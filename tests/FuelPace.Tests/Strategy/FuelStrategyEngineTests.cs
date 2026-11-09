@@ -4,6 +4,7 @@ using FuelPace.Tests.Baselines;
 
 namespace FuelPace.Tests.Strategy;
 
+[Collection(FuelPace.Tests.Perf.PerfCollection.Name)]
 public class FuelStrategyEngineTests
 {
     static readonly Baseline FixtureBaseline =

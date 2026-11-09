@@ -5,6 +5,7 @@ using FuelPace.Core.Laps;
 
 namespace FuelPace.Tests.Diagnostics;
 
+[Collection(FuelPace.Tests.Perf.PerfCollection.Name)]
 public class DiagLogTests
 {
     private static string ToJson(in DiagRecord r)

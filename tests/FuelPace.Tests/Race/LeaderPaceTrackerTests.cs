@@ -62,6 +62,7 @@ internal sealed class RaceFrames
     }
 }
 
+[Collection(FuelPace.Tests.Perf.PerfCollection.Name)]
 public class LeaderPaceTrackerTests
 {
     private static (RaceFrames R, LeaderPaceTracker T) Make(int window = 5, DiagLog? log = null)

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FuelPace.Core\FuelPace.Core.csproj" />
+  </ItemGroup>
+
+  <!-- The synthetic race is shared with the tests by linking the sources, not by referencing the test project. -->
+  <ItemGroup>
+    <Compile Include="..\..\tests\FuelPace.Tests\Support\SyntheticRace.cs" Link="Support\SyntheticRace.cs" />
+    <Compile Include="..\..\tests\FuelPace.Tests\Support\LapSim.cs" Link="Support\LapSim.cs" />
+    <Compile Include="..\..\tests\FuelPace.Tests\Support\IbtFileBuilder.cs" Link="Support\IbtFileBuilder.cs" />
+    <Compile Include="..\..\tests\FuelPace.Tests\Support\SampleYaml.cs" Link="Support\SampleYaml.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+  </ItemGroup>
+
+</Project>

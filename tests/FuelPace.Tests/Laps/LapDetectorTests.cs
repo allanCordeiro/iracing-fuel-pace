@@ -5,6 +5,7 @@ using FuelPace.Tests.Support;
 
 namespace FuelPace.Tests.Laps;
 
+[Collection(FuelPace.Tests.Perf.PerfCollection.Name)]
 public class LapDetectorTests
 {
     private sealed class Sink : ILapSink

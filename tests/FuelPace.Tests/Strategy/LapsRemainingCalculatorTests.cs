@@ -2,6 +2,7 @@ using FuelPace.Core.Strategy;
 
 namespace FuelPace.Tests.Strategy;
 
+[Collection(FuelPace.Tests.Perf.PerfCollection.Name)]
 public class LapsRemainingCalculatorTests
 {
     [Fact] public void Time_race_uses_leader_pace() => Assert.Equal(7.2, LapsRemainingCalculator.ByTime(600, 0.30, 100, 0.80, 102), 6); // criterion 9

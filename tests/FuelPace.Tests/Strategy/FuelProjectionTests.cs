@@ -4,6 +4,7 @@ using FuelPace.Tests.Support;
 
 namespace FuelPace.Tests.Strategy;
 
+[Collection(FuelPace.Tests.Perf.PerfCollection.Name)]
 public class FuelProjectionTests
 {
     static float[] SyntheticProfile()

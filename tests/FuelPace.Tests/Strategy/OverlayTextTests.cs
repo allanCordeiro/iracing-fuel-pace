@@ -2,6 +2,7 @@ using FuelPace.Core.Strategy;
 
 namespace FuelPace.Tests.Strategy;
 
+[Collection(FuelPace.Tests.Perf.PerfCollection.Name)]
 public class OverlayTextTests
 {
     [Theory]

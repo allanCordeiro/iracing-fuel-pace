@@ -4,6 +4,7 @@ using FuelPace.Tests.Support;
 
 namespace FuelPace.Tests.Telemetry;
 
+[Collection(FuelPace.Tests.Perf.PerfCollection.Name)]
 public class IbtTelemetrySourceTests
 {
     private const string Yaml = "---\nWeekendInfo:\n TrackName: test\n...\n";
@@ -163,10 +164,10 @@ public class IbtTelemetrySourceTests
         var path = Fixtures.TempPath(".ibt");
         try
         {
-            IbtFileBuilder.WriteFrames(path, Yaml, Synthetic(2000, 1.0 / 60));
+            IbtFileBuilder.WriteFrames(path, Yaml, Synthetic(3000, 1.0 / 60));
             using var src = new IbtTelemetrySource(path);
             var f = new TelemetryFrame();
-            Assert.Equal(ReadResult.Frame, src.TryRead(ref f));
+            for (int i = 0; i < 1000; i++) Assert.Equal(ReadResult.Frame, src.TryRead(ref f)); // warm-up: JIT and first-call stubs
             long before = GC.GetAllocatedBytesForCurrentThread();
             for (int i = 0; i < 1999; i++)
                 if (src.TryRead(ref f) != ReadResult.Frame) Assert.Fail("unexpected end");
