@@ -7,7 +7,8 @@ public class BaselineCalculatorTests
 {
     static readonly DateTimeOffset T0 = new(2026, 11, 9, 12, 0, 0, TimeSpan.Zero);
 
-    static readonly LapSample[] Fixture6 =
+    /// <summary>The six valid laps of the §12 fixture; shared with the strategy tests.</summary>
+    internal static readonly LapSample[] Fixture6 =
     [
         new(2.382, 80.897, 64, null), new(2.404, 80.272, 66, null), new(2.373, 79.964, 65, null),
         new(2.403, 79.514, 67, null), new(2.389, 79.134, 64, null), new(2.289, 81.062, 58, null),
