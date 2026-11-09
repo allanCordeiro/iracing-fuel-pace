@@ -77,6 +77,10 @@ public sealed class TelemetryPipeline : ILapSink
     /// copy (the I/O thread works on the original); an exception they throw is logged and does not stop the save.</summary>
     public event Action<CaptureRecord, string>? CaptureCompleted;
 
+    /// <summary>Optional observer called on the telemetry thread for every lap the detector emits (including the lap in
+    /// progress at <see cref="Flush"/>). Null by default; the call costs nothing when unset.</summary>
+    public ILapSink? LapObserver { get; set; }
+
     public OverlayStatePublisher Overlay { get; } = new();
 
     public bool CaptureActive => _captureActive;
@@ -146,6 +150,7 @@ public sealed class TelemetryPipeline : ILapSink
     public void OnLapCompleted(in CompletedLap lap)
     {
         _capture.OnLapCompleted(in lap);
+        LapObserver?.OnLapCompleted(in lap);
         if (!lap.Stats.EndObserved) return; // the lap in progress emitted by Flush is not a "last lap"
         _stint.OnLapCompleted(in lap);
         _lastLapL = lap.FuelUsedL;

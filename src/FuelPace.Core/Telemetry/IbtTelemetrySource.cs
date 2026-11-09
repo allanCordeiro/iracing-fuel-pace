@@ -38,6 +38,10 @@ public sealed class IbtTelemetrySource : ITelemetrySource
 
     // Absolute deadline: t0_wall + (SessionTime - t0_sim) / speed. Sleep only when >= 2 ms remain, so a coarse
     // OS sleep granularity (15.6 ms on Windows) never accumulates drift. timeBeginPeriod is never called.
+    // A single sleep is capped at MaxSleepMs: a SessionTime gap inside a real file (driver left the car) would otherwise
+    // block for minutes. After a capped sleep the deadline is resynchronised to the current frame.
+    private const double MaxSleepMs = 250.0;
+
     private void Pace(double sessionTime)
     {
         if (!_paceStarted)
@@ -49,7 +53,13 @@ public sealed class IbtTelemetrySource : ITelemetrySource
         }
         double targetS = (sessionTime - _sim0) / _speed;
         double remainingMs = (targetS - Stopwatch.GetElapsedTime(_wall0).TotalSeconds) * 1000.0;
-        if (remainingMs >= 2.0) Thread.Sleep((int)remainingMs);
+        if (remainingMs > MaxSleepMs)
+        {
+            Thread.Sleep((int)MaxSleepMs);
+            _wall0 = Stopwatch.GetTimestamp();
+            _sim0 = sessionTime;
+        }
+        else if (remainingMs >= 2.0) Thread.Sleep((int)remainingMs);
     }
 
     public void Dispose() => _reader.Dispose();

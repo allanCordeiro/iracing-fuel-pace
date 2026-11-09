@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FuelPace.Core\FuelPace.Core.csproj" />
+    <ProjectReference Include="..\..\tools\FuelPace.Replay\FuelPace.Replay.csproj" />
   </ItemGroup>
 
   <ItemGroup>

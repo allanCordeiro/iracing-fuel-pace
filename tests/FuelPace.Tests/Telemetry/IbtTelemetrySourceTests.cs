@@ -209,4 +209,23 @@ public class IbtTelemetrySourceTests
         Assert.False(src.Layout.HasCarIdx);
         Assert.False(src.Layout.IsElectric);
     }
+
+    [Fact]
+    public void Paced_replay_caps_the_sleep_across_a_session_time_gap()
+    {
+        // Driver left the car: 100 s of SessionTime between two frames. At 1x that must not sleep for 100 s.
+        var frames = new List<TelemetryFrame> { Frame(1.0, 0.1f, 50f), Frame(1.01, 0.2f, 50f), Frame(101.01, 0.3f, 50f), Frame(101.02, 0.4f, 50f) };
+        var path = Fixtures.TempPath(".ibt");
+        try
+        {
+            IbtFileBuilder.WriteFrames(path, Yaml, frames);
+            using var src = new IbtTelemetrySource(path, ReplaySpeed.X1);
+            var f = new TelemetryFrame();
+            var sw = Stopwatch.StartNew();
+            for (int i = 0; i < 4; i++) Assert.Equal(ReadResult.Frame, src.TryRead(ref f));
+            sw.Stop();
+            Assert.InRange(sw.Elapsed.TotalMilliseconds, 200, 1000);
+        }
+        finally { File.Delete(path); }
+    }
 }
