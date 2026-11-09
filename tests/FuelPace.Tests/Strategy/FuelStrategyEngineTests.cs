@@ -447,14 +447,13 @@ public class FuelStrategyEngineTests
         double sink = 0;
         for (int k = 0; k < inputs.Length; k++)
             sink += FuelStrategyEngine.Compute(in inputs[k], regression, Default, ref h).FuelL;
-        long before = GC.GetAllocatedBytesForCurrentThread();
+        var window = AllocationMeasure.Start();
         for (int n = 0; n < 10_000; n++)
         {
             ref readonly var input = ref inputs[n % inputs.Length];
             sink += FuelStrategyEngine.Compute(in input, (n & 1) == 0 ? regression : null, Default, ref h).Insight.A;
         }
-        long delta = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.Equal(0, delta);
+        window.AssertNone();
         Assert.True(sink != 0 || double.IsNaN(sink));
     }
 

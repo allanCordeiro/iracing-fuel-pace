@@ -25,7 +25,7 @@ public class HotPathAllocationTests
     sealed record Result(long Bytes, int Gen0, long Publishes, int RingFrames, OverlayState Final);
 
     /// <summary>Replays <paramref name="path"/>: warm-up, then <see cref="Measured"/> steps measured on this thread.</summary>
-    static Result Run(string path, string yaml, DiagLog? log = null, bool tap = false, bool baseline = true)
+    static Result Run(string test, string path, string yaml, DiagLog? log = null, bool tap = false, bool baseline = true)
     {
         var info = SessionInfoParser.Parse(yaml);
         using var source = new IbtTelemetrySource(path);
@@ -39,12 +39,10 @@ public class HotPathAllocationTests
         Assert.True(source.RecordCount >= Warmup + Measured + 2, "replay too short for the measured window");
 
         long publishes = pipeline.Overlay.PublishCount;
-        int gen0 = GC.CollectionCount(0);
-        long before = GC.GetAllocatedBytesForCurrentThread();
+        var window = AllocationMeasure.Start(test);
         for (int i = 0; i < Measured; i++)
             if (!loop.Step()) Assert.Fail("unexpected end of stream");
-        long bytes = GC.GetAllocatedBytesForCurrentThread() - before;
-        return new Result(bytes, GC.CollectionCount(0) - gen0, pipeline.Overlay.PublishCount - publishes, ring?.Count ?? 0, pipeline.Overlay.Read());
+        return new Result(window.Bytes, window.Gen0, pipeline.Overlay.PublishCount - publishes, ring?.Count ?? 0, pipeline.Overlay.Read());
     }
 
     static string Synthetic() => SyntheticRace.WriteIbt(Fixtures.TempPath(".ibt"), laps: 12, withCarIdx: true);
@@ -55,8 +53,8 @@ public class HotPathAllocationTests
         var path = Synthetic();
         try
         {
-            var r = Run(path, SyntheticRace.Yaml);
-            Assert.Equal(0, r.Bytes);
+            var r = Run(nameof(Pipeline_allocates_zero_bytes_per_tick_synthetic), path, SyntheticRace.Yaml);
+            Assert.True(r.Bytes == 0, $"allocated {r.Bytes} bytes");
             Assert.InRange(r.Publishes, Measured / 6, Measured / 6 + 1); // the strategy really ran (10 Hz)
             Assert.True(SyntheticRace.LapsCrossed(Warmup + 1, Warmup + 1 + Measured) >= 2);
             // The strategy ran on real data: laps were completed, the baseline and the time race are in use.
@@ -75,8 +73,8 @@ public class HotPathAllocationTests
         var path = Fixtures.RequireZolder();
         string yaml;
         using (var s = new IbtTelemetrySource(path)) yaml = s.ReadSessionInfoYaml();
-        var r = Run(path, yaml);
-        Assert.Equal(0, r.Bytes);
+        var r = Run(nameof(Pipeline_allocates_zero_bytes_per_tick_fixture), path, yaml);
+        Assert.True(r.Bytes == 0, $"allocated {r.Bytes} bytes");
         Assert.True(r.Publishes > 0);
     }
 
@@ -86,8 +84,8 @@ public class HotPathAllocationTests
         var path = Synthetic();
         try
         {
-            var r = Run(path, SyntheticRace.Yaml);
-            Assert.Equal(0, r.Gen0);
+            var r = Run(nameof(No_gen0_collections_during_replay), path, SyntheticRace.Yaml);
+            Assert.True(r.Gen0 == 0, $"{r.Gen0} gen0 collections");
         }
         finally { File.Delete(path); }
     }
@@ -97,18 +95,24 @@ public class HotPathAllocationTests
     {
         var path = Synthetic();
         var log = new DiagLog(DiagLevel.Trace, 1 << 14);
+        long drained = 0;
         using var stop = new CancellationTokenSource();
         var drain = new Thread(() =>
         {
             var buf = new DiagRecord[4096];
-            while (!stop.IsCancellationRequested) { if (log.DrainRecords(buf) == 0) Thread.Sleep(1); }
+            while (!stop.IsCancellationRequested)
+            {
+                int n = log.DrainRecords(buf);
+                if (n == 0) Thread.Sleep(1); else Interlocked.Add(ref drained, n);
+            }
         }) { IsBackground = true };
         drain.Start();
         try
         {
-            var r = Run(path, SyntheticRace.Yaml, log, tap: true);
-            Assert.Equal(0, r.Bytes);
+            var r = Run(nameof(Zero_bytes_with_debug_logging_and_frame_tap), path, SyntheticRace.Yaml, log, tap: true);
+            Assert.True(r.Bytes == 0, $"allocated {r.Bytes} bytes");
             Assert.Equal(1 + Warmup + Measured, r.RingFrames);
+            Assert.True(Interlocked.Read(ref drained) > 0, "the drain thread never saw a record");
         }
         finally { stop.Cancel(); drain.Join(); File.Delete(path); }
     }

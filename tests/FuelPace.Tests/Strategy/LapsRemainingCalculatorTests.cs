@@ -77,12 +77,11 @@ public class LapsRemainingCalculatorTests
         double sink = 0;
         sink += LapsRemainingCalculator.ByTime(600, 0.3, 100, 0.8, 102) + LapsRemainingCalculator.ByLaps(10, 0.2)
               + LapsRemainingCalculator.AfterCheckered(0.6) + LapsRemainingCalculator.Stint(25, 5, 0.5);
-        long before = GC.GetAllocatedBytesForCurrentThread();
+        var window = AllocationMeasure.Start();
         for (int i = 0; i < 1000; i++)
             sink += LapsRemainingCalculator.ByTime(600, 0.3, 100, 0.8, 102) + LapsRemainingCalculator.ByLaps(10, 0.2)
                   + LapsRemainingCalculator.AfterCheckered(0.6) + LapsRemainingCalculator.Stint(25, 5, 0.5);
-        long delta = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.Equal(0, delta);
+        window.AssertNone();
         Assert.False(double.IsNaN(sink));
     }
 }

@@ -293,10 +293,9 @@ public class LeaderPaceTrackerTests
             }
         }
         Run(0, 3000); // warm up (JIT)
-        long before = GC.GetAllocatedBytesForCurrentThread();
+        var window = AllocationMeasure.Start();
         Run(3000, 10_000);
-        long delta = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.Equal(0, delta);
+        window.AssertNone();
         var recs = Drain(log);
         Assert.Contains(recs, x => x.Event == DiagEvent.LeaderLapAccepted);
         Assert.Contains(recs, x => x.Event == DiagEvent.LeaderLapRejected);

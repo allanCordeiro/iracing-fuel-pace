@@ -168,11 +168,10 @@ public class IbtTelemetrySourceTests
             using var src = new IbtTelemetrySource(path);
             var f = new TelemetryFrame();
             for (int i = 0; i < 1000; i++) Assert.Equal(ReadResult.Frame, src.TryRead(ref f)); // warm-up: JIT and first-call stubs
-            long before = GC.GetAllocatedBytesForCurrentThread();
+            var window = AllocationMeasure.Start();
             for (int i = 0; i < 1999; i++)
                 if (src.TryRead(ref f) != ReadResult.Frame) Assert.Fail("unexpected end");
-            long delta = GC.GetAllocatedBytesForCurrentThread() - before;
-            Assert.Equal(0, delta);
+            window.AssertNone();
         }
         finally { File.Delete(path); }
     }
@@ -189,8 +188,10 @@ public class IbtTelemetrySourceTests
             var sw = Stopwatch.StartNew();
             while (src.TryRead(ref f) == ReadResult.Frame) { }
             sw.Stop();
-            // 119 intervals / 60 Hz / 10 = 0.198 s
-            Assert.InRange(sw.Elapsed.TotalSeconds, 0.19, 0.30);
+            // 119 intervals / 60 Hz / 10 = 0.198 s. The upper bound only has to separate "absolute deadline" from drift: sleeping
+            // a relative interval per frame costs >= 119 x 15 ms = 1.8 s on Windows, so 0.60 s still catches it while a loaded
+            // CI host (one descheduled sleep) no longer fails the test.
+            Assert.InRange(sw.Elapsed.TotalSeconds, 0.19, 0.60);
         }
         finally { File.Delete(path); }
     }

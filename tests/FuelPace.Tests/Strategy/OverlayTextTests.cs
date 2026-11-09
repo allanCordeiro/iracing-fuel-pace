@@ -49,7 +49,7 @@ public class OverlayTextTests
     {
         Span<char> b = stackalloc char[128];
         var ins = new Insight(InsightKind.Save, 0.08, 3, 0.9);
-        long before = GC.GetAllocatedBytesForCurrentThread();
+        var window = AllocationMeasure.Start();
         int sink = 0;
         for (int n = 0; n < 10_000; n++)
         {
@@ -57,7 +57,7 @@ public class OverlayTextTests
                 + OverlayText.Minutes(43.4, b) + OverlayText.Seconds(79.514, b)
                 + OverlayText.Insight(in ins, "Ligier", "Zolder Alt", b, out _);
         }
-        Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+        window.AssertNone();
         Assert.True(sink > 0);
     }
 }

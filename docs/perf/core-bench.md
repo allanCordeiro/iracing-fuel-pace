@@ -1,7 +1,7 @@
 # Core hot-path benchmark
 
-`bench/FuelPace.Bench`, class `PipelineTickBench` (BenchmarkDotNet, `[MemoryDiagnoser]`). One invocation is one lap at 60 Hz
-(4 800 `TelemetryLoop.Step()` calls) over the synthetic time race: 20 cars in CarIdx, leader pace, a baseline with a BoP
+`bench/FuelPace.Bench`, class `PipelineTickBench` (BenchmarkDotNet, `[MemoryDiagnoser]`). One invocation is 4 800 `TelemetryLoop.Step()` calls
+(an 80 s lap at 60 Hz; the synthetic race's own laps are 20 s, 1 200 ticks) over the synthetic time race: 20 cars in CarIdx, leader pace, a baseline with a BoP
 condition, a pit stop with refuel, a caution and an incident (`tests/FuelPace.Tests/Support/SyntheticRace.cs`). Each step reads
 and decodes the record, then runs lap detection, stint tracking, leader pace, the strategy (every 6th tick) and the overlay publisher.
 Diagnostics are off and no frame tap is attached. The file is reopened outside the measurement, between iterations.
@@ -10,7 +10,7 @@ Run (not part of `dotnet test`, not run in CI; CI only builds it):
 
     dotnet run -c Release --project bench/FuelPace.Bench -- --filter '*PipelineTickBench*'
 
-Do not pass `--job`: the class defines its own job (3 invocations = 3 laps per iteration) so that reopening the file stays out of
+Do not pass `--job`: the class defines its own job (3 invocations = 14 400 ticks per iteration) so that reopening the file stays out of
 the measured window.
 
 ## Result (2026-11-09)

@@ -340,13 +340,12 @@ public class LapDetectorTests
 
         var sink = new CountingSink();
         var det = new LapDetector(sink, log);
-        long before = GC.GetAllocatedBytesForCurrentThread();
+        var window = AllocationMeasure.Start();
         for (int i = 0; i < frames.Length; i++) det.Update(in frames[i]);
         det.TrySnapshotInProgress(out _);
         det.Flush();
-        long after = GC.GetAllocatedBytesForCurrentThread();
+        window.AssertNone();
 
-        Assert.Equal(0, after - before);
         Assert.Equal(6, sink.Count);
         var recs = new DiagRecord[1 << 16];
         var n = log.DrainRecords(recs);

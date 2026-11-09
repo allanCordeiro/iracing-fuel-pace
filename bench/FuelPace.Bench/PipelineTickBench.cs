@@ -11,8 +11,8 @@ namespace FuelPace.Bench;
 
 /// <summary>
 /// Cost of the telemetry hot path: <see cref="TelemetryLoop.Step"/> (read the record, decode the frame, lap detection, stint,
-/// leader pace, strategy at 10 Hz, overlay publish) over the synthetic time race with a baseline. One invocation is one lap
-/// at 60 Hz, 4 800 ticks, so mean / 4 800 is the cost of a tick. The <c>Allocated</c> column must show <c>-</c>.
+/// leader pace, strategy at 10 Hz, overlay publish) over the synthetic time race with a baseline. One invocation is 4 800 ticks (the length of an 80 s lap at 60 Hz;
+/// the synthetic race's own laps are 20 s, 1 200 ticks), so mean / 4 800 is the cost of a tick. The <c>Allocated</c> column must show <c>-</c>.
 /// Each iteration is exactly three invocations (three laps) and reopens the file in <see cref="IterationSetup"/>, outside the
 /// measurement, so the file's own allocations never reach the column.
 /// </summary>
@@ -68,7 +68,7 @@ public class PipelineTickBench
         for (_records = 1; _records <= SessionStartTicks; _records++) _loop.Step();
     }
 
-    /// <summary>One lap at 60 Hz (4 800 steps). Reopens the file if it runs out (only when the job is overridden from the command line).</summary>
+    /// <summary>4 800 steps (an 80 s lap at 60 Hz). Reopens the file if it runs out (only when the job is overridden from the command line).</summary>
     [Benchmark]
     public void OneLap()
     {

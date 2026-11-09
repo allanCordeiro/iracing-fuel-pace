@@ -63,11 +63,10 @@ public class FuelProjectionTests
         var p = SyntheticProfile();
         double sink = 0;
         for (int i = 0; i < 100; i++) sink += FuelProjection.Project(1.2, 0.5, p);
-        long before = GC.GetAllocatedBytesForCurrentThread();
+        var window = AllocationMeasure.Start();
         for (int i = 0; i < 10_000; i++)
             sink += FuelProjection.Project(1.2, 0.3 + (i % 50) / 100.0, p) + FuelProjection.Interpolate(p, 0.77);
-        long delta = GC.GetAllocatedBytesForCurrentThread() - before;
-        Assert.Equal(0, delta);
+        window.AssertNone();
         Assert.False(double.IsNaN(sink));
     }
 

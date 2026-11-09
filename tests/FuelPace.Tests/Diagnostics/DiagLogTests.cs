@@ -93,14 +93,13 @@ public class DiagLogTests
         for (int i = 0; i < 1000; i++) log.Emit(DiagLevel.Trace, DiagEvent.StrategyTrace, 1.0, 1, 2, 1, 2, 3, 4);
         log.DrainRecords(buf);
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
+        var window = AllocationMeasure.Start();
         for (int n = 0; n < 100; n++)
         {
             for (int i = 0; i < 1000; i++) log.Emit(DiagLevel.Trace, DiagEvent.StrategyTrace, 1.0, i, 2, 1, 2, 3, 4);
             log.DrainRecords(buf);
         }
-        long after = GC.GetAllocatedBytesForCurrentThread();
-        Assert.Equal(0, after - before);
+        window.AssertNone();
     }
 
     [Fact]
