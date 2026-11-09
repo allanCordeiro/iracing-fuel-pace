@@ -8,16 +8,18 @@ namespace FuelPace.Core.Pipeline;
 /// Moving mean of the valid laps of the current stint (decision 4). A stint starts with the first frame, on pit exit
 /// (<c>OnPitRoad</c> true → false) or on a refuel: <c>FuelLevel</c> more than <see cref="RefuelRiseL"/> above its running
 /// minimum since the stint started, which also catches gradual pit refuelling (R14). A refuel during a pit stop already
-/// started the stint, so that stop's exit does not start another. Allocation-free per frame.
+/// started the stint, so that stop's exit does not start another. The last <see cref="MaxWindow"/> valid laps of the stint
+/// are kept, so <see cref="Resize"/> changes the mean window without losing the stint (R15). Allocation-free per frame.
 /// </summary>
 public sealed class StintTracker
 {
     public const double RefuelRiseL = 0.3;
+    public const int MaxWindow = 16;
     private const int CausePitExit = 0, CauseRefuel = 1;
 
-    private readonly int _window;
+    private int _window;
     private readonly DiagLog _log;
-    private readonly double[] _fuel, _time;
+    private readonly double[] _fuel = new double[MaxWindow], _time = new double[MaxWindow];
     private int _head, _count;
     private bool _started, _prevOnPit;
     private float _prevFuel, _minFuel;
@@ -28,11 +30,23 @@ public sealed class StintTracker
 
     public StintTracker(int window, DiagLog? log = null)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(window, 1);
+        CheckWindow(window);
         _window = window;
         _log = log ?? DiagLog.Null;
-        _fuel = new double[window];
-        _time = new double[window];
+    }
+
+    /// <summary>Changes the mean window (1–<see cref="MaxWindow"/>); the stint start, <see cref="LapsDone"/> and the lap history are kept.</summary>
+    public void Resize(int window)
+    {
+        CheckWindow(window);
+        _window = window;
+        Recompute();
+    }
+
+    private static void CheckWindow(int window)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(window, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(window, MaxWindow);
     }
 
     /// <summary>Mean fuel of the last <c>window</c> valid laps of the stint; NaN with fewer than 2.</summary>
@@ -88,8 +102,8 @@ public sealed class StintTracker
 
         _fuel[_head] = lap.FuelUsedL;
         _time[_head] = lap.TimeS;
-        _head = (_head + 1) % _window;
-        if (_count < _window) _count++;
+        _head = (_head + 1) % MaxWindow;
+        if (_count < MaxWindow) _count++;
         Recompute();
     }
 
@@ -105,14 +119,16 @@ public sealed class StintTracker
 
     private void Recompute()
     {
+        int n = Math.Min(_count, _window);
         double fuel = 0, time = 0;
         int timed = 0;
-        for (int i = 0; i < _count; i++)
+        for (int k = 1; k <= n; k++)
         {
+            int i = (_head - k + MaxWindow) % MaxWindow;
             fuel += _fuel[i];
             if (!double.IsNaN(_time[i])) { time += _time[i]; timed++; }
         }
-        MeanFuelL = _count >= 2 ? fuel / _count : double.NaN;
+        MeanFuelL = n >= 2 ? fuel / n : double.NaN;
         MeanLapS = timed >= 2 ? time / timed : double.NaN;
     }
 }

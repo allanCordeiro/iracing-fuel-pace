@@ -9,4 +9,14 @@ public sealed class CaptureRecord
     public required string SessionType { get; set; }
     public required CaptureConditions Conditions { get; set; }
     public List<CapturedLap> Laps { get; set; } = [];
+
+    /// <summary>Deep copy (laps and their profiles); <see cref="Conditions"/> is immutable and shared.</summary>
+    public CaptureRecord Clone() => new()
+    {
+        Id = Id,
+        Active = Active,
+        SessionType = SessionType,
+        Conditions = Conditions,
+        Laps = Laps.ConvertAll(l => l.Clone()),
+    };
 }

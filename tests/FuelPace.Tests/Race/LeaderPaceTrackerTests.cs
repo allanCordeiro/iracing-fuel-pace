@@ -94,6 +94,23 @@ public class LeaderPaceTrackerTests
     }
 
     [Fact]
+    public void SetMeanWindow_keeps_the_lap_history()   // R15
+    {
+        var (r, t) = Make(window: 5);
+        r.Laps(5, 100f, 104f, 90f);
+        Assert.Equal(98.0, t.Current.PaceS, 0.001);
+
+        t.SetMeanWindow(2);
+        r.Tick();
+        Assert.Equal(97.0, t.Current.PaceS, 0.001);
+        t.SetMeanWindow(3);
+        r.Tick();
+        Assert.Equal(98.0, t.Current.PaceS, 0.001);
+        Assert.Throws<ArgumentOutOfRangeException>(() => t.SetMeanWindow(1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => t.SetMeanWindow(17));
+    }
+
+    [Fact]
     public void Single_lap_uses_best_times_102()
     {
         var (r, t) = Make();

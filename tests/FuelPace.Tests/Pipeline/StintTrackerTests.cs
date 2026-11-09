@@ -127,6 +127,31 @@ public class StintTrackerTests
     }
 
     [Fact]
+    public void Resize_keeps_the_stint_and_its_most_recent_laps()   // R15
+    {
+        var s = new StintTracker(5);
+        Drive(s, 0, 100);
+        Complete(s, Lap(0, 80, 2.0, 80));
+        Complete(s, Lap(80, 160, 2.2, 82));
+        Complete(s, Lap(160, 240, 2.4, 84, LapReasons.OffTrack));
+        Complete(s, Lap(240, 320, 2.6, 86));
+        Assert.Equal(2.2667, s.MeanFuelL, 4);
+
+        s.Resize(2);
+        Assert.Equal(2.4, s.MeanFuelL, 9);
+        Assert.Equal(84, s.MeanLapS, 9);
+        Assert.Equal(4, s.LapsDone);
+        Complete(s, Lap(320, 400, 3.0, 90));
+        Assert.Equal(2.8, s.MeanFuelL, 9);
+
+        s.Resize(16);
+        Assert.Equal((2.0 + 2.2 + 2.6 + 3.0) / 4, s.MeanFuelL, 9); // older laps of the same stint come back
+        Assert.Equal(5, s.LapsDone);
+        Assert.Throws<ArgumentOutOfRangeException>(() => s.Resize(0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => s.Resize(17));
+    }
+
+    [Fact]
     public void Mean_uses_the_last_window_valid_laps_and_skips_invalid_or_open_ones()
     {
         var s = new StintTracker(2);

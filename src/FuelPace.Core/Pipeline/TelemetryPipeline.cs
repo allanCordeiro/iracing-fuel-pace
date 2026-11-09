@@ -30,8 +30,8 @@ public sealed class TelemetryPipeline : ILapSink
     private readonly DiagLog _log;
     private readonly LapDetector _detector;
     private readonly CaptureSession _capture;
-    private StintTracker _stint;
-    private LeaderPaceTracker _leader;
+    private readonly StintTracker _stint;
+    private readonly LeaderPaceTracker _leader;
     private SignalHysteresis _hysteresis;
 
     // Written by any thread, read by the tick.
@@ -73,7 +73,8 @@ public sealed class TelemetryPipeline : ILapSink
         _leader = new LeaderPaceTracker(cfg.MeanWindow, _log);
     }
 
-    /// <summary>Raised on the telemetry thread when a capture stops, with the profile key it belongs to.</summary>
+    /// <summary>Raised on the telemetry thread when a capture stops, with the profile key it belongs to. Subscribers get a
+    /// copy (the I/O thread works on the original); an exception they throw is logged and does not stop the save.</summary>
     public event Action<CaptureRecord, string>? CaptureCompleted;
 
     public OverlayStatePublisher Overlay { get; } = new();
@@ -97,7 +98,7 @@ public sealed class TelemetryPipeline : ILapSink
         Overlay.SetLabels(ctx.CarShort, ctx.TrackShort);
     }
 
-    /// <summary>Takes effect on the next tick; a different <see cref="StrategyConfig.MeanWindow"/> restarts the stint and leader trackers.</summary>
+    /// <summary>Takes effect on the next tick; a different <see cref="StrategyConfig.MeanWindow"/> only resizes the means (stint and history kept).</summary>
     public void SetConfig(StrategyConfig cfg) => Volatile.Write(ref _requestedCfg, cfg);
 
     /// <summary>Starts a capture on the next tick that has a session context. The last request wins.</summary>
@@ -158,8 +159,9 @@ public sealed class TelemetryPipeline : ILapSink
         if (ReferenceEquals(cfg, _cfg)) return;
         if (cfg.MeanWindow != _cfg.MeanWindow)
         {
-            _stint = new StintTracker(cfg.MeanWindow, _log);
-            _leader = new LeaderPaceTracker(cfg.MeanWindow, _log);
+            // R15: a settings change must not restart the stint (stint-mode laps remaining) or drop lap history.
+            _stint.Resize(cfg.MeanWindow);
+            _leader.SetMeanWindow(cfg.MeanWindow);
         }
         _cfg = cfg;
     }
@@ -319,7 +321,11 @@ public sealed class TelemetryPipeline : ILapSink
             if (l.Valid) valid++;
         _log.Emit(DiagLevel.Info, DiagEvent.CaptureStopped, sessionTime, valid, rec.Laps.Count, auto ? 1 : 0);
 
-        CaptureCompleted?.Invoke(rec, ctx.ProfileKey);
+        if (CaptureCompleted is { } handlers)
+        {
+            try { handlers(rec.Clone(), ctx.ProfileKey); }
+            catch (Exception e) { _log.Exception("capture", e); }
+        }
 
         if (_store is { } store && _io is { } io)
         {

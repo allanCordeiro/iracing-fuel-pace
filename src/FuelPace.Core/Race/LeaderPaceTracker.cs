@@ -11,7 +11,7 @@ public sealed class LeaderPaceTracker
     private const double TimeoutS = 5.0;
     private const byte FlagPit = 1, FlagNotInWorld = 2, FlagCaution = 4;
 
-    private readonly int _window;
+    private int _window;
     private readonly DiagLog _log;
     private readonly float[] _times = new float[MaxCars * MaxHistory];
     private readonly int[] _count = new int[MaxCars];
@@ -29,11 +29,23 @@ public sealed class LeaderPaceTracker
 
     public LeaderPaceTracker(int meanWindow = 5, DiagLog? log = null)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(meanWindow, 2);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(meanWindow, MaxHistory);
+        CheckWindow(meanWindow);
         _window = meanWindow;
         _log = log ?? DiagLog.Null;
         Reset();
+    }
+
+    /// <summary>Changes the mean window (2–16) from the next <see cref="Update"/>; the lap history is kept.</summary>
+    public void SetMeanWindow(int meanWindow)
+    {
+        CheckWindow(meanWindow);
+        _window = meanWindow;
+    }
+
+    private static void CheckWindow(int meanWindow)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(meanWindow, 2);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(meanWindow, MaxHistory);
     }
 
     public int ValidLapCount(int carIdx) => (uint)carIdx < MaxCars ? _count[carIdx] : 0;

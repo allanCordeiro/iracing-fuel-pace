@@ -367,19 +367,52 @@ public class TelemetryPipelineTests
     }
 
     [Fact]
-    public void SetConfig_applies_on_the_next_tick()
+    public void SetConfig_applies_on_the_next_tick_and_keeps_the_stint()   // R15
     {
-        using var rig = new Rig(new LapSim(lapTimeS: 20).SessionLaps(10).Run(3, endPct: 0.5), LapsRaceYaml(10));
-        rig.StepUntil(f => f.Lap == 4 && f.LapDistPct >= 0.4);
-        Assert.False(rig.Pipeline.Overlay.Read().IsStintMode);
-        Assert.False(double.IsNaN(rig.Pipeline.Overlay.Read().MeanL));
+        using var rig = new Rig(new LapSim(lapTimeS: 20).FuelPerLap(2.0, 2.2, 2.4, 2.6).SessionLaps(10).Run(4, endPct: 0.5),
+            LapsRaceYaml(10));
+        rig.Pipeline.SetConfig(new StrategyConfig { Mode = LapsMode.Stint, StintLaps = 20 });
+        rig.StepUntil(f => f.Lap == 5 && f.LapDistPct >= 0.3);
+        var before = rig.Pipeline.Overlay.Read();
+        Assert.True(before.IsStintMode);
+        Assert.Equal(2.4, before.MeanL, 2); // valid laps 2–4 (2.2, 2.4, 2.6), window 5
+        Assert.Equal(20 - 4 - rig.LastPublishedFrame.LapDistPct, before.LapsRemaining, 1e-6);
 
-        rig.Pipeline.SetConfig(new StrategyConfig { Mode = LapsMode.Stint, StintLaps = 20, MeanWindow = 3 });
+        rig.Pipeline.SetConfig(new StrategyConfig { Mode = LapsMode.Stint, StintLaps = 20, MeanWindow = 2 });
         for (int i = 0; i < 6; i++) rig.Step();
         var s = rig.Pipeline.Overlay.Read();
-        Assert.True(s.IsStintMode);
-        Assert.True(double.IsNaN(s.MeanL)); // new MeanWindow: the stint tracker starts over
-        Assert.Equal(20 - rig.LastPublishedFrame.LapDistPct, s.LapsRemaining, 1e-6);
+        Assert.Equal(2.5, s.MeanL, 2); // the last 2 valid laps, kept across the MeanWindow change
+        Assert.Equal(20 - 4 - rig.LastPublishedFrame.LapDistPct, s.LapsRemaining, 1e-6); // stint start and laps done kept
+    }
+
+    [Fact]
+    public void Throwing_capture_subscriber_neither_loses_the_save_nor_stops_the_loop()
+    {
+        using var dir = new TempDir();
+        using var io = new BackgroundWorkQueue("test-io");
+        var store = new ProfileStore(dir.Path);
+        var log = new DiagLog(DiagLevel.Info, 1 << 16);
+        using var rig = new Rig(new LapSim(lapTimeS: 20).SessionLaps(30).Run(5, endPct: 0.5), LapsRaceYaml(30),
+            store: store, io: io, log: log);
+        CaptureRecord? seen = null;
+        rig.Pipeline.CaptureCompleted += (r, _) => { seen = r; throw new InvalidOperationException("UI on the wrong thread"); };
+
+        rig.Pipeline.RequestCaptureStart();
+        rig.StepUntil(f => f.Lap == 5 && f.LapDistPct >= 0.35);
+        rig.Pipeline.RequestCaptureStop();
+        rig.StepAll(); // keeps ticking after the throwing handler
+
+        Assert.False(rig.Pipeline.CaptureActive);
+        Assert.True(io.WaitIdle(TimeSpan.FromSeconds(10)));
+        var doc = store.Load(rig.Info.CarPath, rig.Info.TrackName)!;
+        var saved = Assert.Single(doc.Captures);
+        Assert.NotNull(seen);
+        Assert.NotSame(saved, seen);
+        Assert.Equal(saved.Laps.Count, seen.Laps.Count);
+        Assert.NotSame(saved.Laps[0], seen.Laps[0]); // a copy: the I/O thread's RecomputeBaseline can't race the subscriber
+        bool logged = false;
+        while (log.TryDequeueText(out var t)) logged |= t.Category == "capture" && t.Message.Contains("UI on the wrong thread");
+        Assert.True(logged);
     }
 
     [Fact]

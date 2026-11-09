@@ -16,6 +16,16 @@ public sealed class CapturedLap
 
     public bool Valid => Reasons == LapReasons.None;
 
+    public CapturedLap Clone() => new()
+    {
+        Lap = Lap,
+        TimeS = TimeS,
+        FuelL = FuelL,
+        FullThrottlePct = FullThrottlePct,
+        Reasons = Reasons,
+        FuelProfile = (float[]?)FuelProfile?.Clone(),
+    };
+
     public static CapturedLap From(in CompletedLap l)
     {
         float[]? profile = null;
