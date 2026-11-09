@@ -40,6 +40,25 @@ public class LapDetectorTests
     }
 
     [Fact]
+    public void Wrap_from_pct_at_or_past_one_puts_the_line_on_the_previous_frame()
+    {
+        // iRacing can report LapDistPct = 1.0000x on the last frame before it wraps (seen in the Zolder fixture).
+        var frames = new LapSim().Run(laps: 3, endPct: 0.1).ToArray();
+        int wrap = Array.FindIndex(frames, f => f.Lap == 3);
+        frames[wrap - 1].LapDistPct = 1.000003f;
+        var log = new DiagLog(DiagLevel.Debug);
+        var sink = Drive(frames, log: log);
+
+        var lap2 = sink.Lap(2);
+        Assert.Equal(frames[wrap - 1].SessionTime, lap2.EndTime, 1e-9);
+        Assert.Equal(lap2.EndTime, sink.Lap(3).StartTime);
+        var buf = new DiagRecord[256];
+        var boundary = Assert.Single(buf.AsSpan(0, log.DrainRecords(buf)).ToArray(),
+            r => r.Event == DiagEvent.LapBoundary && r.I0 == 2);
+        Assert.Equal(0, boundary.C);
+    }
+
+    [Fact]
     public void Emits_complete_laps_with_interpolated_fuel_and_time()
     {
         var sink = Drive(new LapSim(startPct: 0.5, startLap: 1).Run(laps: 3, endPct: 0.1));

@@ -134,7 +134,8 @@ public sealed class LapDetector
         {
             double span = (1.0 - pp) + pct;
             // Never interpolate across a discontinuity: the whole frame belongs to the closing lap.
-            double a = span > 0 && !discontinuity ? (1.0 - pp) / span : 1.0;
+            // prevPct ≥ 1 (iRacing reports 1.0000x before wrapping): the line was at the previous frame.
+            double a = discontinuity ? 1.0 : pp >= 1f ? 0.0 : Math.Clamp((1.0 - pp) / span, 0, 1);
             double endTime = discontinuity ? f.SessionTime : _prevTime + a * (f.SessionTime - _prevTime);
 
             double usedBefore = _fuelUsed;
