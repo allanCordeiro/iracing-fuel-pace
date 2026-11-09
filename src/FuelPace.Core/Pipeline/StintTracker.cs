@@ -6,10 +6,13 @@ namespace FuelPace.Core.Pipeline;
 
 /// <summary>
 /// Moving mean of the valid laps of the current stint (decision 4). A stint starts with the first frame, on pit exit
-/// (<c>OnPitRoad</c> true → false) or when <c>FuelLevel</c> rises by more than 0.05 L between frames. Allocation-free per frame.
+/// (<c>OnPitRoad</c> true → false) or on a refuel: <c>FuelLevel</c> more than <see cref="RefuelRiseL"/> above its running
+/// minimum since the stint started, which also catches gradual pit refuelling (R14). A refuel during a pit stop already
+/// started the stint, so that stop's exit does not start another. Allocation-free per frame.
 /// </summary>
 public sealed class StintTracker
 {
+    public const double RefuelRiseL = 0.3;
     private const int CausePitExit = 0, CauseRefuel = 1;
 
     private readonly int _window;
@@ -17,7 +20,10 @@ public sealed class StintTracker
     private readonly double[] _fuel, _time;
     private int _head, _count;
     private bool _started, _prevOnPit;
-    private float _prevFuel;
+    private float _prevFuel, _minFuel;
+    /// <summary>After a refuel start the minimum follows the level up until it falls again, so one refuel starts one stint.</summary>
+    private bool _followRise;
+    private bool _refuelStartedThisStop;
     private double _stintStart;
 
     public StintTracker(int window, DiagLog? log = null)
@@ -44,9 +50,29 @@ public sealed class StintTracker
         {
             _started = true;
             _stintStart = f.SessionTime;
+            _minFuel = f.FuelLevel;
         }
-        else if (_prevOnPit && !f.OnPitRoad) StartStint(CausePitExit, in f);
-        else if (f.FuelLevel - _prevFuel > LapValidator.RefuelThresholdL) StartStint(CauseRefuel, in f);
+        else
+        {
+            if (_prevOnPit && !f.OnPitRoad)
+            {
+                if (_refuelStartedThisStop) _refuelStartedThisStop = false;
+                else StartStint(CausePitExit, in f);
+            }
+
+            if (_followRise)
+            {
+                if (f.FuelLevel >= _prevFuel) _minFuel = f.FuelLevel;
+                else _followRise = false;
+            }
+            if (f.FuelLevel < _minFuel) _minFuel = f.FuelLevel;
+            else if (!_followRise && f.FuelLevel - _minFuel > RefuelRiseL)
+            {
+                StartStint(CauseRefuel, in f);
+                _followRise = true;
+                _refuelStartedThisStop = f.OnPitRoad || f.PlayerCarInPitStall;
+            }
+        }
 
         _prevOnPit = f.OnPitRoad;
         _prevFuel = f.FuelLevel;
@@ -70,6 +96,7 @@ public sealed class StintTracker
     private void StartStint(int cause, in TelemetryFrame f)
     {
         _stintStart = f.SessionTime;
+        _minFuel = f.FuelLevel;
         _head = _count = 0;
         LapsDone = 0;
         MeanFuelL = MeanLapS = double.NaN;

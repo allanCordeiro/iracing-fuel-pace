@@ -179,7 +179,8 @@ public sealed class TelemetryPipeline : ILapSink
             SessionTime = f.SessionTime,
             FuelL = f.FuelLevel,
             LapDistPct = f.LapDistPct,
-            LapProjectionL = _detector.CurrentLapHasPit
+            // R13: a lap whose start was not seen has partial fuel use; "—" beats a wrong number.
+            LapProjectionL = _detector.CurrentLapHasPit || !_detector.CurrentLapStartObserved
                 ? double.NaN
                 : FuelProjection.Project(_detector.CurrentLapFuelUsedL, _detector.CurrentLapDistPct, profile),
             LastLapL = _lastLapL,

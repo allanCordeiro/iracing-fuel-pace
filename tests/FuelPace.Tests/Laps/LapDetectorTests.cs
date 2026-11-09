@@ -141,6 +141,20 @@ public class LapDetectorTests
     }
 
     [Fact]
+    public void CurrentLapStartObserved_only_after_a_crossing()
+    {
+        var sink = new Sink();
+        var det = new LapDetector(sink);
+        det.SetTrackLength(LapSim.TrackLengthM);
+        Assert.False(det.CurrentLapStartObserved);
+        foreach (var f in new LapSim(startPct: 0.3).Run(1, endPct: 0.2))
+        {
+            det.Update(in f);
+            Assert.Equal(f.Lap == 2, det.CurrentLapStartObserved);
+        }
+    }
+
+    [Fact]
     public void Non_positive_official_time_means_no_time()
     {
         var sink = Drive(new LapSim(publishOfficialTimes: false).Run(3), flush: true);

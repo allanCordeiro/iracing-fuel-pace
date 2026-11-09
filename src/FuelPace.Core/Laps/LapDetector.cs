@@ -71,6 +71,8 @@ public sealed class LapDetector
     public double CurrentLapFuelUsedL => _started ? _fuelUsed : 0;
     public double CurrentLapDistPct => _started ? _prevPct : 0;
     public bool CurrentLapHasPit => _started && _stats.PitSeen;
+    /// <summary>False while the lap in progress started outside the observed window (first lap of a run, mid-lap start).</summary>
+    public bool CurrentLapStartObserved => _started && _stats.StartObserved;
     public double CurrentLapStartTime => _started ? _startTime : double.NaN;
 
     public void SetTrackLength(double meters) => TrackLengthM = meters;

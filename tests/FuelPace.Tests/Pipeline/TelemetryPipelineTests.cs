@@ -295,6 +295,16 @@ public class TelemetryPipelineTests
     }
 
     [Fact]
+    public void Lap_projection_is_hidden_until_a_lap_start_is_observed()   // R13
+    {
+        using var rig = new Rig(new LapSim(lapTimeS: 20, startPct: 0.3).SessionLaps(10).Run(1, endPct: 0.6), LapsRaceYaml(10));
+        rig.StepUntil(f => f.Lap == 1 && f.LapDistPct >= 0.6);
+        Assert.True(double.IsNaN(rig.Pipeline.Overlay.Read().LapProjectionL));
+        rig.StepUntil(f => f.Lap == 2 && f.LapDistPct >= 0.5);
+        Assert.Equal(2.4 * LapSim.FuelCurve(0.5) / 0.5, rig.Pipeline.Overlay.Read().LapProjectionL, 0.02);
+    }
+
+    [Fact]
     public void Time_race_without_caridx_uses_own_pace()
     {
         using var rig = new Rig(new LapSim(lapTimeS: 20).LapTimes(20, 21, 22, 23).TimeRace(1800).Run(3, endPct: 0.5),
