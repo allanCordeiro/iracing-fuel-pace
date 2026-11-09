@@ -9,6 +9,12 @@ public static class LapValidator
     public static LapReasons Evaluate(in LapStats s)
     {
         var r = LapReasons.None;
+        if (s.PitSeen) r |= LapReasons.Pit;
+        if (s.IncidentsAtEnd > s.IncidentsAtStart) r |= LapReasons.Incident;
+        if (s.OffTrackSeconds > OffTrackLimitS) r |= LapReasons.OffTrack;
+        if (s.CautionSeen) r |= LapReasons.Caution;
+        if (s.ResetSeen) r |= LapReasons.Reset;
+        if (s.RefuelSeen) r |= LapReasons.Refuel;
         if (!s.StartObserved || !s.EndObserved) r |= LapReasons.Incomplete;
         return r;
     }

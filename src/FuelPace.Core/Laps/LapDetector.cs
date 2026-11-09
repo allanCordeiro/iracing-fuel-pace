@@ -20,6 +20,7 @@ public sealed class LapDetector
     public const double LapIncrementWindowS = 1.0;
     public const double MaxAccumDtS = 0.1;
     public const float FullThrottleMin = 0.99f;
+    public const double ResetGapS = 1.0, JumpSlackM = 30;
 
     private const int KindWrap = 0, KindLapIncrement = 1;
     private const int SourceOfficial = 0, SourceMeasured = 1, SourceNone = 2;
@@ -30,7 +31,7 @@ public sealed class LapDetector
     // previous frame
     private bool _started;
     private double _prevTime;
-    private float _prevPct, _prevFuel, _prevLlt;
+    private float _prevPct, _prevFuel, _prevLlt, _prevSpeed;
     private int _prevLap;
 
     // lap in progress
@@ -41,6 +42,8 @@ public sealed class LapDetector
     private LapStats _stats;
     private FuelProfile101 _profile;
     private int _nextK;
+    private float _minFuel;
+    private LapReasons _triggered;
 
     // secondary boundary
     private double _lastWrapTime = double.NegativeInfinity;
@@ -77,8 +80,10 @@ public sealed class LapDetector
         if (!_started)
         {
             _started = true;
-            StartLap(f.SessionTime, f.LapDistPct, startObserved: false, atLine: false);
-            Observe(in f);
+            _prevFuel = f.FuelLevel;
+            StartLap(f.SessionTime, Math.Max(0f, f.LapDistPct), startObserved: false, atLine: false, in f);
+            if (f.LapDistPct < 0) Trigger(LapReasons.Reset, f.LapDistPct, in f);
+            Observe(in f, 0);
             Remember(in f);
             return;
         }
@@ -96,6 +101,31 @@ public sealed class LapDetector
             else if (_pendingWait >= LapTimeTimeoutS) ResolvePending(f.LapLastLapTime, official: false, f.SessionTime);
         }
 
+        if (rawDt > MaxAccumDtS || rawDt < 0)
+            _log.Emit(DiagLevel.Debug, DiagEvent.FrameGap, f.SessionTime, 0, 0, rawDt, f.SessionTime);
+        if (rawDt > ResetGapS || rawDt < 0) Trigger(LapReasons.Reset, rawDt, in f);
+
+        if (pct < 0)
+        {
+            // Car not in world (LapDistPct = -1): no boundary, no position/profile state, the lap is contaminated.
+            // Fuel and Lap memory stay untouched so the next real frame accounts for what was burnt meanwhile.
+            Trigger(LapReasons.Reset, pct, in f);
+            _stats.PitSeen |= f.OnPitRoad || f.PlayerCarInPitStall;
+            _stats.IncidentsAtEnd = f.PlayerCarMyIncidentCount;
+            _prevTime = f.SessionTime;
+            _prevLlt = f.LapLastLapTime;
+            return;
+        }
+
+        if (pp >= 0 && !double.IsNaN(TrackLengthM))
+        {
+            double dPct = pct - pp;
+            if (dPct > 0.5) dPct -= 1; else if (dPct < -0.5) dPct += 1;
+            double meters = Math.Abs(dPct) * TrackLengthM;
+            if (meters > Math.Max(f.Speed, _prevSpeed) * Math.Max(0, rawDt) * 2 + JumpSlackM)
+                Trigger(LapReasons.Reset, meters, in f);
+        }
+
         if (pp > 0.9f && pct < 0.1f)
         {
             double span = (1.0 - pp) + pct;
@@ -104,13 +134,15 @@ public sealed class LapDetector
 
             double usedBefore = _fuelUsed;
             Accumulate(a * dUsed, a * dt, a * ftDt);
+            if (f.PlayerTrackSurface == 0) _stats.OffTrackSeconds += a * dt;
+            _stats.IncidentsAtEnd = f.PlayerCarMyIncidentCount;
             RecordProfile(pp, 1.0, usedBefore, _fuelUsed);
             CloseLap(endTime, KindWrap, pp, pct, a, in f);
 
-            StartLap(endTime, 0, startObserved: true, atLine: true);
+            StartLap(endTime, 0, startObserved: true, atLine: true, in f);
             Accumulate((1 - a) * dUsed, (1 - a) * dt, (1 - a) * ftDt);
             RecordProfile(0, pct, 0, _fuelUsed);
-            Observe(in f);
+            Observe(in f, (1 - a) * dt);
 
             _lastWrapTime = f.SessionTime;
             _incPending = false;
@@ -127,16 +159,16 @@ public sealed class LapDetector
             double usedBefore = _fuelUsed;
             Accumulate(dUsed, dt, ftDt);
             if (pct > pp) RecordProfile(pp, pct, usedBefore, _fuelUsed);
-            Observe(in f);
+            Observe(in f, dt);
 
             if (_incPending && f.SessionTime - _incTime >= LapIncrementWindowS)
             {
                 _incPending = false;
                 _stats.ResetSeen = true;
                 CloseLap(f.SessionTime, KindLapIncrement, pp, pct, double.NaN, in f);
-                StartLap(f.SessionTime, pct, startObserved: true, atLine: false);
+                StartLap(f.SessionTime, pct, startObserved: true, atLine: false, in f);
                 _stats.ResetSeen = true;
-                Observe(in f);
+                Observe(in f, 0);
             }
         }
 
@@ -166,7 +198,7 @@ public sealed class LapDetector
         return true;
     }
 
-    private void StartLap(double startTime, float pct, bool startObserved, bool atLine)
+    private void StartLap(double startTime, float pct, bool startObserved, bool atLine, in TelemetryFrame f)
     {
         _startTime = startTime;
         _startAtLine = atLine;
@@ -174,6 +206,9 @@ public sealed class LapDetector
         _midLap = -1;
         _stats = default;
         _stats.StartObserved = startObserved;
+        _stats.IncidentsAtStart = _stats.IncidentsAtEnd = f.PlayerCarMyIncidentCount;
+        _minFuel = Math.Min(_prevFuel, f.FuelLevel);
+        _triggered = LapReasons.None;
         _profile = default;
         _nextK = Math.Clamp((int)(pct * 100) + 1, 1, 100);
     }
@@ -186,12 +221,44 @@ public sealed class LapDetector
     }
 
     /// <summary>Per-frame observations attributed to the lap in progress.</summary>
-    private void Observe(in TelemetryFrame f)
+    private void Observe(in TelemetryFrame f, double dt)
     {
         // An unconfirmed Lap increment does not name the lap yet.
         if (_midLap < 0 && f.LapDistPct >= 0.5f) _midLap = _incPending ? _incFromLap : f.Lap;
-        _stats.PitSeen |= f.OnPitRoad || f.PlayerCarInPitStall;
         _lastFrameLap = f.Lap;
+
+        if (f.OnPitRoad || f.PlayerCarInPitStall) Trigger(LapReasons.Pit, 1, in f);
+        if ((f.SessionFlags & LapValidator.CautionMask) != 0) Trigger(LapReasons.Caution, f.SessionFlags, in f);
+        if (!f.IsOnTrack) Trigger(LapReasons.Reset, 0, in f);
+        if (f.PlayerCarTowTime > 0) Trigger(LapReasons.Reset, f.PlayerCarTowTime, in f);
+
+        _stats.IncidentsAtEnd = f.PlayerCarMyIncidentCount;
+        if (_stats.IncidentsAtEnd > _stats.IncidentsAtStart)
+            Trigger(LapReasons.Incident, _stats.IncidentsAtEnd - _stats.IncidentsAtStart, in f);
+
+        if (f.PlayerTrackSurface == 0)
+        {
+            _stats.OffTrackSeconds += dt;
+            if (_stats.OffTrackSeconds > LapValidator.OffTrackLimitS) Trigger(LapReasons.OffTrack, _stats.OffTrackSeconds, in f);
+        }
+
+        if (f.FuelLevel < _minFuel) _minFuel = f.FuelLevel;
+        else if (f.FuelLevel > _minFuel + LapValidator.RefuelThresholdL) Trigger(LapReasons.Refuel, f.FuelLevel - _minFuel, in f);
+    }
+
+    /// <summary>Sets the stats flag behind <paramref name="reason"/> and logs the first trigger per reason and lap.</summary>
+    private void Trigger(LapReasons reason, double value, in TelemetryFrame f)
+    {
+        switch (reason)
+        {
+            case LapReasons.Pit: _stats.PitSeen = true; break;
+            case LapReasons.Caution: _stats.CautionSeen = true; break;
+            case LapReasons.Reset: _stats.ResetSeen = true; break;
+            case LapReasons.Refuel: _stats.RefuelSeen = true; break;
+        }
+        if ((_triggered & reason) != 0) return;
+        _triggered |= reason;
+        _log.Emit(DiagLevel.Debug, DiagEvent.LapReasonTriggered, f.SessionTime, f.Lap, (int)reason, value, f.LapDistPct);
     }
 
     private void Remember(in TelemetryFrame f)
@@ -201,6 +268,7 @@ public sealed class LapDetector
         _prevFuel = f.FuelLevel;
         _prevLap = f.Lap;
         _prevLlt = f.LapLastLapTime;
+        _prevSpeed = f.Speed;
     }
 
     /// <summary>Records cumulative fuel at each k/100 in (lo, hi], linear in pct between the two ends.</summary>
@@ -227,7 +295,7 @@ public sealed class LapDetector
         l.StartTime = _startTime;
         l.EndTime = endTime;
         l.TimeS = double.NaN;
-        l.MeasuredTimeS = endTime - _startTime;
+        l.MeasuredTimeS = Math.Max(0, endTime - _startTime);
         l.FuelUsedL = _fuelUsed;
         l.FullThrottlePct = FullThrottlePct();
         l.Stats = _stats;
@@ -278,7 +346,7 @@ public sealed class LapDetector
         l.StartTime = _startTime;
         l.EndTime = _prevTime;
         l.TimeS = double.NaN;
-        l.MeasuredTimeS = _prevTime - _startTime;
+        l.MeasuredTimeS = Math.Max(0, _prevTime - _startTime);
         l.FuelUsedL = _fuelUsed;
         l.FullThrottlePct = FullThrottlePct();
         l.Stats = _stats;

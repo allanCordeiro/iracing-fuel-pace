@@ -37,6 +37,23 @@ public class IbtTelemetrySourceTests
     }
 
     [Fact]
+    public void Round_trips_session_flags_with_bit_31_set()
+    {
+        var frame = Frame(1.0, 0.1f, 50f);
+        frame.SessionFlags = 0x80004000u;
+        var path = Fixtures.TempPath(".ibt");
+        try
+        {
+            IbtFileBuilder.WriteFrames(path, Yaml, [frame]);
+            using var src = new IbtTelemetrySource(path);
+            var f = new TelemetryFrame();
+            Assert.Equal(ReadResult.Frame, src.TryRead(ref f));
+            Assert.Equal(0x80004000u, f.SessionFlags);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void Round_trips_scalar_and_caridx_fields()
     {
         var expected = new[] { Frame(1.0, 0.1f, 50f), Frame(1.0167, 0.2f, 49.99f), Frame(1.0333, 0.3f, 49.98f) };

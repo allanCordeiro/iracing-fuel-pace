@@ -73,7 +73,8 @@ public static class IbtFileBuilder
                     switch (vars[i].Type)
                     {
                         case VarType.Char: case VarType.Bool: dst[0] = (byte)v; break;
-                        case VarType.Int: case VarType.BitField: BinaryPrimitives.WriteInt32LittleEndian(dst, (int)v); break;
+                        case VarType.Int: BinaryPrimitives.WriteInt32LittleEndian(dst, (int)v); break;
+                        case VarType.BitField: BinaryPrimitives.WriteInt32LittleEndian(dst, unchecked((int)(uint)v)); break;
                         case VarType.Float: BinaryPrimitives.WriteSingleLittleEndian(dst, (float)v); break;
                         case VarType.Double: BinaryPrimitives.WriteDoubleLittleEndian(dst, v); break;
                     }
