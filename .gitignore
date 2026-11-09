@@ -1,0 +1,7 @@
+bin/
+obj/
+*.ibt
+BenchmarkDotNet.Artifacts/
+.vs/
+*.user
+.superpowers/
