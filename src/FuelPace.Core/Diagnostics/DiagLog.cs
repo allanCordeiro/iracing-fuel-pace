@@ -29,7 +29,7 @@ public sealed class DiagLog
     public DiagLevel Level
     {
         get => (DiagLevel)_level;
-        set => _level = (int)value;
+        set { if (!ReferenceEquals(this, Null)) _level = (int)value; }
     }
 
     public long Dropped => Interlocked.Read(ref _dropped);
@@ -43,9 +43,9 @@ public sealed class DiagLog
         long ticks = _clock.GetUtcNow().UtcTicks;
         using (_lock.EnterScope())
         {
-            if (_count == _ring.Length) { _dropped++; return; }
+            if (_count == _ring.Length) { Interlocked.Increment(ref _dropped); return; }
             ref var r = ref _ring[(_head + _count) % _ring.Length];
-            r.Seq = ++_seq;
+            r.Seq = Interlocked.Increment(ref _seq);
             r.WallTicksUtc = ticks;
             r.SessionTime = sessionTime;
             r.Event = e;

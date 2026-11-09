@@ -216,4 +216,35 @@ public class DiagLogTests
         Assert.Equal("storage", doc.RootElement.GetProperty("cat").GetString());
         Assert.Contains("boom", doc.RootElement.GetProperty("msg").GetString());
     }
+
+    [Fact]
+    public void Null_log_ignores_level_changes()
+    {
+        DiagLog.Null.Level = DiagLevel.Trace;
+        Assert.Equal(DiagLevel.Off, DiagLog.Null.Level);
+        Assert.False(DiagLog.Null.IsEnabled(DiagLevel.Error));
+    }
+
+    [Fact]
+    public void Mixed_text_and_emit_threads_have_unique_seq_and_exact_dropped()
+    {
+        var log = new DiagLog(DiagLevel.Trace, capacity: 100);
+        var threads = new List<Thread>();
+        for (int t = 0; t < 4; t++)
+            threads.Add(new Thread(() => { for (int i = 0; i < 1000; i++) log.Emit(DiagLevel.Info, DiagEvent.UserMark, 0, i0: i); }));
+        for (int t = 0; t < 2; t++)
+            threads.Add(new Thread(() => { for (int i = 0; i < 3000; i++) log.Text(DiagLevel.Info, "x", "m"); }));
+        foreach (var th in threads) th.Start();
+        foreach (var th in threads) th.Join();
+
+        var buf = new DiagRecord[200];
+        Assert.Equal(100, log.DrainRecords(buf));
+        var seqs = new HashSet<long>();
+        for (int i = 0; i < 100; i++) Assert.True(seqs.Add(buf[i].Seq));
+        int texts = 0;
+        while (log.TryDequeueText(out var tx)) { texts++; Assert.True(seqs.Add(tx.Seq)); }
+        Assert.Equal(4096, texts);
+        // emit overflow: 4000-100; text overflow: 6000-4096
+        Assert.Equal(3900 + 1904, log.Dropped);
+    }
 }
