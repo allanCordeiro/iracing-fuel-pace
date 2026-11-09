@@ -456,4 +456,16 @@ public class FuelStrategyEngineTests
         Assert.Equal(0, delta);
         Assert.True(sink != 0 || double.IsNaN(sink));
     }
+
+    [Fact]
+    public void Held_color_with_no_baseline_never_throws_or_emits_nan_amount()
+    {
+        var i = Input.LapsRace(60, 20, 2.38);
+        var h = new SignalHysteresis();
+        FuelStrategyEngine.Compute(in i, FixtureBaseline, Default, ref h);
+        i.SessionTime += 0.1;
+        var s = FuelStrategyEngine.Compute(in i, null, Default, ref h);
+        Assert.Equal(SignalState.NoBaseline, s.State);
+        Assert.Equal(InsightKind.NoBaseline, s.Insight.Kind);
+    }
 }

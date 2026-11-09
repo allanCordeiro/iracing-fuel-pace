@@ -69,13 +69,13 @@ public static class FuelStrategyEngine
         s.State = displayed;
         s.Insight = displayed switch
         {
-            SignalState.NotFeasible => new Insight(InsightKind.StopRequired, Math.Max(0, lRest * feasible - usable)),
+            SignalState.NotFeasible => new Insight(InsightKind.StopRequired, NonNegative(lRest * feasible - usable)),
             SignalState.NoBaseline => new Insight(InsightKind.NoBaseline),
             _ when input.BopMismatch => new Insight(InsightKind.BopMismatch),
             SignalState.Red => Save(refL, target, baseline?.FuelVsTime),
-            SignalState.Blue => new Insight(
-                target >= baseline!.FuelMeanL + baseline.FuelStdL ? InsightKind.Slack : InsightKind.OnTarget,
-                Math.Max(0, usable - lRest * Round2(refL))),
+            SignalState.Blue when baseline is not null => new Insight(
+                target >= baseline.FuelMeanL + baseline.FuelStdL ? InsightKind.Slack : InsightKind.OnTarget,
+                NonNegative(usable - lRest * Round2(refL))),
             _ => new Insight(InsightKind.None),
         };
         return s;
@@ -108,7 +108,7 @@ public static class FuelStrategyEngine
     static Insight Save(double refL, double target, FuelVsTime? fit)
     {
         double refR = Round2(refL);
-        double save = Math.Max(0, refR - Round2(target));
+        double save = NonNegative(refR - Round2(target));
         double pct = refR > 0 ? Math.Round(100 * save / refR, MidpointRounding.AwayFromZero) : 0;
         return new Insight(InsightKind.Save, save, pct, fit is null ? double.NaN : -fit.B * save);
     }
@@ -129,6 +129,9 @@ public static class FuelStrategyEngine
         Recording = input.Recording, RecValid = input.RecValid, RecTotal = input.RecTotal,
         Insight = new Insight(InsightKind.None),
     };
+
+    /// <summary>Clamp at 0; NaN becomes 0 (Math.Max(0, NaN) is NaN).</summary>
+    static double NonNegative(double x) => x > 0 ? x : 0;
 
     static double Round2(double x) => Math.Round(x, 2, MidpointRounding.AwayFromZero);
 
