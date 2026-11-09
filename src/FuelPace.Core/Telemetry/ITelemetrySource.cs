@@ -10,6 +10,7 @@ public interface ITelemetrySource : IDisposable
     /// <summary>
     /// The current session-info YAML. May be called from a background thread concurrently with <see cref="TryRead"/> on the
     /// telemetry thread (the loop loads session info off-thread), so implementations must not share mutable state with it.
+    /// Dispose the <c>TelemetryLoop</c> (which stops that background caller) before disposing the source.
     /// </summary>
     string ReadSessionInfoYaml();
     VarLayout Layout { get; }

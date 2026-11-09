@@ -154,4 +154,63 @@ public class TelemetryLoopLiveTests
         Assert.Single(threads);
         Assert.DoesNotContain(Environment.CurrentManagedThreadId, threads);
     }
+
+    [Fact]
+    public void Dispose_stops_the_worker_and_no_load_runs_after_it()
+    {
+        var src = new FakeSource();
+        var tap = new Tap();
+        var loop = Make(src, tap, new DiagLog(DiagLevel.Info), inline: false);
+        var entered = new ManualResetEventSlim();
+        var gate = new ManualResetEventSlim();
+        Thread? worker = null;
+        int calls = 0;
+        src.YamlHook = () =>
+        {
+            if (Interlocked.Increment(ref calls) == 1) { worker = Thread.CurrentThread; entered.Set(); gate.Wait(TimeSpan.FromSeconds(5)); }
+            return SampleYaml.Zolder;
+        };
+        src.Script.Enqueue(ReadResult.Frame);
+        Assert.True(loop.Step());
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        src.SessionInfoVersion = 2; // pending while the first load is in flight
+        src.Script.Enqueue(ReadResult.Frame);
+        Assert.True(loop.Step());
+        gate.Set();
+        loop.Dispose();
+
+        Assert.False(worker!.IsAlive);
+        Assert.Equal(1, Volatile.Read(ref calls)); // the pending version 2 never ran
+        Thread.Sleep(50);
+        Assert.Equal(1, Volatile.Read(ref calls));
+    }
+
+    [Fact]
+    public void Disconnect_drops_the_pending_load()
+    {
+        var src = new FakeSource();
+        var tap = new Tap();
+        var loop = Make(src, tap, new DiagLog(DiagLevel.Info), inline: false);
+        var entered = new ManualResetEventSlim();
+        var gate = new ManualResetEventSlim();
+        int calls = 0;
+        src.YamlHook = () =>
+        {
+            if (Interlocked.Increment(ref calls) == 1) { entered.Set(); gate.Wait(TimeSpan.FromSeconds(5)); }
+            return SampleYaml.Zolder;
+        };
+        src.Script.Enqueue(ReadResult.Frame);
+        loop.Step();
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        src.SessionInfoVersion = 2;
+        src.Script.Enqueue(ReadResult.Frame);
+        loop.Step();
+        src.Script.Enqueue(ReadResult.Disconnected);
+        loop.Step();
+        gate.Set();
+        Thread.Sleep(100);
+        Assert.Equal(1, Volatile.Read(ref calls));
+        Assert.Empty(tap.Sessions);
+        loop.Dispose();
+    }
 }

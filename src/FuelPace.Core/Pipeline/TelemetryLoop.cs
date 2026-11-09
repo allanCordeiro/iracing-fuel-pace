@@ -21,8 +21,10 @@ public interface IFrameTap
 /// changes it parses the YAML and loads the profile, inline or on a background thread, and hands both to the pipeline.
 /// Times each processed frame in a fixed histogram and emits <see cref="DiagEvent.PerfMinute"/> every 60 s of wall clock
 /// (the pipeline's <see cref="TimeProvider"/>).
+/// Dispose the loop BEFORE disposing the source: it stops the session-info worker, which calls
+/// <see cref="ITelemetrySource.ReadSessionInfoYaml"/> (a native access violation on a pointer-backed live source once unmapped).
 /// </summary>
-public sealed class TelemetryLoop
+public sealed class TelemetryLoop : IDisposable
 {
     public const int BucketUs = 10, Buckets = 1000; // 10 µs buckets up to 10 ms, plus one overflow bucket
     private static readonly TimeSpan PerfPeriod = TimeSpan.FromSeconds(60);
@@ -46,6 +48,7 @@ public sealed class TelemetryLoop
     private bool _hasPending;
     private int _pendingVersion;
     private double _pendingTime;
+    private bool _stop;
 
     private readonly int[] _histogram = new int[Buckets + 1];
     private int _samples;
@@ -87,6 +90,8 @@ public sealed class TelemetryLoop
                 {
                     _disconnected = true;
                     End(reason: 1);
+                    lock (_workLock) _hasPending = false;           // no load for the old connection after this
+                    Volatile.Write(ref _latestVersion, int.MinValue); // and an in-flight one is discarded
                     _sessionVersion = int.MinValue; // re-read the session info on reconnection
                 }
                 return true;
@@ -151,13 +156,29 @@ public sealed class TelemetryLoop
             _pendingVersion = version;
             _pendingTime = sessionTime;
             _hasPending = true;
+            if (_stop) return;
             if (_worker is null)
             {
-                _worker = new Thread(WorkerLoop) { IsBackground = true, Name = "FuelPace session info" };
-                _worker.Start();
+                var worker = new Thread(WorkerLoop) { IsBackground = true, Name = "FuelPace session info" };
+                worker.Start();
+                _worker = worker;
             }
             else Monitor.Pulse(_workLock);
         }
+    }
+
+    /// <summary>Stops the session-info worker and waits for it (up to 2 s). Call before disposing the source.</summary>
+    public void Dispose()
+    {
+        Thread? worker;
+        lock (_workLock)
+        {
+            _stop = true;
+            _hasPending = false;
+            worker = _worker;
+            Monitor.PulseAll(_workLock);
+        }
+        worker?.Join(TimeSpan.FromSeconds(2));
     }
 
     private void WorkerLoop()
@@ -168,7 +189,8 @@ public sealed class TelemetryLoop
             double sessionTime;
             lock (_workLock)
             {
-                while (!_hasPending) Monitor.Wait(_workLock);
+                while (!_hasPending && !_stop) Monitor.Wait(_workLock);
+                if (_stop) return;
                 _hasPending = false;
                 version = _pendingVersion;
                 sessionTime = _pendingTime;
@@ -182,6 +204,7 @@ public sealed class TelemetryLoop
     {
         string yaml;
         SessionInfo info;
+        if (Volatile.Read(ref _stop)) return;
         try
         {
             yaml = _source.ReadSessionInfoYaml();
