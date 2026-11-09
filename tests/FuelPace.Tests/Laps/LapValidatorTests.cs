@@ -177,17 +177,28 @@ public class LapValidatorTests
         Assert.True(gap.A < 0);
     }
 
-    [Fact]
-    public void Time_going_backwards_over_the_line_never_yields_negative_measured_time()
+    [Theory]
+    [InlineData(-200.0)]
+    [InlineData(-5.0)]
+    [InlineData(3.0)]
+    public void Time_discontinuity_at_the_line_flags_both_laps(double shiftS)
     {
-        // The line is crossed while SessionTime jumps back by more than the lap has run so far.
-        var sink = Drive(Run(new LapSim().TimeBackwards(2, 0.999, 200)));
+        // The discontinuity lands exactly on the frame that crosses the line into lap 3.
+        var frames = Run(new LapSim()).ToArray();
+        int wrap = Array.FindIndex(frames, f => f.Lap == 3);
+        for (int k = wrap; k < frames.Length; k++) frames[k].SessionTime += shiftS;
+        var sink = Drive(frames);
+
         Assert.All(sink.Laps, l =>
         {
             Assert.True(l.FuelUsedL >= 0);
             Assert.True(l.MeasuredTimeS >= 0);
+            // no absurd value on an unflagged lap
+            if (l.Reasons == LapReasons.None) Assert.InRange(l.MeasuredTimeS, 70, 90);
         });
         Assert.True(sink.Reasons(2).HasFlag(LapReasons.Reset));
+        Assert.True(sink.Reasons(3).HasFlag(LapReasons.Reset));
+        Assert.Equal(LapReasons.None, sink.Reasons(4));
     }
 
     [Fact]

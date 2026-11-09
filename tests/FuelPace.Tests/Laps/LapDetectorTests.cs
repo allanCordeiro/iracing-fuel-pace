@@ -269,14 +269,17 @@ public class LapDetectorTests
     [Fact]
     public void Update_allocates_nothing_across_laps()
     {
-        var frames = new LapSim(lapTimeS: 20, fuelPerLapL: 0.6).Run(5, endPct: 0.3).ToArray();
-        var log = new DiagLog(DiagLevel.Trace, capacity: 4096);
+        // Reason triggers fire in every lap (incident, offtrack, caution, pit, refuel, tow, time gap) so Trigger/Emit run hot.
+        var frames = new LapSim(lapTimeS: 20, fuelPerLapL: 0.6)
+            .Incident(2, 0.3).OffTrack(2, 0.4, 3).Caution(3, 0.2, 0.4).PitRoad(3, 0.5, 0.6)
+            .Refuel(4, 0.5, 1.0).Tow(4, 0.7).TimeGap(5, 0.2, 3).Run(5, endPct: 0.3).ToArray();
+        var log = new DiagLog(DiagLevel.Trace, capacity: 1 << 16);
 
         var warm = new LapDetector(new CountingSink(), log);
         for (int i = 0; i < frames.Length; i++) warm.Update(in frames[i]);
         warm.Flush();
         warm.TrySnapshotInProgress(out _);
-        log.DrainRecords(new DiagRecord[4096]);
+        log.DrainRecords(new DiagRecord[1 << 16]);
 
         var sink = new CountingSink();
         var det = new LapDetector(sink, log);
@@ -288,5 +291,8 @@ public class LapDetectorTests
 
         Assert.Equal(0, after - before);
         Assert.Equal(6, sink.Count);
+        var recs = new DiagRecord[1 << 16];
+        var n = log.DrainRecords(recs);
+        Assert.True(recs.AsSpan(0, n).ToArray().Count(r => r.Event == DiagEvent.LapReasonTriggered) >= 6);
     }
 }

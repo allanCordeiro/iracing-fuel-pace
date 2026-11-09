@@ -101,9 +101,10 @@ public sealed class LapDetector
             else if (_pendingWait >= LapTimeTimeoutS) ResolvePending(f.LapLastLapTime, official: false, f.SessionTime);
         }
 
-        if (rawDt > MaxAccumDtS || rawDt < 0)
+        if (rawDt > MaxAccumDtS + 1e-6 || rawDt < 0)
             _log.Emit(DiagLevel.Debug, DiagEvent.FrameGap, f.SessionTime, 0, 0, rawDt, f.SessionTime);
-        if (rawDt > ResetGapS || rawDt < 0) Trigger(LapReasons.Reset, rawDt, in f);
+        bool discontinuity = rawDt > ResetGapS || rawDt < 0;
+        if (discontinuity) Trigger(LapReasons.Reset, rawDt, in f);
 
         if (pct < 0)
         {
@@ -123,14 +124,18 @@ public sealed class LapDetector
             if (dPct > 0.5) dPct -= 1; else if (dPct < -0.5) dPct += 1;
             double meters = Math.Abs(dPct) * TrackLengthM;
             if (meters > Math.Max(f.Speed, _prevSpeed) * Math.Max(0, rawDt) * 2 + JumpSlackM)
+            {
+                discontinuity = true;
                 Trigger(LapReasons.Reset, meters, in f);
+            }
         }
 
         if (pp > 0.9f && pct < 0.1f)
         {
             double span = (1.0 - pp) + pct;
-            double a = span > 0 ? (1.0 - pp) / span : 1.0;
-            double endTime = _prevTime + a * (f.SessionTime - _prevTime);
+            // Never interpolate across a discontinuity: the whole frame belongs to the closing lap.
+            double a = span > 0 && !discontinuity ? (1.0 - pp) / span : 1.0;
+            double endTime = discontinuity ? f.SessionTime : _prevTime + a * (f.SessionTime - _prevTime);
 
             double usedBefore = _fuelUsed;
             Accumulate(a * dUsed, a * dt, a * ftDt);
@@ -140,6 +145,7 @@ public sealed class LapDetector
             CloseLap(endTime, KindWrap, pp, pct, a, in f);
 
             StartLap(endTime, 0, startObserved: true, atLine: true, in f);
+            if (discontinuity) Trigger(LapReasons.Reset, rawDt, in f);
             Accumulate((1 - a) * dUsed, (1 - a) * dt, (1 - a) * ftDt);
             RecordProfile(0, pct, 0, _fuelUsed);
             Observe(in f, (1 - a) * dt);
@@ -167,7 +173,7 @@ public sealed class LapDetector
                 _stats.ResetSeen = true;
                 CloseLap(f.SessionTime, KindLapIncrement, pp, pct, double.NaN, in f);
                 StartLap(f.SessionTime, pct, startObserved: true, atLine: false, in f);
-                _stats.ResetSeen = true;
+                Trigger(LapReasons.Reset, 0, in f);
                 Observe(in f, 0);
             }
         }
