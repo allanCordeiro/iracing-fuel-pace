@@ -83,4 +83,73 @@ public static class IbtFileBuilder
 
         File.WriteAllBytes(path, buf);
     }
+
+    /// <summary>Writes the full <see cref="TelemetryVars.All"/> catalog (minus CarIdx* when asked) with native types.</summary>
+    public static void WriteFrames(string path, string yaml, IEnumerable<TelemetryFrame> frames,
+        bool includeCarIdx = true, string fuelUnit = "l")
+    {
+        var vars = new List<VarSpec>();
+        var ids = new List<int>();
+        for (int i = 0; i < TelemetryVars.All.Count; i++)
+        {
+            if (!includeCarIdx && TelemetryVars.IsCarIdx((TelemetryVarId)i)) continue;
+            var spec = TelemetryVars.All[i];
+            vars.Add(i == (int)TelemetryVarId.FuelLevel ? spec with { Unit = fuelUnit } : spec);
+            ids.Add(i);
+        }
+
+        int width = vars.Sum(v => v.Count);
+        var rows = frames.Select(f =>
+        {
+            var row = new double[width];
+            int e = 0;
+            foreach (int id in ids) e = Fill(f, (TelemetryVarId)id, row, e);
+            return row;
+        });
+        Write(path, yaml, vars, rows);
+    }
+
+    private static int Fill(in TelemetryFrame f, TelemetryVarId id, double[] row, int e)
+    {
+        switch (id)
+        {
+            case TelemetryVarId.SessionTime: row[e++] = f.SessionTime; break;
+            case TelemetryVarId.SessionTimeRemain: row[e++] = f.SessionTimeRemain; break;
+            case TelemetryVarId.SessionNum: row[e++] = f.SessionNum; break;
+            case TelemetryVarId.SessionState: row[e++] = f.SessionState; break;
+            case TelemetryVarId.SessionLapsRemainEx: row[e++] = f.SessionLapsRemainEx; break;
+            case TelemetryVarId.Lap: row[e++] = f.Lap; break;
+            case TelemetryVarId.LapCompleted: row[e++] = f.LapCompleted; break;
+            case TelemetryVarId.PlayerTrackSurface: row[e++] = f.PlayerTrackSurface; break;
+            case TelemetryVarId.PlayerCarMyIncidentCount: row[e++] = f.PlayerCarMyIncidentCount; break;
+            case TelemetryVarId.PlayerCarIdx: row[e++] = f.PlayerCarIdx; break;
+            case TelemetryVarId.TrackWetness: row[e++] = f.TrackWetness; break;
+            case TelemetryVarId.SessionFlags: row[e++] = f.SessionFlags; break;
+            case TelemetryVarId.LapDistPct: row[e++] = f.LapDistPct; break;
+            case TelemetryVarId.LapLastLapTime: row[e++] = f.LapLastLapTime; break;
+            case TelemetryVarId.FuelLevel: row[e++] = f.FuelLevel; break;
+            case TelemetryVarId.FuelLevelPct: row[e++] = f.FuelLevelPct; break;
+            case TelemetryVarId.FuelUsePerHour: row[e++] = f.FuelUsePerHour; break;
+            case TelemetryVarId.PlayerCarTowTime: row[e++] = f.PlayerCarTowTime; break;
+            case TelemetryVarId.Speed: row[e++] = f.Speed; break;
+            case TelemetryVarId.Throttle: row[e++] = f.Throttle; break;
+            case TelemetryVarId.TrackTempCrew: row[e++] = f.TrackTempCrew; break;
+            case TelemetryVarId.AirTemp: row[e++] = f.AirTemp; break;
+            case TelemetryVarId.PlayerCarPowerAdjust: row[e++] = f.PlayerCarPowerAdjust; break;
+            case TelemetryVarId.PlayerCarWeightPenalty: row[e++] = f.PlayerCarWeightPenalty; break;
+            case TelemetryVarId.OnPitRoad: row[e++] = f.OnPitRoad ? 1 : 0; break;
+            case TelemetryVarId.PlayerCarInPitStall: row[e++] = f.PlayerCarInPitStall ? 1 : 0; break;
+            case TelemetryVarId.IsOnTrack: row[e++] = f.IsOnTrack ? 1 : 0; break;
+            case TelemetryVarId.IsReplayPlaying: row[e++] = f.IsReplayPlaying ? 1 : 0; break;
+            case TelemetryVarId.CarIdxPosition: for (int i = 0; i < 64; i++) row[e++] = f.CarIdxPosition[i]; break;
+            case TelemetryVarId.CarIdxLapCompleted: for (int i = 0; i < 64; i++) row[e++] = f.CarIdxLapCompleted[i]; break;
+            case TelemetryVarId.CarIdxTrackSurface: for (int i = 0; i < 64; i++) row[e++] = f.CarIdxTrackSurface[i]; break;
+            case TelemetryVarId.CarIdxClass: for (int i = 0; i < 64; i++) row[e++] = f.CarIdxClass[i]; break;
+            case TelemetryVarId.CarIdxLapDistPct: for (int i = 0; i < 64; i++) row[e++] = f.CarIdxLapDistPct[i]; break;
+            case TelemetryVarId.CarIdxLastLapTime: for (int i = 0; i < 64; i++) row[e++] = f.CarIdxLastLapTime[i]; break;
+            case TelemetryVarId.CarIdxOnPitRoad: for (int i = 0; i < 64; i++) row[e++] = f.CarIdxOnPitRoad[i] ? 1 : 0; break;
+            default: throw new ArgumentOutOfRangeException(nameof(id), id, null);
+        }
+        return e;
+    }
 }
