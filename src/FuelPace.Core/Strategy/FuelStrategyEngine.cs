@@ -61,7 +61,8 @@ public static class FuelStrategyEngine
         if (raw != SignalState.NoTarget && !double.IsNaN(target))
         {
             s.TargetL = target;
-            s.TargetIsEstimate = input.Caution && input.Race == RaceKind.Time;
+            // Ruling R10: "~" means the target rests on the frozen leader pace, i.e. the auto timed-race projection only.
+            s.TargetIsEstimate = input.Caution && input.Race == RaceKind.Time && cfg.Mode == LapsMode.Auto && !input.LeaderFinished;
         }
 
         var displayed = hysteresis.Apply(raw, input.SessionTime);

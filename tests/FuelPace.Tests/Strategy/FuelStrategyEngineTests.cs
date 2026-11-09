@@ -360,6 +360,21 @@ public class FuelStrategyEngineTests
     }
 
     [Fact]
+    public void Caution_in_stint_mode_or_after_checkered_is_not_estimate()
+    {
+        var t = Input.TimeRace();
+        t.Caution = true;
+        var stint = Run(t, FixtureBaseline, new StrategyConfig { Mode = LapsMode.Stint, StintLaps = 25 });
+        Assert.False(double.IsNaN(stint.TargetL));
+        Assert.False(stint.TargetIsEstimate);
+
+        t.LeaderFinished = true;
+        var checkered = Run(t);
+        Assert.False(double.IsNaN(checkered.TargetL));
+        Assert.False(checkered.TargetIsEstimate);
+    }
+
+    [Fact]
     public void Mean_falls_back_to_baseline_italic()
     {
         var i = Input.LapsRace(50, 19, 2.38);
