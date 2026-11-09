@@ -60,29 +60,85 @@ public static class IbtFileBuilder
         yamlBytes.CopyTo(s[yamlOffset..]);
 
         for (int r = 0; r < rowList.Count; r++)
+            WriteRow(s[(bufOffset + r * bufLen)..], vars, offsets, rowList[r]);
+
+        File.WriteAllBytes(path, buf);
+    }
+
+    private static void WriteRow(Span<byte> row, IReadOnlyList<VarSpec> vars, int[] offsets, double[] values)
+    {
+        int e = 0;
+        for (int i = 0; i < vars.Count; i++)
         {
-            var row = s[(bufOffset + r * bufLen)..];
-            int e = 0;
-            for (int i = 0; i < vars.Count; i++)
+            int size = VarTypeExt.VarTypeSize(vars[i].Type);
+            for (int k = 0; k < vars[i].Count; k++, e++)
             {
-                int size = VarTypeExt.VarTypeSize(vars[i].Type);
-                for (int k = 0; k < vars[i].Count; k++, e++)
+                var dst = row[(offsets[i] + k * size)..];
+                double v = values[e];
+                switch (vars[i].Type)
                 {
-                    var dst = row[(offsets[i] + k * size)..];
-                    double v = rowList[r][e];
-                    switch (vars[i].Type)
-                    {
-                        case VarType.Char: case VarType.Bool: dst[0] = (byte)v; break;
-                        case VarType.Int: BinaryPrimitives.WriteInt32LittleEndian(dst, (int)v); break;
-                        case VarType.BitField: BinaryPrimitives.WriteInt32LittleEndian(dst, unchecked((int)(uint)v)); break;
-                        case VarType.Float: BinaryPrimitives.WriteSingleLittleEndian(dst, (float)v); break;
-                        case VarType.Double: BinaryPrimitives.WriteDoubleLittleEndian(dst, v); break;
-                    }
+                    case VarType.Char: case VarType.Bool: dst[0] = (byte)v; break;
+                    case VarType.Int: BinaryPrimitives.WriteInt32LittleEndian(dst, (int)v); break;
+                    case VarType.BitField: BinaryPrimitives.WriteInt32LittleEndian(dst, unchecked((int)(uint)v)); break;
+                    case VarType.Float: BinaryPrimitives.WriteSingleLittleEndian(dst, (float)v); break;
+                    case VarType.Double: BinaryPrimitives.WriteDoubleLittleEndian(dst, v); break;
                 }
             }
         }
+    }
 
-        File.WriteAllBytes(path, buf);
+    /// <summary>
+    /// A live shared-memory image: the irsdk header (no disk sub-header), var headers, the NUL-terminated latin-1 YAML and
+    /// <paramref name="numBuf"/> rotating var buffers. <paramref name="buffers"/> fills buffers 0.. in order with the given tick counts.
+    /// </summary>
+    public static byte[] BuildLiveImage(string yaml, IReadOnlyList<VarSpec> vars, int numBuf,
+        (int tickCount, double[] values)[] buffers, int status = 1, int sessionInfoUpdate = 1)
+    {
+        var yamlBytes = Encoding.Latin1.GetBytes(yaml + "\0");
+        const int varHeaderSize = 144, varHeaderOffset = 144;
+        int yamlOffset = varHeaderOffset + vars.Count * varHeaderSize;
+        int bufStart = yamlOffset + yamlBytes.Length;
+
+        var offsets = new int[vars.Count];
+        int bufLen = 0;
+        for (int i = 0; i < vars.Count; i++)
+        {
+            offsets[i] = bufLen;
+            bufLen += VarTypeExt.VarTypeSize(vars[i].Type) * vars[i].Count;
+        }
+
+        var buf = new byte[bufStart + numBuf * bufLen];
+        var s = buf.AsSpan();
+        BinaryPrimitives.WriteInt32LittleEndian(s[0..], 2);
+        BinaryPrimitives.WriteInt32LittleEndian(s[4..], status);
+        BinaryPrimitives.WriteInt32LittleEndian(s[8..], 60);
+        BinaryPrimitives.WriteInt32LittleEndian(s[12..], sessionInfoUpdate);
+        BinaryPrimitives.WriteInt32LittleEndian(s[16..], yamlBytes.Length);
+        BinaryPrimitives.WriteInt32LittleEndian(s[20..], yamlOffset);
+        BinaryPrimitives.WriteInt32LittleEndian(s[24..], vars.Count);
+        BinaryPrimitives.WriteInt32LittleEndian(s[28..], varHeaderOffset);
+        BinaryPrimitives.WriteInt32LittleEndian(s[32..], numBuf);
+        BinaryPrimitives.WriteInt32LittleEndian(s[36..], bufLen);
+
+        for (int i = 0; i < vars.Count; i++)
+        {
+            var h = s[(varHeaderOffset + i * varHeaderSize)..];
+            BinaryPrimitives.WriteInt32LittleEndian(h[0..], (int)vars[i].Type);
+            BinaryPrimitives.WriteInt32LittleEndian(h[4..], offsets[i]);
+            BinaryPrimitives.WriteInt32LittleEndian(h[8..], vars[i].Count);
+            Encoding.Latin1.GetBytes(vars[i].Name, h.Slice(16, 32));
+            Encoding.Latin1.GetBytes(vars[i].Unit, h.Slice(112, 32));
+        }
+        yamlBytes.CopyTo(s[yamlOffset..]);
+
+        for (int b = 0; b < numBuf; b++)
+        {
+            int off = bufStart + b * bufLen;
+            BinaryPrimitives.WriteInt32LittleEndian(s[(48 + 16 * b)..], b < buffers.Length ? buffers[b].tickCount : 0);
+            BinaryPrimitives.WriteInt32LittleEndian(s[(52 + 16 * b)..], off);
+            if (b < buffers.Length) WriteRow(s[off..], vars, offsets, buffers[b].values);
+        }
+        return buf;
     }
 
     /// <summary>Writes the full <see cref="TelemetryVars.All"/> catalog (minus CarIdx* when asked) with native types.</summary>

@@ -38,7 +38,14 @@ public sealed class TelemetryLoop
     private TelemetryFrame _frame;
     private int _sessionVersion = int.MinValue;
     private int _latestVersion;
-    private bool _ended, _disconnected;
+    private bool _finished, _disconnected; // _finished: End already ran for this connection (reset by the next frame)
+
+    // Session-info worker: one background thread, newest requested version wins.
+    private readonly object _workLock = new();
+    private Thread? _worker;
+    private bool _hasPending;
+    private int _pendingVersion;
+    private double _pendingTime;
 
     private readonly int[] _histogram = new int[Buckets + 1];
     private int _samples;
@@ -73,11 +80,7 @@ public sealed class TelemetryLoop
             case ReadResult.Frame:
                 break;
             case ReadResult.EndOfStream:
-                if (!_ended)
-                {
-                    _ended = true;
-                    End(reason: 0);
-                }
+                End(reason: 0);
                 return false;
             case ReadResult.Disconnected:
                 if (!_disconnected)
@@ -92,6 +95,7 @@ public sealed class TelemetryLoop
         }
 
         long t0 = Stopwatch.GetTimestamp();
+        _finished = false;
         if (_disconnected)
         {
             _disconnected = false;
@@ -124,8 +128,11 @@ public sealed class TelemetryLoop
         return layout;
     }
 
+    /// <summary>Flushes and notifies once per connection: a Disconnected followed by EndOfStream does not repeat it.</summary>
     private void End(int reason)
     {
+        if (_finished) return;
+        _finished = true;
         _pipeline.Flush();
         _tap?.OnSourceEnded();
         _log.Emit(DiagLevel.Info, DiagEvent.SourceEnded, _frame.SessionTime, reason);
@@ -139,12 +146,36 @@ public sealed class TelemetryLoop
             LoadSessionInfo(version, sessionTime);
             return;
         }
-        new Thread(() =>
+        lock (_workLock)
         {
+            _pendingVersion = version;
+            _pendingTime = sessionTime;
+            _hasPending = true;
+            if (_worker is null)
+            {
+                _worker = new Thread(WorkerLoop) { IsBackground = true, Name = "FuelPace session info" };
+                _worker.Start();
+            }
+            else Monitor.Pulse(_workLock);
+        }
+    }
+
+    private void WorkerLoop()
+    {
+        while (true)
+        {
+            int version;
+            double sessionTime;
+            lock (_workLock)
+            {
+                while (!_hasPending) Monitor.Wait(_workLock);
+                _hasPending = false;
+                version = _pendingVersion;
+                sessionTime = _pendingTime;
+            }
             try { LoadSessionInfo(version, sessionTime); }
             catch (Exception e) { _log.Exception("telemetry", e); }
-        })
-        { IsBackground = true, Name = "FuelPace session info" }.Start();
+        }
     }
 
     private void LoadSessionInfo(int version, double sessionTime)
