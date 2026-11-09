@@ -197,6 +197,15 @@ public sealed class LapDetector
         _lastWrapTime = double.NegativeInfinity;
     }
 
+    /// <summary>
+    /// Emits the closed lap still waiting for its official <c>LapLastLapTime</c> now, by the timeout rule (measured time),
+    /// so a capture that stops inside the 5 s window still gets it. No-op when nothing is pending.
+    /// </summary>
+    public void ResolvePendingNow()
+    {
+        if (_started && _hasPending) ResolvePending(_prevLlt, official: false, _prevTime);
+    }
+
     public bool TrySnapshotInProgress(out CompletedLap lap)
     {
         lap = default;

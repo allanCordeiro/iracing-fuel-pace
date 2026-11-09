@@ -118,6 +118,29 @@ public class LapDetectorTests
     }
 
     [Fact]
+    public void ResolvePendingNow_emits_the_waiting_lap_by_the_timeout_rule()
+    {
+        // Constant lap times: lap 2's official time never shows as a change, so it would wait 5 s; stop 0.8 s past the line.
+        var sink = new Sink();
+        var det = new LapDetector(sink);
+        det.ResolvePendingNow(); // nothing pending on a fresh detector
+        Assert.Empty(sink.Laps);
+
+        det.SetTrackLength(LapSim.TrackLengthM);
+        foreach (var f in new LapSim().Run(2, endPct: 0.01)) det.Update(in f);
+        Assert.Equal(-1, sink.IndexOf(2));
+        det.ResolvePendingNow();
+
+        var lap2 = sink.Lap(2);
+        Assert.Equal(LapReasons.None, lap2.Reasons);
+        Assert.Equal(lap2.MeasuredTimeS, lap2.TimeS, 1e-9);
+        det.ResolvePendingNow();
+        Assert.Single(sink.Laps, l => l.LapNumber == 2);
+        Assert.True(det.TrySnapshotInProgress(out var inProgress));
+        Assert.Equal(3, inProgress.LapNumber);
+    }
+
+    [Fact]
     public void Non_positive_official_time_means_no_time()
     {
         var sink = Drive(new LapSim(publishOfficialTimes: false).Run(3), flush: true);
