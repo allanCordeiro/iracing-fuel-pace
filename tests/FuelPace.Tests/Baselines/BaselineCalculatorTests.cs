@@ -72,7 +72,14 @@ public class BaselineCalculatorTests
     [Fact]
     public void No_regression_when_range_below_2pct()
     {
-        var b = BaselineCalculator.Compute(Laps(2.38, 2.40, 2.39, 2.38, 2.40, 2.39, 2.38, 2.40, 2.39, 2.38), 100, [], T0)!;
+        var b = BaselineCalculator.Compute(Laps(2.40, 2.40, 2.40, 2.40, 2.40, 2.40, 2.355, 2.355), 100, [], T0)!;
+        Assert.Null(b.FuelVsTime);
+    }
+
+    [Fact]
+    public void No_regression_below_8_laps()
+    {
+        var b = BaselineCalculator.Compute(Laps(2.40, 2.40, 2.40, 2.40, 2.40, 2.30, 2.29), 100, [], T0)!;
         Assert.Null(b.FuelVsTime);
     }
 

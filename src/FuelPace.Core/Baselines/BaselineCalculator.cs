@@ -5,10 +5,11 @@ public static class BaselineCalculator
 {
     public const int MinLaps = 3;
     const int ProfileLength = 101;
-    /// <summary>The regression needs a fuel range of at least this fraction of the median...</summary>
+    /// <summary>The regression (PRD §6.4) needs at least this many valid laps,</summary>
+    const int MinRegressionLaps = 8;
+    /// <summary>a fuel range of at least this fraction of the median,</summary>
     const double MinRangeFraction = 0.02;
-    /// <summary>...and at least <see cref="MinEconomyLaps"/> laps below median × (1 − this).</summary>
-    const double EconomyMargin = 0.01;
+    /// <summary>and at least this many laps below median − 1 standard deviation.</summary>
     const int MinEconomyLaps = 2;
 
     public static Baseline? Compute(IReadOnlyList<LapSample> validLaps, double tankCapacityL,
@@ -23,15 +24,16 @@ public static class BaselineCalculator
         double fuelMedian = Percentile(fuel, 0.5);
 
         var throttle = validLaps.Select(l => l.FullThrottlePct).Where(x => !double.IsNaN(x)).ToArray();
+        double fuelStd = Std(fuel, fuelMean);
         double autonomyLaps = tankCapacityL / fuelMean;
 
         return new Baseline(
             computedAt, n,
-            fuelMean, fuelMedian, Std(fuel, fuelMean), fuel[0], Percentile(fuel, 0.10), Percentile(fuel, 0.90),
+            fuelMean, fuelMedian, fuelStd, fuel[0], Percentile(fuel, 0.10), Percentile(fuel, 0.90),
             lapMean, Percentile(time, 0.5), Std(time, lapMean), time[0],
             throttle.Length == 0 ? double.NaN : throttle.Average(),
             autonomyLaps, autonomyLaps * lapMean / 60.0,
-            Regress(validLaps, fuel, fuelMedian),
+            Regress(validLaps, fuel, fuelMedian, fuelStd),
             n >= 10 ? Confidence.Alta : n >= 5 ? Confidence.Media : Confidence.Baixa,
             MeanProfile(validLaps.Where(l => l.FuelProfile is not null).Select(l => l.FuelProfile!).ToList()),
             conditions);
@@ -52,11 +54,12 @@ public static class BaselineCalculator
         return mean;
     }
 
-    static FuelVsTime? Regress(IReadOnlyList<LapSample> laps, double[] sortedFuel, double median)
+    static FuelVsTime? Regress(IReadOnlyList<LapSample> laps, double[] sortedFuel, double median, double std)
     {
+        if (laps.Count < MinRegressionLaps) return null;
         if (median <= 0) return null;
         if ((sortedFuel[^1] - sortedFuel[0]) / median < MinRangeFraction) return null;
-        if (sortedFuel.Count(f => f < median * (1 - EconomyMargin)) < MinEconomyLaps) return null;
+        if (sortedFuel.Count(f => f < median - std) < MinEconomyLaps) return null;
 
         double mx = laps.Average(l => l.FuelL), my = laps.Average(l => l.TimeS);
         double sxx = 0, sxy = 0;
