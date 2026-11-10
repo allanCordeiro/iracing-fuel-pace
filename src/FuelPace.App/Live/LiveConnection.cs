@@ -48,6 +48,9 @@ public sealed class LiveConnection
     /// <summary>The header's <c>sessionInfoUpdate</c> as of the last read.</summary>
     public int SessionInfoVersion => _snap.SessionInfoUpdate;
 
+    /// <summary>Tests: the snapshot reader (its torn-read hook).</summary>
+    internal LiveSnapshotReader SnapshotForTests => _snap;
+
     /// <summary>Test hook, called between the session-info copy and the counter re-check.</summary>
     internal Action? BetweenYamlReadsForTests { get; set; }
 

@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using FuelPace.App.Live;
 using FuelPace.App.Simulation;
 using FuelPace.App.Tests.Fakes;
+using FuelPace.Core.Diagnostics;
 using FuelPace.Core.Telemetry;
 using static FuelPace.App.Tests.Recording.RecordingTestSupport;
 
@@ -146,6 +147,21 @@ public class LiveConnectionTests
         Assert.Equal(ReadResult.NoData, Read(c));
         _clock.Advance(TimeSpan.FromSeconds(2));
         Assert.Equal(ReadResult.Disconnected, Read(c));
+    }
+
+    [Fact]
+    public void A_torn_read_is_no_data_and_logged()
+    {
+        var log = new DiagLog(DiagLevel.Debug);
+        var c = new LiveConnection(_clock, log);
+        Assert.True(c.TryConnect(_image));
+        Write();
+        // The sim rotates into the buffer being copied: its tickCount (buffer 0, header offset 48) changes after the copy.
+        c.SnapshotForTests.AfterCopyForTests = () => BinaryPrimitives.WriteInt32LittleEndian(_image.AsSpan(48), 99);
+        Assert.Equal(ReadResult.NoData, Read(c));
+        Assert.Contains(Drain(log), r => r.Event == DiagEvent.TornRead);
+        c.SnapshotForTests.AfterCopyForTests = null;
+        Assert.Equal(ReadResult.Frame, Read(c));
     }
 
     [Fact]
