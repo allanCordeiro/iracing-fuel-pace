@@ -195,20 +195,43 @@ public sealed class DiagnosticBundleTests : IDisposable
     public void A_bundle_cancelled_in_the_middle_of_a_recording_stops_promptly()
     {
         Populate();
-        PutRandom("recordings/20261109-140000_big.ibt", 96); // seconds of deflate: the cancel lands inside it
+        PutRandom("recordings/20261109-140000_big.ibt", 96); // incompressible: the zip grows with every chunk copied
         using var cts = new CancellationTokenSource();
+        using var started = new ManualResetEventSlim();
         var sinceCancel = new System.Diagnostics.Stopwatch();
-        cts.Token.Register(sinceCancel.Start); // runs on the cancelling thread, at the cancel itself
         Exception? thrown = null;
-        // A thread of its own (a pool task can be starved on a busy runner); the flush runs just before the zip starts.
-        var t = new Thread(() =>
+        bool done = false;
+        // Threads of their own (pool work can be starved on a busy runner). The canceller waits until the zip holds 8 MB:
+        // the logs and settings are a few KB, so the copy is inside the recording.
+        var bundle = new Thread(() =>
         {
-            try { DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, DiagLog.Null, Clock, () => cts.CancelAfter(300), cts.Token); }
+            try { DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, DiagLog.Null, Clock, started.Set, cts.Token); }
             catch (Exception e) { thrown = e; }
             sinceCancel.Stop();
+            Volatile.Write(ref done, true);
         });
-        t.Start();
-        Assert.True(t.Join(TimeSpan.FromSeconds(60)), "the bundle did not end");
+        var canceller = new Thread(() =>
+        {
+            started.Wait(TimeSpan.FromSeconds(30));
+            while (!Volatile.Read(ref done))
+            {
+                var tmp = Directory.Exists(Dest) ? Directory.GetFiles(Dest, "*.tmp") : [];
+                long len = 0;
+                try { if (tmp.Length > 0) len = new FileInfo(tmp[0]).Length; } catch (IOException) { }
+                if (len >= 8 << 20)
+                {
+                    sinceCancel.Start();
+                    cts.Cancel();
+                    return;
+                }
+                Thread.Sleep(1);
+            }
+        });
+        bundle.Start();
+        canceller.Start();
+        Assert.True(bundle.Join(TimeSpan.FromSeconds(60)), "the bundle did not end");
+        canceller.Join(TimeSpan.FromSeconds(5));
+        Assert.True(sinceCancel.Elapsed > TimeSpan.Zero || thrown is not null, "the bundle ended before 8 MB were zipped");
         Assert.IsAssignableFrom<OperationCanceledException>(thrown);
         Assert.True(sinceCancel.Elapsed < TimeSpan.FromMilliseconds(500), $"stopped {sinceCancel.Elapsed.TotalMilliseconds:F0} ms after the cancel");
         Assert.Empty(Directory.GetFiles(Dest));
