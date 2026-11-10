@@ -189,28 +189,43 @@ public static class DiagnosticBundle
     }
 
     private static readonly byte[] MarkNeedle = "\"ev\":\"UserMark\""u8.ToArray();
+    private const int MaxLineBytes = 1 << 20;
 
-    /// <summary>Copies a JSONL file counting complete lines that carry a <c>UserMark</c> (a truncated last line is not counted).</summary>
+    /// <summary>
+    /// Copies a JSONL file line by line through <see cref="Privacy.Scrub"/> (the sink already scrubs; this also covers logs
+    /// written before it did), counting complete lines that carry a <c>UserMark</c> (a truncated last line is not counted).
+    /// Returns the bytes written. A line longer than 1 MB is scrubbed in 1 MB pieces.
+    /// </summary>
     private static long CopyCountingMarks(Stream src, Stream dst, ref int marks)
     {
         var buf = new byte[CopyBuffer];
-        var line = new List<byte>(256);
-        long total = 0;
+        var line = new MemoryStream(256);
+        long written = 0;
         int n;
-        while ((n = ReadSource(src, buf, total)) > 0)
+        while ((n = ReadSource(src, buf, written)) > 0)
         {
-            dst.Write(buf, 0, n);
-            total += n;
+            int start = 0;
             for (int i = 0; i < n; i++)
             {
-                if (buf[i] == (byte)'\n')
-                {
-                    if (line.Count > 0 && System.Runtime.InteropServices.CollectionsMarshal.AsSpan(line).IndexOf(MarkNeedle) >= 0) marks++;
-                    line.Clear();
-                }
-                else if (line.Count < 4096) line.Add(buf[i]); // marks sit near the start of the line; cap memory
+                if (buf[i] != (byte)'\n' && line.Length + (i - start) < MaxLineBytes) continue;
+                line.Write(buf, start, i - start);
+                bool complete = buf[i] == (byte)'\n';
+                if (complete && line.GetBuffer().AsSpan(0, (int)line.Length).IndexOf(MarkNeedle) >= 0) marks++;
+                written += WriteScrubbed(line, dst, newline: complete);
+                start = complete ? i + 1 : i;
             }
+            line.Write(buf, start, n - start);
         }
-        return total;
+        if (line.Length > 0) written += WriteScrubbed(line, dst, newline: false);
+        return written;
+    }
+
+    private static long WriteScrubbed(MemoryStream line, Stream dst, bool newline)
+    {
+        var text = Privacy.Scrub(Encoding.UTF8.GetString(line.GetBuffer(), 0, (int)line.Length));
+        line.SetLength(0);
+        var bytes = Encoding.UTF8.GetBytes(newline ? text + "\n" : text);
+        dst.Write(bytes);
+        return bytes.Length;
     }
 }

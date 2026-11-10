@@ -3,6 +3,7 @@ using System.Text.Json;
 using FuelPace.App.Diagnostics;
 using FuelPace.App.Host;
 using FuelPace.App.Ipc;
+using FuelPace.App.Overlay;
 using FuelPace.App.Placement;
 using FuelPace.App.Settings;
 using FuelPace.App.Simulation;
@@ -291,38 +292,102 @@ public sealed class AgentHostTests
         Assert.Single(rig.Events("SettingsSaved"));
     }
 
-    [Fact]
-    public void Settings_are_not_overwritten_after_a_fallback_load()
+    static AppSettings UserSettings()
     {
-        using var rig = new HostRig();
         var mine = new AppSettings();
         mine.Hotkeys.ToggleEdit = "Ctrl+Alt+E";
         mine.Overlay.OffsetX = 77;
-        rig.WriteSettings(mine);
-        string original = File.ReadAllText(rig.SettingsPath);
+        return mine;
+    }
 
-        using (new FileStream(rig.SettingsPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) // an antivirus holds it
+    static FileStream Lock(string path) => new(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None); // an antivirus holds it
+
+    [Fact] // carry-over (a)
+    public async Task Settings_are_not_overwritten_after_a_fallback_load()
+    {
+        using var rig = new HostRig();
+        rig.WriteSettings(UserSettings());
+        string original = File.ReadAllText(rig.SettingsPath);
+        IpcProbe probe;
+        using (Lock(rig.SettingsPath))
         {
             rig.Start();
-            Assert.Equal(HotkeySettings.DefaultToggleEdit, rig.Host.Settings.Hotkeys.ToggleEdit);
-            rig.Monitors.Set(FakeMonitors.Primary with { DpiScale = 1.25 });
+            Assert.True(rig.Host.SettingsFallback);
+            probe = await rig.ConnectAsync();
+            var snap = await probe.SendAndSync(new GetSnapshot());
+            Assert.Equal(HotkeySettings.DefaultToggleEdit, snap.Settings.Hotkeys.ToggleEdit);
+
+            // Changes from the Settings window are refused while the file cannot be read: they would save the defaults.
+            await probe.SendAndSync(new UpdateSettings(snap.Settings with { Strategy = snap.Settings.Strategy with { ReserveL = 1.0 } }));
+            Assert.Equal(AgentHost.SettingsUnreadableText, (await probe.WaitFor<Notice>()).Text);
+            Assert.Equal(0.5, rig.Host.Settings.Strategy.ReserveL);
+            await probe.SendAndSync(new SetDebugMode(true));
+            await probe.WaitFor<Notice>(skip: 1);
+            Assert.False(rig.Host.DebugMode);
+
+            // A drag applies at once but is not saved; the 5 s re-read keeps failing; protection stays armed.
             rig.Hotkeys.Press(AgentHost.HotkeyToggleEdit);
-            rig.Clock.Advance(TimeSpan.FromSeconds(2));
+            rig.Surface.RaiseMoved(new PixelRect(500, 300, 300, 100));
+            rig.Ui.Drain();
+            Assert.Equal(507, rig.Host.Settings.Overlay.OffsetX); // edit mode: the panel sits (7, 31) px inside the window
+            rig.Clock.Advance(TimeSpan.FromSeconds(6));
             rig.Ui.Drain();
             Assert.True(rig.Host.WaitIo(HostRig.Timeout));
+            Assert.True(rig.Host.SettingsFallback);
         }
         Assert.Equal(original, File.ReadAllText(rig.SettingsPath));
         Assert.Empty(rig.Events("SettingsSaved"));
 
-        // The file is readable again: a user change is applied on top of the user's settings, not of the defaults.
-        rig.Surface.RaiseMoved(new PixelRect(500, 300, 300, 100));
+        // Readable again: the next 5 s re-read brings the user's settings back and tells the Settings window.
+        rig.Clock.Advance(TimeSpan.FromSeconds(5));
         rig.Ui.Drain();
-        rig.Clock.Advance(TimeSpan.FromSeconds(1));
-        rig.Ui.Drain();
+        var applied = await probe.WaitFor<SettingsApplied>();
+        Assert.Equal("Ctrl+Alt+E", applied.Settings.Hotkeys.ToggleEdit);
+        Assert.False(rig.Host.SettingsFallback);
+
+        await probe.SendAndSync(new UpdateSettings(applied.Settings with { Strategy = applied.Settings.Strategy with { ReserveL = 1.0 } }));
         Assert.True(rig.Host.WaitIo(HostRig.Timeout));
         var saved = new SettingsStore(rig.AppData).Load();
-        Assert.Equal("Ctrl+Alt+E", saved.Hotkeys.ToggleEdit);
-        Assert.Equal((507, 331), (saved.Overlay.OffsetX, saved.Overlay.OffsetY)); // edit mode: the panel sits (7, 31) px inside the window
+        Assert.Equal(("Ctrl+Alt+E", 77, 1.0), (saved.Hotkeys.ToggleEdit, saved.Overlay.OffsetX, saved.Strategy.ReserveL));
+    }
+
+    [Fact] // carry-over (a)
+    public async Task Snapshot_after_the_file_is_readable_again_carries_the_users_settings()
+    {
+        using var rig = new HostRig();
+        rig.WriteSettings(UserSettings());
+        using (Lock(rig.SettingsPath)) rig.Start();
+        Assert.True(rig.Host.SettingsFallback);
+
+        var probe = await rig.ConnectAsync(); // Hello re-reads the file before answering
+        var snap = await probe.SendAndSync(new GetSnapshot());
+        Assert.Equal("Ctrl+Alt+E", snap.Settings.Hotkeys.ToggleEdit);
+        Assert.False(rig.Host.SettingsFallback);
+
+        await probe.SendAndSync(new UpdateSettings(snap.Settings with { StartWithWindows = true }));
+        Assert.True(rig.Host.WaitIo(HostRig.Timeout));
+        var saved = new SettingsStore(rig.AppData).Load();
+        Assert.Equal(("Ctrl+Alt+E", 77, true), (saved.Hotkeys.ToggleEdit, saved.Overlay.OffsetX, saved.StartWithWindows));
+    }
+
+    sealed class ThrowingTray : ITrayIcon
+    {
+        public event Action<TrayCommand>? Command { add => throw new InvalidOperationException("tray unavailable"); remove { } }
+        public void SetTooltip(string text) { }
+        public void Notify(string title, string text) { }
+        public void SetDebugMenu(bool visible) { }
+    }
+
+    [Fact]
+    public void Dispose_after_a_failed_start_does_not_throw()
+    {
+        using var rig = new HostRig();
+        var host = new AgentHost(rig.Options, rig.Sources, rig.Surface, rig.Ui, rig.Hotkeys, new ThrowingTray(), rig.Monitors,
+            rig.Sys, new FixedMetricsMeasurer(), rig.Clock);
+        Assert.Throws<InvalidOperationException>(host.Start);
+        host.Dispose();
+        host.Dispose();
+        Assert.False(host.TelemetryThreadAlive);
     }
 
     [Fact] // Review Focus 5 (host side) and the placement contract
@@ -348,6 +413,12 @@ public sealed class AgentHostTests
         var moved = rig.Surface.LastBounds!.Value;
         Assert.Equal((1960, 40, 450), (moved.X, moved.Y, moved.Width)); // 300 DIP × scale 1 × DPI 1.5
         Assert.Equal(450, (int)Math.Ceiling(rig.Surface.LastSize.W)); // the draw list itself is built at DPI scale
+
+        // Edit mode: the chrome follows the DPI (7 × 1.5, 31 × 1.5 px around the panel), the footer the user's scale.
+        rig.Hotkeys.Press(AgentHost.HotkeyToggleEdit);
+        rig.WaitUntil(() => rig.Surface.LastBounds!.Value.X == 1960 - 11, "edit-mode window around the panel", pump: Tick);
+        Assert.Equal(40 - 47, rig.Surface.LastBounds!.Value.Y);
+        Assert.Contains("X 40 · Y 40 · escala 100%", rig.Surface.LastTexts);
     }
 
     [Fact]

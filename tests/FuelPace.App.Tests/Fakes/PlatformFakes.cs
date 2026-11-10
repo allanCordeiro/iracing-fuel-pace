@@ -87,8 +87,14 @@ public sealed class FakeSurface : IOverlaySurface
 
     public void SetBounds(PixelRect r) { using (_gate.EnterScope()) _bounds.Add(r); }
 
+    public List<string> LastTexts { get; private set; } = [];
+
     public void Render(DrawList list)
     {
+        var texts = new List<string>();
+        foreach (var c in list.Commands)
+            if (c.Kind == CommandKind.Text) texts.Add(new string(list.TextOf(in c)));
+        LastTexts = texts;
         LastSize = list.Size;
         Interlocked.Increment(ref _renders);
     }

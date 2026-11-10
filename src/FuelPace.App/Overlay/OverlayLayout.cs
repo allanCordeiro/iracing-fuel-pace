@@ -2,14 +2,18 @@ using FuelPace.Core.Strategy;
 
 namespace FuelPace.App.Overlay;
 
+/// <param name="Scale">The user's scale (0.5–2.5), shown in the edit-mode footer.</param>
+/// <param name="DpiScale">The monitor's dpi / 96: the panel is drawn at Scale × DpiScale and the edit chrome at DpiScale,
+/// so the list is in physical pixels.</param>
 public sealed record OverlayViewOptions(
     double Scale, double BackgroundOpacity, double ContentOpacity, bool ShowPaceLine, bool ShowInsightLine,
-    bool EditMode, bool DebugTag, string ToggleEditHotkey, int ScreenX, int ScreenY);
+    bool EditMode, bool DebugTag, string ToggleEditHotkey, int ScreenX, int ScreenY, double DpiScale = 1.0);
 
 /// <summary>
 /// Lays the overlay out as a <see cref="DrawList"/>, matching the approved mocks at 1x (width 300 px, line height 1.0).
-/// Everything inside the panel scales with <see cref="OverlayViewOptions.Scale"/>; the edit-mode chrome (banner, footer,
-/// outline, handles) keeps a fixed size. Zero allocation once the list has warmed up.
+/// Everything inside the panel scales with <see cref="OverlayViewOptions.Scale"/> × <see cref="OverlayViewOptions.DpiScale"/>;
+/// the edit-mode chrome (banner, footer, outline, handles) does not follow the user's scale, only the DPI. Zero allocation
+/// once the list has warmed up.
 /// </summary>
 public static class OverlayLayout
 {
@@ -20,9 +24,10 @@ public static class OverlayLayout
         new Builder(o, m, dest).Run(in s, carShort, trackShort);
     }
 
-    /// <summary>Where the panel's top-left corner sits inside the list (px): edit mode adds fixed-size chrome above and to
-    /// the left of it, so the window must start that far before the panel.</summary>
-    public static SizeF PanelOffset(bool editMode) => editMode ? new SizeF(EditMargin, BannerH + BannerGap) : default;
+    /// <summary>Where the panel's top-left corner sits inside the list (physical px): edit mode adds chrome above and to the
+    /// left of it (sized by <paramref name="dpiScale"/> only), so the window must start that far before the panel.</summary>
+    public static SizeF PanelOffset(bool editMode, double dpiScale = 1.0) =>
+        editMode ? new SizeF(EditMargin * (float)dpiScale, (BannerH + BannerGap) * (float)dpiScale) : default;
 
     // 1x metrics (px)
     const float PanelW = 300, PadV = 9, PadH = 11, Gap = 6, RowGap = 6;
@@ -33,12 +38,12 @@ public static class OverlayLayout
         readonly OverlayViewOptions _o;
         readonly ITextMeasurer _m;
         readonly DrawList _d;
-        readonly float _k;
+        readonly float _k, _c; // panel factor (Scale × DPI), chrome factor (DPI)
         double _op;
 
         public Builder(OverlayViewOptions o, ITextMeasurer m, DrawList d)
         {
-            _o = o; _m = m; _d = d; _k = (float)o.Scale; _op = o.ContentOpacity;
+            _o = o; _m = m; _d = d; _c = (float)o.DpiScale; _k = (float)o.Scale * _c; _op = o.ContentOpacity;
         }
 
         float W(ReadOnlySpan<char> t, FontRole r, float size, float ls) => _m.Width(t, r, size * _k, ls);
@@ -87,7 +92,7 @@ public static class OverlayLayout
             if (paceLine) h += RowGap + 10;
             if (insightLen > 0) h += RowGap + 11;
             float ph = h * k, pw = PanelW * k;
-            float ox = edit ? EditMargin : 0, oy = edit ? BannerH + BannerGap : 0;
+            float ox = edit ? EditMargin * _c : 0, oy = edit ? (BannerH + BannerGap) * _c : 0;
             float x0 = ox + PadH * k, right = ox + (PanelW - PadH) * k;
 
             _d.FillRoundedRect(new RectF(ox, oy, pw, ph), 6 * k, OverlayTheme.Panel(_o.BackgroundOpacity));
@@ -276,27 +281,29 @@ public static class OverlayLayout
 
         float EditChrome(float ox, float oy, float pw, float ph, float bottom, ref float width)
         {
+            float c = _c;
             var white = OverlayTheme.White;
             // outline and handles
-            _d.StrokeDashedRect(new RectF(ox - 3, oy - 3, pw + 6, ph + 6), 1, Rgba.From(255, 255, 255, 0.75));
-            ReadOnlySpan<float> hx = [ox - 7, ox + pw, ox - 7, ox + pw];
-            ReadOnlySpan<float> hy = [oy - 7, oy - 7, oy + ph, oy + ph];
+            _d.StrokeDashedRect(new RectF(ox - 3 * c, oy - 3 * c, pw + 6 * c, ph + 6 * c), c, Rgba.From(255, 255, 255, 0.75));
+            float hs = EditMargin * c;
+            ReadOnlySpan<float> hx = [ox - hs, ox + pw, ox - hs, ox + pw];
+            ReadOnlySpan<float> hy = [oy - hs, oy - hs, oy + ph, oy + ph];
             for (int i = 0; i < 4; i++)
             {
-                var r = new RectF(hx[i], hy[i], 7, 7);
+                var r = new RectF(hx[i], hy[i], hs, hs);
                 _d.FillRect(r, white.WithOpacity(_op));
-                _d.StrokeRect(r, 1, OverlayTheme.Accent.WithOpacity(_op));
+                _d.StrokeRect(r, c, OverlayTheme.Accent.WithOpacity(_op));
             }
 
-            // banner above (fixed size, not scaled)
-            const float f = ChromeFont;
+            // banner above (does not follow the user's scale)
+            float f = ChromeFont * c;
             float asc = _m.Ascent(FontRole.Label, f);
             float w1 = _m.Width("MODO EDIÇÃO", FontRole.Label, f, 0.08f);
             float w2 = _m.Width("arraste para mover · puxe um canto para redimensionar", FontRole.Body, f, 0);
-            float bw = 18 + w1 + 7 + w2;
-            _d.FillRoundedRect(new RectF(ox, 0, bw, BannerH), 4, OverlayTheme.Accent);
-            _d.Text("MODO EDIÇÃO", FontRole.Label, 600, f, 0.08f, false, white, ox + 9, 5 + asc);
-            _d.Text("arraste para mover · puxe um canto para redimensionar", FontRole.Body, 400, f, 0, false, white, ox + 9 + w1 + 7, 5 + asc);
+            float bw = 18 * c + w1 + 7 * c + w2;
+            _d.FillRoundedRect(new RectF(ox, 0, bw, BannerH * c), 4 * c, OverlayTheme.Accent);
+            _d.Text("MODO EDIÇÃO", FontRole.Label, 600, f, 0.08f, false, white, ox + 9 * c, 5 * c + asc);
+            _d.Text("arraste para mover · puxe um canto para redimensionar", FontRole.Body, 400, f, 0, false, white, ox + 9 * c + w1 + 7 * c, 5 * c + asc);
             width = Math.Max(width, ox + bw);
 
             // footer pills
@@ -311,19 +318,19 @@ public static class OverlayLayout
 
             const string rest = " trava e volta ao modo click-through";
             float wk = _m.Width(_o.ToggleEditHotkey, FontRole.Value, f, 0), wrest = _m.Width(rest, FontRole.Body, f, 0);
-            float wl = 12 + wk + wrest, wr = _m.Width(info[..n], FontRole.Value, f, 0) + 12;
-            float fy = Math.Max(bottom, oy + ph + EditMargin) + 6, fh = f + 6;
+            float wl = 12 * c + wk + wrest, wr = _m.Width(info[..n], FontRole.Value, f, 0) + 12 * c;
+            float fy = Math.Max(bottom, oy + ph + EditMargin * c) + 6 * c, fh = f + 6 * c;
             var bg = Rgba.From(OverlayTheme.PanelR, OverlayTheme.PanelG, OverlayTheme.PanelB, 0.75);
             float fa = _m.Ascent(FontRole.Body, f);
 
-            _d.FillRoundedRect(new RectF(ox, fy, wl, fh), 6, bg);
-            _d.Text(_o.ToggleEditHotkey, FontRole.Value, 600, f, 0, false, OverlayTheme.Insight, ox + 6, fy + 3 + fa);
-            _d.Text(rest, FontRole.Body, 400, f, 0, false, OverlayTheme.Insight, ox + 6 + wk, fy + 3 + fa);
+            _d.FillRoundedRect(new RectF(ox, fy, wl, fh), 6 * c, bg);
+            _d.Text(_o.ToggleEditHotkey, FontRole.Value, 600, f, 0, false, OverlayTheme.Insight, ox + 6 * c, fy + 3 * c + fa);
+            _d.Text(rest, FontRole.Body, 400, f, 0, false, OverlayTheme.Insight, ox + 6 * c + wk, fy + 3 * c + fa);
             float ry = fy;
-            if (wl + 6 + wr > pw) ry = fy + fh + 6; // does not fit beside it: stack
+            if (wl + 6 * c + wr > pw) ry = fy + fh + 6 * c; // does not fit beside it: stack
             float rx = Math.Max(ox, ox + pw - wr);
-            _d.FillRoundedRect(new RectF(rx, ry, wr, fh), 6, bg);
-            _d.Text(info[..n], FontRole.Value, 400, f, 0, false, OverlayTheme.Insight, rx + 6, ry + 3 + fa);
+            _d.FillRoundedRect(new RectF(rx, ry, wr, fh), 6 * c, bg);
+            _d.Text(info[..n], FontRole.Value, 400, f, 0, false, OverlayTheme.Insight, rx + 6 * c, ry + 3 * c + fa);
             width = Math.Max(width, Math.Max(ox + wl, rx + wr));
             return ry + fh;
         }

@@ -7,7 +7,8 @@ using FuelPace.Core.Telemetry;
 
 namespace FuelPace.Core.Storage;
 
-/// <summary>Reads and writes <c>{rootDir}/profiles/{car}__{track}.json</c>. Call from a background thread, never the telemetry thread.</summary>
+/// <summary>Reads and writes <c>{rootDir}/profiles/{car}__{track}.json</c>. Call from a background thread, never the telemetry thread.
+/// Log messages name files, never their folder (it sits under the user's profile); OS error messages are passed through.</summary>
 public sealed class ProfileStore
 {
     private static readonly string[] Reserved =
@@ -94,7 +95,7 @@ public sealed class ProfileStore
         try
         {
             if (TryLoad(path, out var doc) == LoadResult.NewerSchema)
-                throw new IOException($"{path} has a newer schemaVersion; captures are kept as pending files");
+                throw new IOException($"{Path.GetFileName(path)} has a newer schemaVersion; captures are kept as pending files");
             doc ??= ProfileDocument.CreateFor(info);
             var merged = MergePending(doc, info);
             ProfileOperations.AddCapture(doc, rec, now);
@@ -105,7 +106,7 @@ public sealed class ProfileStore
                 try { File.Delete(p); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException)
                 {
-                    _log.Text(DiagLevel.Warn, "storage", $"merged pending capture not deleted {p}: {e.Message}");
+                    _log.Text(DiagLevel.Warn, "storage", $"merged pending capture not deleted {Path.GetFileName(p)}: {e.Message}");
                 }
             }
             return doc;
@@ -136,14 +137,14 @@ public sealed class ProfileStore
             if (schema > CurrentSchemaVersion)
             {
                 _log.Text(DiagLevel.Warn, "storage",
-                    $"profile {path} has schemaVersion {schema} (this version reads {CurrentSchemaVersion}); not loaded, left untouched");
+                    $"profile {Path.GetFileName(path)} has schemaVersion {schema} (this version reads {CurrentSchemaVersion}); not loaded, left untouched");
                 return LoadResult.NewerSchema;
             }
             var loaded = JsonSerializer.Deserialize(text, ProfileJsonContext.Default.ProfileDocument)
                 ?? throw new JsonException("document is null");
             Validate(loaded);
             doc = loaded;
-            _log.Text(DiagLevel.Debug, "storage", "loaded " + path);
+            _log.Text(DiagLevel.Debug, "storage", "loaded " + Path.GetFileName(path));
             return LoadResult.Loaded;
         }
         catch (JsonException e)
@@ -188,21 +189,21 @@ public sealed class ProfileStore
             try { schema = PeekSchemaVersion(ReadText(path)); }
             catch (JsonException e)
             {
-                if (!Quarantine(path, e)) throw new IOException($"corrupt profile {path} could not be quarantined; not overwritten", e);
+                if (!Quarantine(path, e)) throw new IOException($"corrupt profile {Path.GetFileName(path)} could not be quarantined; not overwritten", e);
                 schema = CurrentSchemaVersion;
             }
             if (schema > CurrentSchemaVersion)
-                throw new IOException($"{path} has schemaVersion {schema}; a newer FuelPace wrote it, not overwritten");
+                throw new IOException($"{Path.GetFileName(path)} has schemaVersion {schema}; a newer FuelPace wrote it, not overwritten");
         }
         AtomicFile.WriteAllText(path, JsonSerializer.Serialize(doc, ProfileJsonContext.Default.ProfileDocument));
         _log.Emit(DiagLevel.Info, DiagEvent.ProfileSaved, 0, doc.Captures.Count, CountValid(doc));
-        _log.Text(DiagLevel.Info, "storage", "saved " + path);
+        _log.Text(DiagLevel.Info, "storage", "saved " + Path.GetFileName(path));
     }
 
     private void SaveFailed(string path, int captures, int validLaps, Exception e)
     {
         _log.Emit(DiagLevel.Error, DiagEvent.ProfileSaveFailed, 0, captures, validLaps);
-        _log.Text(DiagLevel.Error, "storage", $"save failed {path}: {e.Message}");
+        _log.Text(DiagLevel.Error, "storage", $"save failed {Path.GetFileName(path)}: {e.Message}");
     }
 
     /// <summary>Adds the captures of every readable pending file (skipping ids already present); returns those files.</summary>
@@ -228,11 +229,11 @@ public sealed class ProfileStore
             var doc = ProfileDocument.CreateFor(info);
             doc.Captures.Add(rec);
             AtomicFile.WriteAllText(path, JsonSerializer.Serialize(doc, ProfileJsonContext.Default.ProfileDocument));
-            _log.Text(DiagLevel.Warn, "storage", $"capture {rec.Id} kept in {path}; merged by the next save of this profile");
+            _log.Text(DiagLevel.Warn, "storage", $"capture {rec.Id} kept in {Path.GetFileName(path)}; merged by the next save of this profile");
         }
         catch (Exception e)
         {
-            _log.Text(DiagLevel.Error, "storage", $"capture {rec.Id} LOST: pending file {path} not written: {e.Message}");
+            _log.Text(DiagLevel.Error, "storage", $"capture {rec.Id} LOST: pending file {Path.GetFileName(path)} not written: {e.Message}");
         }
     }
 
@@ -240,7 +241,7 @@ public sealed class ProfileStore
     private bool Quarantine(string path, Exception cause)
     {
         _log.Emit(DiagLevel.Warn, DiagEvent.ProfileQuarantined, 0);
-        _log.Text(DiagLevel.Warn, "storage", $"corrupt profile {path}: {cause.Message}");
+        _log.Text(DiagLevel.Warn, "storage", $"corrupt profile {Path.GetFileName(path)}: {cause.Message}");
         try
         {
             File.Move(path, path + ".corrupt", overwrite: true);
@@ -248,7 +249,7 @@ public sealed class ProfileStore
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            _log.Text(DiagLevel.Warn, "storage", $"corrupt profile {path} not quarantined: {e.Message}");
+            _log.Text(DiagLevel.Warn, "storage", $"corrupt profile {Path.GetFileName(path)} not quarantined: {e.Message}");
             return false;
         }
     }

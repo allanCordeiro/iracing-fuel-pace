@@ -12,6 +12,8 @@ namespace FuelPace.App.Host;
 public sealed partial class AgentHost
 {
     private static readonly TimeSpan UiRequestTimeout = TimeSpan.FromSeconds(5);
+    internal const string SettingsUnreadableText = "configurações ainda não puderam ser lidas; tente novamente";
+    internal const string SettingsReloadedText = "configurações recarregadas do arquivo; confira e tente novamente";
 
     /// <summary>Pool thread, one message at a time per client. State changes run on the UI thread and are awaited, so a
     /// request that follows sees them; disk work goes to the I/O queue and answers from there.</summary>
@@ -22,19 +24,39 @@ public sealed partial class AgentHost
         switch (m)
         {
             case Hello or GetSnapshot:
+                // After a fallback load the Settings window must not start from the defaults: re-read first.
+                if (_settingsFallback) await OnUiAsync(() => TryRecoverSettings());
                 await ctx.ReplyAsync(new Snapshot(BuildSnapshot()));
                 break;
             case SetCapture c:
                 SetCapture(c.On);
                 break;
             case UpdateSettings u:
-                await OnUiAsync(() => ApplyUserChange(_ => u.Settings, debounce: false));
+                await OnUiAsync(() =>
+                {
+                    if (_settingsFallback)
+                    {
+                        // Built from a snapshot of the defaults: never saved over the user's file. If the file is readable
+                        // now, its settings are broadcast and the window retries on them.
+                        Reply(ctx, new Notice("warn", TryRecoverSettings() ? SettingsReloadedText : SettingsUnreadableText));
+                        return;
+                    }
+                    ApplySettings(u.Settings, save: true);
+                });
                 break;
             case SetEditMode e:
                 await OnUiAsync(() => SetEditMode(e.On));
                 break;
             case SetDebugMode d:
-                await OnUiAsync(() => ApplyUserChange(s => s with { Debug = s.Debug with { Enabled = d.On } }, debounce: false));
+                await OnUiAsync(() =>
+                {
+                    if (!TryRecoverSettings())
+                    {
+                        Reply(ctx, new Notice("warn", SettingsUnreadableText));
+                        return;
+                    }
+                    ApplySettings(_settings with { Debug = _settings.Debug with { Enabled = d.On } }, save: true);
+                });
                 break;
             case ListProfiles:
                 _io.Enqueue(() => Reply(ctx, ListProfilesNow()));
@@ -242,10 +264,11 @@ public sealed partial class AgentHost
             if (ctx is not null) Reply(ctx, new BundleCreated(path));
             return path;
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        catch (Exception e)
         {
-            _log.Text(DiagLevel.Error, "app", "diagnostic bundle failed: " + e.Message);
-            if (ctx is not null) Reply(ctx, new Error("Falha ao gerar o pacote de diagnóstico: " + e.Message));
+            _log.Text(DiagLevel.Error, "app", $"diagnostic bundle failed: {e.GetType().Name}: {e.Message}");
+            // The exception type only: its message may carry paths under the user's profile.
+            if (ctx is not null) Reply(ctx, new Error($"Falha ao gerar o pacote de diagnóstico ({e.GetType().Name})."));
             return null;
         }
     }

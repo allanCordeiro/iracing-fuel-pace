@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using FuelPace.App.Diagnostics;
 using FuelPace.App.Ipc;
 using FuelPace.App.Overlay;
@@ -27,8 +26,9 @@ namespace FuelPace.App.Host;
 /// thread. Platform events may be raised on any thread: they are posted to the UI thread.
 /// <see cref="Start"/> may be called from any thread; <see cref="Dispose"/> belongs on the UI thread (hotkeys are unregistered
 /// there) after the message loop ended, once <see cref="Completion"/> finished.
-/// settings.json is written only for explicit user changes; after a load that fell back to the defaults (file locked or
-/// unreadable) the next user change first re-reads the file, so the user's settings are kept.
+/// settings.json is written only for explicit user changes, and never while the settings in use did not come from it: after
+/// a load that fell back to the defaults (file locked or unreadable) the file is re-read every 5 s, before every snapshot and
+/// before every change; until a read succeeds changes from the Settings window are refused and overlay drags are not saved.
 /// </summary>
 public sealed partial class AgentHost : IDisposable
 {
@@ -80,11 +80,13 @@ public sealed partial class AgentHost : IDisposable
     private IpcServer? _ipc;
     private Thread? _telemetry;
     private ITimer? _redrawTimer, _fullscreenTimer, _saveTimer, _autoHideTimer, _exitTimer;
-    private Action _emitRedraws = null!, _checkFullscreen = null!;
+    private Action _emitRedraws = null!, _checkFullscreen = null!, _retrySettings = null!, _connectionChanged = null!;
     private int _started, _disposed;
 
     // Shared between threads.
-    private volatile bool _stopping, _debugMode, _simConnected, _editMode, _fullscreen, _fullscreenNotified, _recorderWanted;
+    private volatile bool _stopping, _debugMode, _simConnected, _editMode, _recorderWanted;
+    private volatile bool _fullscreen;       // written by the UI thread only
+    private volatile bool _settingsFallback; // written by the UI thread only (and Start)
     private volatile AppSettings _settings = new AppSettings().Normalize();
     private volatile SessionInfo? _sessionInfo;
     private volatile SessionTap? _lastSession;
@@ -92,7 +94,8 @@ public sealed partial class AgentHost : IDisposable
     private volatile IReadOnlyList<MonitorDesc> _monitors = [];
     private volatile TelemetryRecorder? _recorder;
     private double _lastSessionTime;
-    private int _sessionNum, _savePending;
+    private int _sessionNum, _savePending, _connections;
+    private Task? _recorderDisposal;
     private List<CapturedLapDto> _captureLaps = [];
     private int _captureValid;
 
@@ -100,8 +103,8 @@ public sealed partial class AgentHost : IDisposable
     private bool _sourceEnded;
 
     // UI thread only.
-    private bool _settingsFallback, _userVisible = true, _shown, _hasShown, _hotkeysNotified, _rendered, _inactive, _hasPanel;
-    private int _marks, _redraws;
+    private bool _userVisible = true, _shown, _hasShown, _hotkeysNotified, _rendered, _inactive, _hasPanel, _fullscreenNotified;
+    private int _marks, _redraws, _seenConnections;
     private long _lastHash, _inactiveSince;
     private readonly DrawList _list = new(), _measure = new();
     private PixelRect _panel;
@@ -141,6 +144,7 @@ public sealed partial class AgentHost : IDisposable
     internal TelemetryPipeline Pipeline => _pipeline;
     internal AppSettings Settings => _settings;
     internal bool SimConnected => _simConnected;
+    internal bool SettingsFallback => _settingsFallback;
     internal bool RecordingEnabled => _recorderWanted;
     internal bool RecorderRunning => _recorder is not null;
     internal bool TelemetryThreadAlive => _telemetry?.IsAlive ?? false;
@@ -168,7 +172,7 @@ public sealed partial class AgentHost : IDisposable
         _log.Text(DiagLevel.Info, "startup", DescribeStartup(settings));
         if (_settingsFallback)
             _log.Text(DiagLevel.Warn, "settings", "settings.json could not be read (locked or access denied): defaults in use; "
-                + "it is not written until the user changes a setting, which re-reads it first");
+                + "it is re-read every 5 s and before every snapshot, and never written until a read succeeds");
 
         _profiles = new ProfileStore(_o.AppDataRoot, _log);
         _io = new BackgroundWorkQueue("FuelPace.IO", _log) { OnError = e => _log.Exception("io", e) };
@@ -180,6 +184,8 @@ public sealed partial class AgentHost : IDisposable
 
         _emitRedraws = EmitRedraws;
         _checkFullscreen = CheckFullscreen;
+        _retrySettings = () => RunUi(() => TryRecoverSettings());
+        _connectionChanged = ConnectionChanged;
         _hotkeys.Pressed += OnHotkeyPressed;
         _tray.Command += OnTrayCommand;
         _monitorProvider.Changed += OnMonitorsChanged;
@@ -190,7 +196,11 @@ public sealed partial class AgentHost : IDisposable
         _ipc.Start();
 
         _redrawTimer = _clock.CreateTimer(_ => _ui.Post(_emitRedraws), null, RedrawPeriod, RedrawPeriod);
-        _fullscreenTimer = _clock.CreateTimer(_ => _ui.Post(_checkFullscreen), null, FullscreenPeriod, FullscreenPeriod);
+        _fullscreenTimer = _clock.CreateTimer(_ =>
+        {
+            _ui.Post(_checkFullscreen);
+            if (_settingsFallback) _ui.Post(_retrySettings);
+        }, null, FullscreenPeriod, FullscreenPeriod);
         _saveTimer = _clock.CreateTimer(_ => SaveIfPending(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         _autoHideTimer = _clock.CreateTimer(_ => _scheduler.InvalidateOptions(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         if (_o.ExitAfter is { } after)
@@ -268,7 +278,8 @@ public sealed partial class AgentHost : IDisposable
     private void OnConnected()
     {
         _simConnected = true;
-        _fullscreenNotified = false; // a new sim session: the fullscreen notice may show again
+        Interlocked.Increment(ref _connections);
+        _ui.Post(_connectionChanged);
         _scheduler.InvalidateOptions();
     }
 
@@ -276,9 +287,21 @@ public sealed partial class AgentHost : IDisposable
     {
         if (!_simConnected) return;
         _simConnected = false;
-        _fullscreen = false;
+        _ui.Post(_connectionChanged);
         _scheduler.InvalidateOptions();
     }
+
+    /// <summary>UI thread: a new sim connection may show the fullscreen notice again; without the sim nothing is fullscreen.</summary>
+    private void ConnectionChanged() => RunUi(() =>
+    {
+        int c = Volatile.Read(ref _connections);
+        if (c != _seenConnections)
+        {
+            _seenConnections = c;
+            _fullscreenNotified = false;
+        }
+        if (!_simConnected) _fullscreen = false;
+    });
 
     /// <summary>Telemetry thread: starts or stops the recorder to match the debug settings.</summary>
     private void ApplyRecorder()
@@ -301,9 +324,14 @@ public sealed partial class AgentHost : IDisposable
         }
         else if (!want && cur is not null)
         {
+            // Dispose writes what is in the ring, closes the file and joins its thread (up to 10 s): not on this thread.
             _recorder = null;
-            if (_simConnected) cur.OnSourceEnded();
-            cur.Dispose();
+            var previous = _recorderDisposal;
+            _recorderDisposal = Task.Run(() =>
+            {
+                previous?.Wait();
+                cur.Dispose();
+            });
         }
     }
 
@@ -528,16 +556,16 @@ public sealed partial class AgentHost : IDisposable
     {
         var monitors = _monitors;
         if (monitors.Count == 0) return;
-        var off = OverlayLayout.PanelOffset(_editMode);
+        double dpi = _monitor?.DpiScale ?? 1.0;
+        var off = OverlayLayout.PanelOffset(_editMode, dpi);
         int chromeW = _bounds is { } b && _hasPanel ? b.Width - _panel.Width : 0;
-        var panel = new PixelRect(window.X + (int)off.W, window.Y + (int)off.H,
+        var panel = new PixelRect(window.X + Px(off.W), window.Y + Px(off.H),
             Math.Max(1, window.Width - chromeW), _hasPanel ? _panel.Height : window.Height);
         ApplyUserChange(s =>
         {
             var o = s.Overlay;
             if (resized)
             {
-                double dpi = _monitor?.DpiScale ?? 1.0;
                 double scale = OverlayPlacement.ScaleFromUserResize(panel, _measure.Size, dpi);
                 o = o with { Scale = Math.Round(scale, 2, MidpointRounding.AwayFromZero) };
             }
@@ -545,26 +573,38 @@ public sealed partial class AgentHost : IDisposable
         }, debounce: true);
     }
 
-    /// <summary>An explicit user change. After a fallback load the file is read again first, so the change lands on the user's
-    /// settings rather than on the defaults.</summary>
+    /// <summary>A change made on the overlay (drag, resize). After a fallback load the file is re-read first so the change
+    /// lands on the user's settings; while it still cannot be read the change applies now but is not saved.</summary>
     private void ApplyUserChange(Func<AppSettings, AppSettings> change, bool debounce)
     {
-        if (_settingsFallback)
+        bool persist = TryRecoverSettings();
+        ApplySettings(change(_settings), save: persist && !debounce);
+        if (!persist)
         {
-            var loaded = _settingsStore.Load();
-            if (!_settingsStore.LastLoadWasFallback)
-            {
-                _log.Text(DiagLevel.Info, "settings", "settings.json is readable again: the user's settings are back in use");
-                ApplySettings(loaded, save: false);
-            }
-            _settingsFallback = false;
+            _log.Text(DiagLevel.Warn, "settings", "settings.json still unreadable: the change is applied but not saved");
+            return;
         }
-        ApplySettings(change(_settings), save: !debounce);
         if (debounce)
         {
             Volatile.Write(ref _savePending, 1);
             _saveTimer?.Change(SaveDebounce, Timeout.InfiniteTimeSpan);
         }
+    }
+
+    /// <summary>
+    /// UI thread. True when settings.json is the source of the settings in use: no fallback, or a re-read (one attempt, no
+    /// retry delay) just succeeded, which applies the user's settings and broadcasts them. Only then may settings be saved.
+    /// </summary>
+    private bool TryRecoverSettings()
+    {
+        if (!_settingsFallback) return true;
+        var loaded = _settingsStore.Load(retryLocked: false);
+        if (_settingsStore.LastLoadWasFallback) return false;
+        _log.Text(DiagLevel.Info, "settings", "settings.json is readable again: the user's settings are in use");
+        ApplySettings(loaded, save: false);
+        _settingsFallback = false;
+        Broadcast(new SettingsApplied(_settings));
+        return true;
     }
 
     /// <summary>Applies everything live: strategy, hotkeys, autostart, debug mode (log level, recorder, tray, mark hotkey), view.</summary>
@@ -601,6 +641,11 @@ public sealed partial class AgentHost : IDisposable
 
     private void EnqueueSave(AppSettings s) => _io.Enqueue(() =>
     {
+        if (_settingsFallback)
+        {
+            _log.Text(DiagLevel.Warn, "settings", "settings.json not saved: it has not been read successfully yet");
+            return;
+        }
         try
         {
             _settingsStore.Save(s);
@@ -680,7 +725,7 @@ public sealed partial class AgentHost : IDisposable
         var car = _pipeline.Overlay.CarShort;
         var track = _pipeline.Overlay.TrackShort;
         if (!ReferenceEquals(_viewSettings, s)) { _view = null; _measureView = null; _viewSettings = s; }
-        _measureView ??= ViewOptions(s, 1.0, edit: false);
+        _measureView ??= ViewOptions(s, 1.0, edit: false, dpi: 1.0);
         OverlayLayout.Build(in state, car, track, _measureView, _measurer, _measure);
 
         var monitors = _monitors;
@@ -693,15 +738,15 @@ public sealed partial class AgentHost : IDisposable
         double dpi = _monitor?.DpiScale ?? 1.0;
         if (_view is null || _viewDpi != dpi)
         {
-            _view = ViewOptions(s, s.Overlay.Scale * dpi, _editMode);
+            _view = ViewOptions(s, s.Overlay.Scale, _editMode, dpi);
             _viewDpi = dpi;
         }
         OverlayLayout.Build(in state, car, track, _view, _measurer, _list);
 
         if (_hasPanel)
         {
-            var off = OverlayLayout.PanelOffset(_editMode);
-            var bounds = new PixelRect(_panel.X - (int)off.W, _panel.Y - (int)off.H,
+            var off = OverlayLayout.PanelOffset(_editMode, dpi);
+            var bounds = new PixelRect(_panel.X - Px(off.W), _panel.Y - Px(off.H),
                 (int)Math.Ceiling(_list.Size.W), (int)Math.Ceiling(_list.Size.H));
             if (_bounds != bounds)
             {
@@ -719,9 +764,12 @@ public sealed partial class AgentHost : IDisposable
         _redraws++;
     }
 
-    private OverlayViewOptions ViewOptions(AppSettings s, double scale, bool edit) => new(
+    /// <summary>The panel is drawn at <paramref name="scale"/> × <paramref name="dpi"/>, the edit chrome at <paramref name="dpi"/>.</summary>
+    private OverlayViewOptions ViewOptions(AppSettings s, double scale, bool edit, double dpi) => new(
         scale, s.Overlay.BackgroundOpacity, s.Overlay.ContentOpacity, s.Overlay.ShowPaceLine, s.Overlay.ShowInsightLine,
-        edit, _debugMode, s.Hotkeys.ToggleEdit, s.Overlay.OffsetX, s.Overlay.OffsetY);
+        edit, _debugMode, s.Hotkeys.ToggleEdit, s.Overlay.OffsetX, s.Overlay.OffsetY, dpi);
+
+    private static int Px(float v) => (int)Math.Round(v, MidpointRounding.AwayFromZero);
 
     // ---------------------------------------------------------------- startup text, privacy
 
@@ -732,7 +780,7 @@ public sealed partial class AgentHost : IDisposable
         sb.Append(CultureInfo.InvariantCulture,
             $"(command line {_o.DebugFromCommandLine}, marker {_o.DebugMarker}, settings {settings.Debug.Enabled})\n");
         sb.Append(CultureInfo.InvariantCulture,
-            $"options: appData {Scrub(_o.AppDataRoot)}, replay {(_o.ReplayPath is null ? "-" : Path.GetFileName(_o.ReplayPath))}, ");
+            $"options: appData {Privacy.Scrub(_o.AppDataRoot)}, replay {(_o.ReplayPath is null ? "-" : Path.GetFileName(_o.ReplayPath))}, ");
         sb.Append(CultureInfo.InvariantCulture,
             $"speed {_o.ReplaySpeed}, exitAfter {_o.ExitAfter?.TotalSeconds.ToString(CultureInfo.InvariantCulture) ?? "-"} s, pipe {_o.PipeName}\n");
         sb.Append("system:");
@@ -756,25 +804,8 @@ public sealed partial class AgentHost : IDisposable
         d[SystemInfoKeys.DebugMode] = _debugMode ? "on" : "off";
         d[SystemInfoKeys.OverlayBackend] = _surface.BackendName;
         d[SystemInfoKeys.FullscreenExclusive] = _fullscreen ? "yes" : "no";
-        foreach (var k in d.Keys.ToList()) d[k] = Scrub(d[k]);
+        foreach (var k in d.Keys.ToList()) d[k] = Privacy.Scrub(d[k]);
         return d;
-    }
-
-    private static readonly string UserProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-    private static readonly Regex? UserNameRegex = Environment.UserName.Length >= 3
-        ? new Regex(@"(?<![\p{L}\p{N}])" + Regex.Escape(Environment.UserName) + @"(?![\p{L}\p{N}])",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
-        : null;
-
-    /// <summary>Replaces the user-profile path with <c>%USERPROFILE%</c> and the user name with <c>%USERNAME%</c>.</summary>
-    internal static string Scrub(string text)
-    {
-        if (UserProfile.Length > 1)
-        {
-            text = text.Replace(UserProfile, "%USERPROFILE%", StringComparison.OrdinalIgnoreCase);
-            text = text.Replace(UserProfile.Replace('\\', '/'), "%USERPROFILE%", StringComparison.OrdinalIgnoreCase);
-        }
-        return UserNameRegex?.Replace(text, "%USERNAME%") ?? text;
     }
 
     // ---------------------------------------------------------------- shutdown
@@ -799,12 +830,17 @@ public sealed partial class AgentHost : IDisposable
         // The telemetry thread saves an active capture (pipeline flush), closes the recording and disposes loop, then source.
         if (_telemetry is { } t && !t.Join(StopTimeout))
             _log.Text(DiagLevel.Error, "app", "telemetry thread did not stop in time");
+        if (_recorderDisposal is { } rd && !rd.Wait(StopTimeout))
+            _log.Text(DiagLevel.Error, "app", "a stopped recorder did not close in time");
         _ipc?.Dispose();
         try { _hotkeys.UnregisterAll(); }
         catch (Exception e) { _log.Exception("input", e); }
-        SaveIfPending(); // a drag that ended less than 500 ms ago
-        if (!_io.WaitIdle(StopTimeout)) _log.Text(DiagLevel.Error, "app", "I/O queue did not drain in time");
-        _io.Dispose();
+        if (_io is { } io) // null when Start failed early
+        {
+            SaveIfPending(); // a drag that ended less than 500 ms ago
+            if (!io.WaitIdle(StopTimeout)) _log.Text(DiagLevel.Error, "app", "I/O queue did not drain in time");
+            io.Dispose();
+        }
 
         _log.Emit(DiagLevel.Info, AppDiagEvents.Shutdown, SessionTime);
         _log.Text(DiagLevel.Info, "app", "shutdown");

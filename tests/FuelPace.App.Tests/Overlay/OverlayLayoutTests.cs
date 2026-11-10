@@ -237,6 +237,23 @@ public sealed class OverlayLayoutTests
     }
 
     [Fact]
+    public void Dpi_scales_the_panel_with_the_user_scale_and_the_chrome_alone()
+    {
+        var o = Opts(scale: 2, edit: true) with { DpiScale = 1.5 };
+        var d = Build(Blue(), o);
+        var cmds = d.Commands.ToArray();
+        var panel = cmds.First(c => c.Kind == CommandKind.FillRoundedRect);
+        var offset = OverlayLayout.PanelOffset(true, 1.5);
+        Assert.Equal((7 * 1.5f, 31 * 1.5f), (offset.W, offset.H));
+        Assert.Equal((offset.W, offset.H), (panel.Rect.X, panel.Rect.Y));
+        Assert.Equal(300 * 3f, panel.Rect.W, 0.01);                      // panel: Scale × DPI
+        Assert.Equal(11 * 1.5f, Text(d, "MODO EDIÇÃO").SizePx, 0.01);   // chrome: DPI only
+        Assert.Equal(4, cmds.Count(c => c.Kind == CommandKind.FillRect && Math.Abs(c.Rect.W - 7 * 1.5f) < 0.01));
+        Assert.True(Has(d, "X 1840 · Y 980 · escala 200%"));             // the user's scale, not Scale × DPI
+        Assert.Equal(default, OverlayLayout.PanelOffset(false, 1.5));
+    }
+
+    [Fact]
     public void Hidden_insight_line_shrinks_height()
     {
         var withLine = Build(Blue());

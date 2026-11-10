@@ -149,6 +149,7 @@ public sealed class DiagFileSink : IDisposable
                 else
                 {
                     var t = texts[ti++];
+                    t = t with { Message = Privacy.Scrub(t.Message) }; // exceptions and I/O errors carry user paths
                     TrySerialize(w => { if (_textFormatter is not null) _textFormatter(w, t); else DiagJsonFormatter.Write(w, in t); });
                 }
             }
