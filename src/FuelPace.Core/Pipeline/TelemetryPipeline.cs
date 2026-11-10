@@ -94,7 +94,7 @@ public sealed class TelemetryPipeline : ILapSink
     public string TrackShort => Volatile.Read(ref _ctx)?.TrackShort ?? "";
 
     /// <summary>The race leader's pace as the strategy sees it. Telemetry thread only (diagnostics and tests).</summary>
-    public LeaderPace Leader => _leader.Current;
+    internal LeaderPace Leader => _leader.Current;
 
     internal TimeProvider Clock => _clock;
 
@@ -108,7 +108,7 @@ public sealed class TelemetryPipeline : ILapSink
     /// <see cref="SessionInfo.ProfileKey"/>; the context is left alone when nothing it uses changed. False when the caller
     /// must load the profile and call <see cref="OnSessionContext"/>: no context yet, another key, or the last load failed.
     /// </summary>
-    public bool TryReuseProfile(SessionInfo info)
+    internal bool TryReuseProfile(SessionInfo info)
     {
         while (true)
         {
@@ -126,7 +126,7 @@ public sealed class TelemetryPipeline : ILapSink
 
     /// <summary>I-2b: the profile could not be read (I/O error). Keeps the profile in use for the same key (never replaced by
     /// "no baseline"); otherwise installs the session with none. The next session-info change retries the load.</summary>
-    public void OnSessionContextProfileUnavailable(SessionInfo info)
+    internal void OnSessionContextProfileUnavailable(SessionInfo info)
     {
         while (true)
         {
@@ -182,7 +182,13 @@ public sealed class TelemetryPipeline : ILapSink
         // new session's stint, last lap or leader pace.
         if (!_hasSessionNum || f.SessionNum != _sessionNum)
         {
-            if (_hasSessionNum) ResetHistory();
+            if (_hasSessionNum)
+            {
+                // N-2: the previous session's last lap may still wait (≤ 5 s) for its official time; emit it now, while
+                // the history is still there to be cleared, so it cannot reach the new stint or last lap later.
+                _detector.ResolvePendingNow();
+                ResetHistory();
+            }
             _sessionNum = f.SessionNum;
             _hasSessionNum = true;
         }

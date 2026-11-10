@@ -11,8 +11,8 @@ public static partial class SessionInfoParser
     [GeneratedRegex(@"^(\s*(?:- )?[A-Za-z0-9_]+: )(.+?)\s*$")]
     private static partial Regex KeyValueLine();
 
-    /// <summary>One complete YAML scalar in double quotes (backslash escapes) or single quotes (<c>''</c> escapes).</summary>
-    [GeneratedRegex(@"^(?:""(?:[^""\\]|\\.)*""|'(?:[^']|'')*')$")]
+    /// <summary>One complete YAML scalar in double quotes (only the <c>\\</c> and <c>\"</c> escapes; YamlDotNet rejects others such as <c>\U</c> in a Windows path) or single quotes (<c>''</c> escapes).</summary>
+    [GeneratedRegex(@"^(?:""(?:[^""\\]|\\[""\\])*""|'(?:[^']|'')*')$")]
     private static partial Regex FullyQuoted();
 
     private static readonly IDeserializer Deserializer = new DeserializerBuilder()

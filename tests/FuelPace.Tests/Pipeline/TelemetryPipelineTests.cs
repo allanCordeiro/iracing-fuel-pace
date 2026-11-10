@@ -377,6 +377,28 @@ public class TelemetryPipelineTests
     }
 
     [Fact]
+    public void Session_change_resolves_the_pending_lap_before_resetting_history()   // N-2
+    {
+        var frames = SyntheticWith(f => f);
+        int w = Array.FindIndex(frames, f => f.Lap == 3);                  // lap 2 just ended
+        Assert.True(w > 0);
+        int changeAt = w + 30, officialAt = w + 120;                       // 0.5 s and 2 s after the line (< 5 s timeout)
+        for (int i = officialAt; i < w + SyntheticRace.FramesPerLap; i++) frames[i].LapLastLapTime = 21f; // the official time arrives late and differs
+        for (int i = changeAt; i < frames.Length; i++) frames[i].SessionNum = 1;
+
+        var info = SessionInfoParser.Parse(PracticeThenRaceYaml);
+        var pipeline = new TelemetryPipeline(StintCfg, new FixedTimeProvider(T0), null, null);
+        pipeline.OnSessionContext(info, SyntheticRace.Profile(info));
+        int k = 0;
+        for (; k < officialAt + 2 * TelemetryPipeline.StrategyEvery; k++) pipeline.Tick(in frames[k]);
+
+        var s = pipeline.Overlay.Read();
+        Assert.True(double.IsNaN(s.LastLapL), "the previous session's last lap leaked into the new session");
+        var published = frames[(k - 1) - (k - 1) % TelemetryPipeline.StrategyEvery];
+        Assert.Equal(30 - 0 - published.LapDistPct, s.LapsRemaining, 1e-6);   // stint LapsDone == 0
+    }
+
+    [Fact]
     public void Flush_resets_stint_leader_pace_and_last_lap_for_the_next_connection()   // I-5
     {
         var frames = SyntheticWith(f => f);

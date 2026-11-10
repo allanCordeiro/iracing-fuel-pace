@@ -63,10 +63,24 @@ public class SessionInfoParserTests
     }
 
     [Theory]
+    [InlineData("TeamName: \"C:\\Users\\bob\"", "\"C:\\Users\\bob\"")]
+    [InlineData("UserName: \"x\\y\"", "\"x\\y\"")]
+    [InlineData("UserName: \"a\\tb\"", "\"a\\tb\"")]
+    public void Double_quoted_values_with_unknown_escapes_are_taken_literally(string line, string expected)   // N-1
+    {
+        var yaml = SampleYaml.Zolder.Replace("   UserName: Allan Cordeiro\n", "   " + line + "\n");
+        Assert.Contains(line, yaml);
+        Assert.Contains(line[..(line.IndexOf(':') + 2)] + "'" + expected + "'", SessionInfoParser.Sanitize(yaml));
+        Assert.Equal("ligierjsp320", SessionInfoParser.Parse(yaml).CarPath);
+    }
+
+    [Theory]
     [InlineData("CarNumber: \"7\"")]
     [InlineData("TeamName: 'Rock''n Roll'")]
     [InlineData("UserName: \"Joe \\\"Rocket\\\" Smith\"")]
     [InlineData("UserName: ''")]
+    [InlineData("UserName: \"x\\\\y\"")]
+    [InlineData("UserName: \"a \\\"b\\\" c\"")]
     public void Fully_quoted_values_are_left_unchanged(string line)
     {
         Assert.Equal(" " + line, SessionInfoParser.Sanitize(" " + line));
