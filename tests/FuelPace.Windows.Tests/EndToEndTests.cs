@@ -31,31 +31,34 @@ public sealed class EndToEndTests
 {
     private const string CarPath = "ligierjsp320", TrackName = "zolder alt";
 
-    [Fact]
-    public void Agent_follows_fake_sim_and_reconnects() // criterion 7
+    // A hung test fails instead of holding the CI job (every wait inside is bounded too).
+    private const int TestTimeoutMs = 6 * 60_000;
+
+    [Fact(Timeout = TestTimeoutMs)]
+    public async Task Agent_follows_fake_sim_and_reconnects() // criterion 7
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only");
-        using var run = new E2ERun(nameof(Agent_follows_fake_sim_and_reconnects));
+        using var run = new E2ERun(nameof(Agent_follows_fake_sim_and_reconnects), TestContext.Current.CancellationToken);
         // PerfMinute comes once a connection lasts 60 s of wall clock (TelemetryLoop, one per connection), so the second
         // connection must: the Agent runs 90 s (not 40) and the first sim publishes for 8 s.
         const int exitAfterS = 90;
         var agent = run.StartAgent("--debug", "--exit-after", exitAfterS.ToString(CultureInfo.InvariantCulture));
-        run.WaitForLog(l => l.Count("Startup") == 1, "Agent startup");
+        await run.WaitForLogAsync(l => l.Count("Startup") == 1, "Agent startup");
 
         var sim1 = run.StartFakeSim("sim1", "--synthetic-race", "30", "--speed", "10", "--cars", "20", "--disconnect-after", "8");
-        run.WaitForExit(sim1, TimeSpan.FromSeconds(60));
+        await run.WaitForExitAsync(sim1, TimeSpan.FromSeconds(60));
         Assert.Equal(0, sim1.ExitCode);
-        run.WaitForLog(l => l.Count("SourceEnded") == 1, "the Agent noticing that the sim left");
+        await run.WaitForLogAsync(l => l.Count("SourceEnded") == 1, "the Agent noticing that the sim left");
         var first = run.Log();
         Assert.Equal(1, first.Count("SourceOpened"));
         Assert.Equal(1, first.Events("SourceEnded").Single().GetProperty("reason").GetInt32()); // disconnected, not EOF
 
         // Started only now: a sim back within 2 s would be the same connection (the sim reloading), by design.
         var sim2 = run.StartFakeSim("sim2", "--synthetic-race", "80", "--speed", "10", "--cars", "20", "--disconnect-after", "300");
-        run.WaitForLog(l => l.Count("SourceOpened") == 2, "the Agent reconnecting");
+        await run.WaitForLogAsync(l => l.Count("SourceOpened") == 2, "the Agent reconnecting");
         double reconnectedAtS = run.AgentElapsed.TotalSeconds;
 
-        run.WaitForExit(agent, TimeSpan.FromSeconds(exitAfterS + 120));
+        await run.WaitForExitAsync(agent, TimeSpan.FromSeconds(exitAfterS + 120));
         Assert.Equal(0, agent.ExitCode);
         Assert.False(sim2.HasExited, "the second sim ended before the Agent (a second SourceEnded)");
 
@@ -81,40 +84,40 @@ public sealed class EndToEndTests
         Assert.True(frames > 600, $"only {frames} recorded frames");
     }
 
-    [Fact]
+    [Fact(Timeout = TestTimeoutMs)]
     public async Task Second_agent_instance_exits_and_requests_settings() // Review Focus 4
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only");
-        using var run = new E2ERun(nameof(Second_agent_instance_exits_and_requests_settings));
+        using var run = new E2ERun(nameof(Second_agent_instance_exits_and_requests_settings), TestContext.Current.CancellationToken);
         var first = run.StartAgent("--debug", "--exit-after", "25");
-        run.WaitForLog(l => l.Count("Startup") == 1, "Agent startup");
+        await run.WaitForLogAsync(l => l.Count("Startup") == 1, "Agent startup");
         await using (var probe = new IpcClient(E2ERun.PipeName))
             Assert.True(await probe.ConnectAsync(TimeSpan.FromSeconds(30)), "the first Agent's pipe never accepted");
 
         string secondAppData = Path.Combine(run.Root, "second");
         var second = run.StartAgentIn(secondAppData, "agent2", "--debug", "--exit-after", "25");
-        run.WaitForExit(second, TimeSpan.FromSeconds(20)); // long before its --exit-after: it never ran an agent
+        await run.WaitForExitAsync(second, TimeSpan.FromSeconds(20)); // long before its --exit-after: it never ran an agent
         Assert.Equal(0, second.ExitCode);
         Assert.False(Directory.Exists(Path.Combine(secondAppData, "logs")), "the second instance started a host");
         Assert.False(first.HasExited);
-        run.WaitForLog(l => l.HasText("another Agent instance asked for the Settings window"), "the Settings request");
+        await run.WaitForLogAsync(l => l.HasText("another Agent instance asked for the Settings window"), "the Settings request");
 
-        run.WaitForExit(first, TimeSpan.FromSeconds(120));
+        await run.WaitForExitAsync(first, TimeSpan.FromSeconds(120));
         Assert.Equal(0, first.ExitCode);
     }
 
-    [Fact]
+    [Fact(Timeout = TestTimeoutMs)]
     public async Task Capture_end_to_end_with_ipc() // criterion 12, without the Settings window
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only");
-        using var run = new E2ERun(nameof(Capture_end_to_end_with_ipc));
+        using var run = new E2ERun(nameof(Capture_end_to_end_with_ipc), TestContext.Current.CancellationToken);
         var agent = run.StartAgent("--debug", "--exit-after", "60");
         run.StartFakeSim("sim", "--synthetic-race", "80", "--speed", "10", "--cars", "20", "--disconnect-after", "300");
-        run.WaitForLog(l => l.Count("SessionInfoChanged") >= 1, "the session info");
+        await run.WaitForLogAsync(l => l.Count("SessionInfoChanged") >= 1, "the session info");
 
         var timeout = TimeSpan.FromSeconds(60);
         var laps = new ConcurrentQueue<CaptureLapAdded>();
-        await using (var settings = new IpcProbe(E2ERun.PipeName))
+        await using (var settings = new IpcProbe(run))
         {
             settings.Client.Received += m =>
             {
@@ -122,12 +125,12 @@ public sealed class EndToEndTests
             };
             await settings.ConnectAsync(timeout);
             await settings.Client.SendAsync(new SetCapture(true));
-            await E2ERun.WaitAsync(() => laps.Count >= 4, timeout, "4 captured laps");
+            await run.WaitAsync(() => laps.Count >= 4, timeout, "4 captured laps");
         } // the Settings window closes during the capture...
 
         int seen = laps.Count;
-        run.WaitForLog(l => l.Count("CaptureLap") > seen, "a lap captured without a client");
-        await using (var settings = new IpcProbe(E2ERun.PipeName))
+        await run.WaitForLogAsync(l => l.Count("CaptureLap") > seen, "a lap captured without a client");
+        await using (var settings = new IpcProbe(run))
         {
             var snapshot = await settings.ConnectAsync(timeout); // ...and opens again: the capture is still running
             Assert.True(snapshot.S.CaptureActive);
@@ -137,13 +140,13 @@ public sealed class EndToEndTests
             Assert.Equal(CarPath + "__" + TrackName, finished.ProfileKey);
 
             ProfileDocument? doc = null;
-            await E2ERun.WaitAsync(() => (doc = TryLoadProfile(run.AppData)) is { Captures.Count: > 0 }, timeout, "the saved profile");
+            await run.WaitAsync(() => (doc = TryLoadProfile(run.AppData)) is { Captures.Count: > 0 }, timeout, "the saved profile");
             var capture = Assert.Single(doc!.Captures);
             Assert.Equal(finished.CaptureId, capture.Id);
             Assert.True(capture.Laps.Count >= snapshot.S.CaptureLaps.Count, $"{capture.Laps.Count} laps saved");
         }
 
-        run.WaitForExit(agent, TimeSpan.FromSeconds(180));
+        await run.WaitForExitAsync(agent, TimeSpan.FromSeconds(180));
         Assert.Equal(0, agent.ExitCode);
         var log = run.Log();
         Assert.Equal(1, log.Count("CaptureStarted"));
@@ -159,11 +162,11 @@ public sealed class EndToEndTests
     }
 
     /// <summary>A stand-in for the Settings window: the client plus every message it received.</summary>
-    private sealed class IpcProbe(string pipe) : IAsyncDisposable
+    private sealed class IpcProbe(E2ERun run) : IAsyncDisposable
     {
         private readonly ConcurrentQueue<IpcMessage> _got = new();
 
-        public IpcClient Client { get; } = new(pipe);
+        public IpcClient Client { get; } = new(E2ERun.PipeName);
 
         /// <summary>Connects and says hello, as the Settings window does; returns the snapshot it answers with.</summary>
         public async Task<Snapshot> ConnectAsync(TimeSpan timeout)
@@ -177,7 +180,7 @@ public sealed class EndToEndTests
         public async Task<T> WaitForAsync<T>(TimeSpan timeout) where T : IpcMessage
         {
             T? found = null;
-            await E2ERun.WaitAsync(() => (found = _got.OfType<T>().FirstOrDefault()) is not null, timeout, typeof(T).Name);
+            await run.WaitAsync(() => (found = _got.OfType<T>().FirstOrDefault()) is not null, timeout, typeof(T).Name);
             return found!;
         }
 
@@ -203,14 +206,17 @@ internal sealed class E2ERun : IDisposable
     private readonly DateTime _started = DateTime.Now;
     private Stopwatch? _agentClock;
 
-    public E2ERun(string test)
+    /// <param name="token">The test's: its timeout ends every wait with an exception, so Dispose still kills and copies.</param>
+    public E2ERun(string test, CancellationToken token)
     {
         _test = test;
+        Token = token;
         Root = Path.Combine(Path.GetTempPath(), "fuelpace-e2e-" + Guid.NewGuid().ToString("N")[..12]);
         AppData = Path.Combine(Root, "appdata");
         Directory.CreateDirectory(AppData);
     }
 
+    public CancellationToken Token { get; }
     public string Root { get; }
     public string AppData { get; }
 
@@ -245,14 +251,21 @@ internal sealed class E2ERun : IDisposable
         return child.Process;
     }
 
-    public void WaitForExit(Process p, TimeSpan timeout)
+    /// <summary>Waits for the process itself, not for the end of its output: a process the Agent starts (the Settings window)
+    /// inherits the Agent's redirected stdout and keeps the pipe open after the Agent exited.</summary>
+    public async Task WaitForExitAsync(Process p, TimeSpan timeout)
     {
-        if (p.WaitForExit(timeout)) p.WaitForExit(); // the second call drains the redirected output
-        else Assert.Fail($"{_children.Find(c => c.Process == p)?.Name ?? "a process"} did not exit within {timeout.TotalSeconds} s");
+        var sw = Stopwatch.StartNew();
+        while (!p.HasExited)
+        {
+            if (sw.Elapsed > timeout)
+                Assert.Fail($"{_children.Find(c => c.Process == p)?.Name ?? "a process"} did not exit within {timeout.TotalSeconds} s");
+            await Task.Delay(Poll, Token);
+        }
     }
 
     /// <summary>Polls the Agent's log until <paramref name="cond"/> holds; fails after <paramref name="timeoutS"/> seconds.</summary>
-    public void WaitForLog(Func<AgentLog, bool> cond, string what, double timeoutS = 60)
+    public async Task WaitForLogAsync(Func<AgentLog, bool> cond, string what, double timeoutS = 60)
     {
         var sw = Stopwatch.StartNew();
         while (!cond(Log()))
@@ -260,17 +273,17 @@ internal sealed class E2ERun : IDisposable
             foreach (var c in _children)
                 if (c.Name == "agent" && c.Process.HasExited) Assert.Fail($"the Agent exited ({c.Process.ExitCode}) while waiting for {what}");
             if (sw.Elapsed.TotalSeconds > timeoutS) Assert.Fail($"timed out after {timeoutS} s waiting for {what}");
-            Thread.Sleep(Poll);
+            await Task.Delay(Poll, Token);
         }
     }
 
-    public static async Task WaitAsync(Func<bool> cond, TimeSpan timeout, string what)
+    public async Task WaitAsync(Func<bool> cond, TimeSpan timeout, string what)
     {
         var sw = Stopwatch.StartNew();
         while (!cond())
         {
             if (sw.Elapsed > timeout) Assert.Fail($"timed out after {timeout.TotalSeconds} s waiting for {what}");
-            await Task.Delay(Poll);
+            await Task.Delay(Poll, Token);
         }
     }
 
@@ -402,7 +415,7 @@ internal sealed class E2ERun : IDisposable
                 {
                     Append("killed by the test");
                     Process.Kill(entireProcessTree: true);
-                    Process.WaitForExit(10_000);
+                    for (int i = 0; i < 100 && !Process.HasExited; i++) Thread.Sleep(100); // not WaitForExit: see WaitForExitAsync
                 }
             }
             catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
