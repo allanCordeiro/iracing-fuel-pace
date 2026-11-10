@@ -12,14 +12,18 @@ public sealed record BundleOptions(bool IncludeRecordings = true, int MaxRecordi
 /// <c>.corrupt</c> copy), <c>profiles/</c> (including <c>.pending-*</c> and <c>.corrupt</c>), the newest recordings, <c>perf/</c>
 /// when present, <c>system-info.txt</c> and <c>manifest.json</c>. Files are streamed into the zip (never loaded whole) and opened
 /// with <c>FileShare.ReadWrite | Delete</c> because the Agent may still be writing them. Blocking I/O: call off the UI thread.
+/// A cancellation (the Agent exiting) is seen between files and between 80 KB chunks: the partial <c>.tmp</c> is deleted and
+/// <see cref="OperationCanceledException"/> is thrown, so an exit never waits for a zip of the recordings.
 /// </summary>
 public static class DiagnosticBundle
 {
     private const int CopyBuffer = 81920;
 
     /// <param name="flush">Called before zipping (the sink's <c>FlushNow</c>) so the newest log lines are on disk.</param>
+    /// <param name="cancel">Stops the bundle (ruling A16: exit during a bundle); nothing is left in <paramref name="destDir"/>.</param>
     public static string Create(string appDataRoot, string destDir, BundleOptions o,
-        IReadOnlyDictionary<string, string> systemInfo, DiagLog log, TimeProvider clock, Action? flush = null)
+        IReadOnlyDictionary<string, string> systemInfo, DiagLog log, TimeProvider clock, Action? flush = null,
+        CancellationToken cancel = default)
     {
         if (flush is not null)
         {
@@ -44,6 +48,7 @@ public static class DiagnosticBundle
             {
                 void Add(string source, string entry, bool countMarks = false)
                 {
+                    cancel.ThrowIfCancellationRequested();
                     FileStream src;
                     try
                     {
@@ -62,7 +67,7 @@ public static class DiagnosticBundle
                         using var dst = zip.CreateEntry(entry, CompressionLevel.Optimal).Open();
                         try
                         {
-                            long size = countMarks ? CopyCountingMarks(src, dst, ref marks) : Copy(src, dst);
+                            long size = countMarks ? CopyCountingMarks(src, dst, ref marks, cancel) : Copy(src, dst, cancel);
                             files.Add((entry, size, false));
                         }
                         catch (SourceReadException ex)
@@ -85,6 +90,7 @@ public static class DiagnosticBundle
                     foreach (var f in Newest(Path.Combine(appDataRoot, "recordings"), "*.ibt", o.MaxRecordings).OrderBy(Path.GetFileName, StringComparer.Ordinal))
                         Add(f, "recordings/" + Path.GetFileName(f));
 
+                cancel.ThrowIfCancellationRequested();
                 var sys = new StringBuilder();
                 foreach (var (k, v) in systemInfo)
                     sys.Append(k).Append(": ").Append(v.Replace("\r\n", " | ").Replace('\n', ' ').Replace('\r', ' ')).Append('\n');
@@ -179,12 +185,17 @@ public static class DiagnosticBundle
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return []; }
     }
 
-    private static long Copy(Stream src, Stream dst)
+    private static long Copy(Stream src, Stream dst, CancellationToken cancel)
     {
         var buf = new byte[CopyBuffer];
         long total = 0;
         int n;
-        while ((n = ReadSource(src, buf, total)) > 0) { dst.Write(buf, 0, n); total += n; }
+        while ((n = ReadSource(src, buf, total)) > 0)
+        {
+            cancel.ThrowIfCancellationRequested();
+            dst.Write(buf, 0, n);
+            total += n;
+        }
         return total;
     }
 
@@ -196,7 +207,7 @@ public static class DiagnosticBundle
     /// written before it did), counting complete lines that carry a <c>UserMark</c> (a truncated last line is not counted).
     /// Returns the bytes written. A line longer than 1 MB is scrubbed in 1 MB pieces.
     /// </summary>
-    private static long CopyCountingMarks(Stream src, Stream dst, ref int marks)
+    private static long CopyCountingMarks(Stream src, Stream dst, ref int marks, CancellationToken cancel)
     {
         var buf = new byte[CopyBuffer];
         var line = new MemoryStream(256);
@@ -204,6 +215,7 @@ public static class DiagnosticBundle
         int n;
         while ((n = ReadSource(src, buf, written)) > 0)
         {
+            cancel.ThrowIfCancellationRequested();
             int start = 0;
             for (int i = 0; i < n; i++)
             {

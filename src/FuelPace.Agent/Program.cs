@@ -84,9 +84,10 @@ internal static class Program
             new SystemServices(), new DWriteTextMeasurer(fonts), TimeProvider.System);
         window.SessionEnding += () =>
         {
-            // Off the UI thread so the wait is bounded; Dispose waits for nothing the UI thread would have to run.
+            // Off the UI thread so the wait is bounded; EndSession waits for nothing the UI thread would have to run (it
+            // leaves the hotkeys to the process exit).
             host.Log.Text(DiagLevel.Info, "app", "the Windows session is ending");
-            if (!Task.Run(host.Dispose).Wait(SessionEndBudget))
+            if (!Task.Run(host.EndSession).Wait(SessionEndBudget))
                 host.Log.Text(DiagLevel.Warn, "app", "shutdown did not finish before the session ended");
         };
         int exitCode = 0;

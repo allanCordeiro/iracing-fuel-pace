@@ -125,7 +125,19 @@ public sealed class FakeHotkeys : IHotkeyService
         return true;
     }
 
-    public void UnregisterAll() { using (_gate.EnterScope()) _registered.Clear(); }
+    /// <summary>Calls of <see cref="UnregisterAll"/>.</summary>
+    public int UnregisterCalls;
+
+    /// <summary>How long <see cref="UnregisterAll"/> blocks: the real one marshals to the UI thread and gives up after 2 s
+    /// when that thread is busy (it is, at a Windows session end).</summary>
+    public TimeSpan UnregisterDelay;
+
+    public void UnregisterAll()
+    {
+        Interlocked.Increment(ref UnregisterCalls);
+        if (UnregisterDelay > TimeSpan.Zero) Thread.Sleep(UnregisterDelay);
+        using (_gate.EnterScope()) _registered.Clear();
+    }
 
     public Dictionary<int, Hotkey> Registered { get { using (_gate.EnterScope()) return new(_registered); } }
 

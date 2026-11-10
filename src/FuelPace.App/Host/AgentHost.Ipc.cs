@@ -266,10 +266,16 @@ public sealed partial class AgentHost
         try
         {
             var path = DiagnosticBundle.Create(_o.AppDataRoot, _sys.DesktopDir, new BundleOptions(includeRecordings), SystemInfo(),
-                _log, _clock, _sink is { } sink ? sink.FlushNow : null);
+                _log, _clock, _sink is { } sink ? sink.FlushNow : null, _shutdown.Token);
             _log.Text(DiagLevel.Info, "app", "diagnostic bundle created: " + Path.GetFileName(path));
             if (ctx is not null) Reply(ctx, new BundleCreated(path));
             return path;
+        }
+        catch (OperationCanceledException)
+        {
+            // Ruling A16: the Agent is exiting; the partial zip is gone and the exit does not wait for it.
+            _log.Text(DiagLevel.Info, "app", "diagnostic bundle cancelled: the Agent is exiting");
+            return null;
         }
         catch (Exception e)
         {

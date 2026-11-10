@@ -25,7 +25,8 @@ namespace FuelPace.App.Host;
 /// and bundles (the pipeline saves captures on it too); IPC handlers run on pool threads and hand state changes to the UI
 /// thread. Platform events may be raised on any thread: they are posted to the UI thread.
 /// <see cref="Start"/> may be called from any thread; <see cref="Dispose"/> belongs on the UI thread (hotkeys are unregistered
-/// there) after the message loop ended, once <see cref="Completion"/> finished.
+/// there) after the message loop ended, once <see cref="Completion"/> finished; <see cref="EndSession"/> is the off-UI-thread
+/// variant for a Windows session end.
 /// settings.json is written only for explicit user changes, and never while the settings in use did not come from it: after
 /// a load that fell back to the defaults (file locked or unreadable) the file is re-read every 5 s, before every snapshot and
 /// before every change; until a read succeeds changes from the Settings window are refused and overlay drags are not saved.
@@ -67,6 +68,8 @@ public sealed partial class AgentHost : IDisposable
     private readonly SettingsStore _settingsStore;
     private readonly TaskCompletionSource _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly ManualResetEventSlim _stop = new(false);
+    /// <summary>Cancelled first thing in <see cref="Dispose"/>: an in-flight diagnostic bundle stops (ruling A16).</summary>
+    private readonly CancellationTokenSource _shutdown = new();
     private readonly Tap _tap;
     private readonly Lock _captureGate = new();
 
@@ -82,6 +85,7 @@ public sealed partial class AgentHost : IDisposable
     private ITimer? _redrawTimer, _fullscreenTimer, _saveTimer, _autoHideTimer, _exitTimer;
     private Action _emitRedraws = null!, _checkFullscreen = null!, _retrySettings = null!, _connectionChanged = null!;
     private int _started, _disposed;
+    private volatile bool _sessionEnding;
 
     // Shared between threads.
     private volatile bool _stopping, _debugMode, _simConnected, _editMode, _recorderWanted;
@@ -826,12 +830,24 @@ public sealed partial class AgentHost : IDisposable
 
     // ---------------------------------------------------------------- shutdown
 
+    /// <summary>
+    /// <see cref="Dispose"/> for a Windows session end (ruling A20), from a pool thread while the UI thread is blocked in
+    /// <c>WM_ENDSESSION</c>: the hotkeys are left registered (the process exit frees them; unregistering would wait for the
+    /// blocked UI thread until it timed out) so the budget goes to the capture, the recording, the I/O queue and the log.
+    /// </summary>
+    public void EndSession()
+    {
+        _sessionEnding = true;
+        Dispose();
+    }
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         if (Volatile.Read(ref _started) == 0) return;
         _stopping = true;
         _stop.Set();
+        _shutdown.Cancel();
         _exitTimer?.Dispose();
         _redrawTimer?.Dispose();
         _fullscreenTimer?.Dispose();
@@ -849,8 +865,11 @@ public sealed partial class AgentHost : IDisposable
         if (_recorderDisposal is { } rd && !rd.Wait(StopTimeout))
             _log.Text(DiagLevel.Error, "app", "a stopped recorder did not close in time");
         _ipc?.Dispose();
-        try { _hotkeys.UnregisterAll(); }
-        catch (Exception e) { _log.Exception("input", e); }
+        if (!_sessionEnding)
+        {
+            try { _hotkeys.UnregisterAll(); }
+            catch (Exception e) { _log.Exception("input", e); }
+        }
         if (_io is { } io) // null when Start failed early
         {
             SaveIfPending(); // a drag that ended less than 500 ms ago

@@ -598,6 +598,65 @@ public sealed class AgentHostTests
         Assert.Single(rig.Events("BundleCreated"));
     }
 
+    [Fact] // Ruling A20: at a Windows session end the 3 s budget goes to the logs and the recording, not to the hotkeys
+    public async Task Session_end_skips_the_hotkeys_and_finishes_well_under_the_budget()
+    {
+        using var rig = new HostRig(replay: false);
+        rig.Start();
+        int before = Volatile.Read(ref rig.Hotkeys.UnregisterCalls); // the registration at start unregisters first
+        rig.Hotkeys.UnregisterDelay = TimeSpan.FromSeconds(2); // the UI thread is blocked in WndProc: the real call times out
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        await Task.Run(rig.Host.EndSession, TestContext.Current.CancellationToken); // a pool thread, as Program does
+        sw.Stop();
+
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(1), $"session-end dispose took {sw.Elapsed.TotalMilliseconds:F0} ms");
+        Assert.Equal(before, Volatile.Read(ref rig.Hotkeys.UnregisterCalls));
+        Assert.False(rig.Host.TelemetryThreadAlive);
+        Assert.Single(rig.Events("Shutdown")); // the log's tail made it to disk
+        Assert.True(rig.Host.Completion.IsCompleted);
+    }
+
+    [Fact]
+    public void A_normal_dispose_still_unregisters_the_hotkeys()
+    {
+        using var rig = new HostRig(replay: false);
+        rig.Start();
+        int before = Volatile.Read(ref rig.Hotkeys.UnregisterCalls);
+        rig.Host.Dispose();
+        Assert.Equal(before + 1, Volatile.Read(ref rig.Hotkeys.UnregisterCalls));
+        Assert.Empty(rig.Hotkeys.Registered);
+    }
+
+    [Fact] // A16: Sair during "Gerar pacote" with big recordings does not wait for the zip
+    public async Task Exit_during_a_bundle_cancels_it_and_shuts_down_promptly()
+    {
+        using var rig = new HostRig(replay: false);
+        var rec = Path.Combine(rig.AppData, "recordings");
+        Directory.CreateDirectory(rec);
+        var rnd = new Random(3);
+        var buf = new byte[1 << 20];
+        foreach (var name in new[] { "20261109-140000_a.ibt", "20261109-150000_b.ibt" })
+        {
+            using var fs = File.Create(Path.Combine(rec, name));
+            for (int i = 0; i < 64; i++) { rnd.NextBytes(buf); fs.Write(buf); }
+        }
+        rig.Start();
+        rig.Tray.Raise(TrayCommand.CreateBundle);
+        rig.WaitUntil(() => Directory.Exists(rig.Sys.DesktopDir) && Directory.GetFiles(rig.Sys.DesktopDir, "*.tmp").Length > 0,
+            "the bundle started");
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        rig.Host.Dispose();
+        sw.Stop();
+
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(1.5), $"shutdown took {sw.Elapsed.TotalMilliseconds:F0} ms");
+        Assert.Empty(Directory.GetFiles(rig.Sys.DesktopDir)); // no zip, no .tmp
+        Assert.Contains(rig.LogLines(), l => l.TryGetProperty("msg", out var m) && m.GetString()!.Contains("bundle cancelled"));
+        Assert.Single(rig.Events("Shutdown"));
+    }
+
     [Fact]
     public async Task Exit_after_shuts_down_cleanly_and_logs()
     {

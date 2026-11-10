@@ -73,7 +73,7 @@ public sealed class DiagnosticBundleTests : IDisposable
     {
         Populate();
         int flushed = 0;
-        var zip = DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, DiagLog.Null, Clock, () => flushed++);
+        var zip = DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, DiagLog.Null, Clock, () => flushed++, cancel: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, flushed);
         Assert.Equal("FuelPace-diag-20261109-140509.zip", Path.GetFileName(zip));
@@ -102,7 +102,7 @@ public sealed class DiagnosticBundleTests : IDisposable
     public void Bundle_without_recordings_option()
     {
         Populate();
-        var zip = DiagnosticBundle.Create(Data, Dest, new BundleOptions(IncludeRecordings: false), Info, DiagLog.Null, Clock);
+        var zip = DiagnosticBundle.Create(Data, Dest, new BundleOptions(IncludeRecordings: false), Info, DiagLog.Null, Clock, cancel: TestContext.Current.CancellationToken);
         Assert.DoesNotContain(Names(zip), n => n.StartsWith("recordings/", StringComparison.Ordinal));
         Assert.Contains("logs/fuelpace-20261109-1.jsonl", Names(zip));
     }
@@ -110,7 +110,7 @@ public sealed class DiagnosticBundleTests : IDisposable
     [Fact]
     public void Bundle_works_with_missing_folders()
     {
-        var zip = DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, DiagLog.Null, Clock);
+        var zip = DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, DiagLog.Null, Clock, cancel: TestContext.Current.CancellationToken);
         Assert.Equal(["manifest.json", "system-info.txt"], Names(zip));
     }
 
@@ -127,7 +127,7 @@ public sealed class DiagnosticBundleTests : IDisposable
         log.Write("{\"seq\":1}\n"u8); log.Flush();
         rec.Write("abc"u8); rec.Flush();
 
-        var zip = DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, DiagLog.Null, Clock);
+        var zip = DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, DiagLog.Null, Clock, cancel: TestContext.Current.CancellationToken);
         Assert.Contains("logs/fuelpace-20261109-1.jsonl", Names(zip));
         Assert.Equal("abc", ReadEntry(zip, "recordings/live.ibt"));
     }
@@ -135,8 +135,8 @@ public sealed class DiagnosticBundleTests : IDisposable
     [Fact]
     public void Two_bundles_in_the_same_second_do_not_overwrite()
     {
-        var a = DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, DiagLog.Null, Clock);
-        var b = DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, DiagLog.Null, Clock);
+        var a = DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, DiagLog.Null, Clock, cancel: TestContext.Current.CancellationToken);
+        var b = DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, DiagLog.Null, Clock, cancel: TestContext.Current.CancellationToken);
         Assert.NotEqual(a, b);
         Assert.True(File.Exists(a) && File.Exists(b));
     }
@@ -147,7 +147,7 @@ public sealed class DiagnosticBundleTests : IDisposable
         Populate();
         AppDiagEvents.RegisterAll();
         var log = new DiagLog(DiagLevel.Info);
-        var zip = DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, log, Clock);
+        var zip = DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, log, Clock, cancel: TestContext.Current.CancellationToken);
         var manifest = ReadEntry(zip, "manifest.json");
         Assert.DoesNotContain(_root, manifest);
         Assert.DoesNotContain(Path.GetTempPath(), manifest);
@@ -161,9 +161,55 @@ public sealed class DiagnosticBundleTests : IDisposable
     {
         AppDiagEvents.RegisterAll();
         var log = new DiagLog(DiagLevel.Info);
-        DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, log, Clock);
+        DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, log, Clock, cancel: TestContext.Current.CancellationToken);
         var buf = new DiagRecord[8];
         int n = log.DrainRecords(buf);
         Assert.Contains(buf.Take(n), r => r.Event == AppDiagEvents.BundleCreated);
+    }
+
+    private void PutRandom(string rel, int mb)
+    {
+        var p = Path.Combine(Data, rel);
+        Directory.CreateDirectory(Path.GetDirectoryName(p)!);
+        var rnd = new Random(7);
+        var buf = new byte[1 << 20];
+        using var fs = File.Create(p);
+        for (int i = 0; i < mb; i++)
+        {
+            rnd.NextBytes(buf); // incompressible: the zip has to work for every byte
+            fs.Write(buf);
+        }
+    }
+
+    [Fact] // A16: an exit during a bundle cancels it and nothing is left on the desktop
+    public void A_cancelled_bundle_throws_and_leaves_no_file()
+    {
+        Populate();
+        using var cts = new CancellationTokenSource();
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, DiagLog.Null, Clock, cts.Cancel, cts.Token));
+        Assert.Empty(Directory.GetFiles(Dest));
+    }
+
+    [Fact] // A16: a big recording is not finished first; the copy stops within a chunk
+    public async Task A_bundle_cancelled_in_the_middle_of_a_recording_stops_promptly()
+    {
+        Populate();
+        PutRandom("recordings/20261109-140000_big.ibt", 96);
+        using var cts = new CancellationTokenSource();
+        var task = Task.Run(() => DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, DiagLog.Null, Clock, null, cts.Token),
+            TestContext.Current.CancellationToken);
+        var end = DateTime.UtcNow + TimeSpan.FromSeconds(20);
+        while (!Directory.Exists(Dest) || Directory.GetFiles(Dest, "*.tmp").Length == 0)
+        {
+            Assert.True(DateTime.UtcNow < end, "the bundle never started");
+            await Task.Delay(1, TestContext.Current.CancellationToken);
+        }
+        await Task.Delay(100, TestContext.Current.CancellationToken); // inside the recording by now
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => task);
+        Assert.True(sw.Elapsed < TimeSpan.FromMilliseconds(500), $"stopped {sw.Elapsed.TotalMilliseconds:F0} ms after the cancel");
+        Assert.Empty(Directory.GetFiles(Dest));
     }
 }
