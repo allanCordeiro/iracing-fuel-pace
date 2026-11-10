@@ -69,6 +69,14 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
           path: artifacts/renders/*.png
+      # The Settings pages with the mocks' values (SettingsScreenshotTests), 1120 x 820, for review against mocks 7 and 8.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: settings
+          retention-days: 14
+          if-no-files-found: warn
+          path: artifacts/settings/*.png
       # EndToEndTests: per test, the Agent's %APPDATA%\FuelPace (logs, recordings, profiles) and the processes' output, in
       # the layout `FuelPace.Replay diag <folder>` reads.
       - uses: actions/upload-artifact@v4

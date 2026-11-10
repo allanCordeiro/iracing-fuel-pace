@@ -1,0 +1,190 @@
+<UserControl x:Class="FuelPace.Settings.Views.OverlayPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:FuelPace.Settings">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="../Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="SliderLabel" TargetType="Label" BasedOn="{StaticResource FieldLabel}">
+                <Setter Property="Width" Value="150" />
+                <Setter Property="Margin" Value="0,0,14,0" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style x:Key="SliderValue" TargetType="TextBlock">
+                <Setter Property="Width" Value="52" />
+                <Setter Property="Margin" Value="14,0,0,0" />
+                <Setter Property="TextAlignment" Value="Right" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+            </Style>
+            <!-- One shortcut: the bold mono key (editable), its action, and the error or the failed registration in red -->
+            <DataTemplate x:Key="Hotkey">
+                <StackPanel Margin="0,0,28,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBox x:Name="Key" Style="{StaticResource KeyBox}" Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 AutomationProperties.Name="{Binding Label}" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Label}" Margin="4,0,0,0" Foreground="{StaticResource TextLabel}" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource ErrorText}" Margin="0,4,0,0" Text="{Binding Error}"
+                               Visibility="{Binding Error, Converter={StaticResource NotEmptyVisible}}" />
+                    <TextBlock Style="{StaticResource ErrorText}" Margin="0,4,0,0" Text="{Binding Warning}"
+                               Visibility="{Binding Warning, Converter={StaticResource NotEmptyVisible}}" />
+                </StackPanel>
+                <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding IsRed}" Value="True">
+                        <Setter TargetName="Key" Property="Foreground" Value="{StaticResource RedText}" />
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid Margin="32,24,32,24">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="28" />
+            <ColumnDefinition Width="320" />
+        </Grid.ColumnDefinitions>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+            <StackPanel>
+                <TextBlock Style="{StaticResource H1}" Text="Overlay e cálculo" AutomationProperties.HeadingLevel="Level1" />
+                <TextBlock Margin="0,8,0,0" Text="{Binding StatusMessage}" Foreground="{StaticResource Warn}" TextWrapping="Wrap" FontSize="13"
+                           Visibility="{Binding StatusMessage, Converter={StaticResource NotEmptyVisible}}" />
+
+                <!-- OVERLAY -->
+                <local:SpacedText Margin="0,22,0,0" Style="{StaticResource H2}" Text="OVERLAY" AutomationProperties.HeadingLevel="Level2" />
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <Label Style="{StaticResource FieldLabel}" Content="Monitor" Target="{Binding ElementName=Monitor}" />
+                        <ComboBox x:Name="Monitor" ItemsSource="{Binding MonitorLabels}" SelectedIndex="{Binding SelectedMonitorIndex, Mode=TwoWay}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <Label Style="{StaticResource FieldLabel}" Content="Posição X" Target="{Binding ElementName=PosX}" />
+                        <TextBox x:Name="PosX" Style="{StaticResource NumberBox}" Text="{Binding OffsetX, Mode=TwoWay}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="4">
+                        <Label Style="{StaticResource FieldLabel}" Content="Posição Y" Target="{Binding ElementName=PosY}" />
+                        <TextBox x:Name="PosY" Style="{StaticResource NumberBox}" Text="{Binding OffsetY, Mode=TwoWay}" />
+                    </StackPanel>
+                </Grid>
+
+                <DockPanel Margin="0,14,0,0">
+                    <Label DockPanel.Dock="Left" Style="{StaticResource SliderLabel}" Content="Escala" Target="{Binding ElementName=ScaleSlider}" />
+                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValue}" Text="{Binding ScalePercent, StringFormat={}{0}%}" />
+                    <Slider x:Name="ScaleSlider" Minimum="50" Maximum="250" Value="{Binding ScalePercent, Mode=TwoWay}" />
+                </DockPanel>
+                <DockPanel Margin="0,10,0,0">
+                    <Label DockPanel.Dock="Left" Style="{StaticResource SliderLabel}" Content="Opacidade do fundo" Target="{Binding ElementName=BgOpacity}" />
+                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValue}" Text="{Binding BackgroundOpacityPercent, StringFormat={}{0}%}" />
+                    <Slider x:Name="BgOpacity" Minimum="0" Maximum="100" Value="{Binding BackgroundOpacityPercent, Mode=TwoWay}" />
+                </DockPanel>
+                <DockPanel Margin="0,10,0,0">
+                    <Label DockPanel.Dock="Left" Style="{StaticResource SliderLabel}" Content="Opacidade do texto" Target="{Binding ElementName=TextOpacity}" />
+                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValue}" Text="{Binding ContentOpacityPercent, StringFormat={}{0}%}" />
+                    <Slider x:Name="TextOpacity" Minimum="30" Maximum="100" Value="{Binding ContentOpacityPercent, Mode=TwoWay}" />
+                </DockPanel>
+
+                <WrapPanel Margin="0,14,0,0">
+                    <CheckBox Margin="0,0,24,0" Content="Linha de pace" IsChecked="{Binding ShowPaceLine, Mode=TwoWay}" />
+                    <CheckBox Margin="0,0,24,0" Content="Linha de insight" IsChecked="{Binding ShowInsightLine, Mode=TwoWay}" />
+                    <CheckBox Content="Ocultar fora da pista" IsChecked="{Binding AutoHide, Mode=TwoWay}" />
+                </WrapPanel>
+
+                <!-- CÁLCULO -->
+                <Border Margin="0,22,0,0" Style="{StaticResource Section}">
+                    <StackPanel>
+                        <local:SpacedText Style="{StaticResource H2}" Text="CÁLCULO" AutomationProperties.HeadingLevel="Level2" />
+                        <Grid Margin="0,14,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <Label Style="{StaticResource FieldLabel}" Content="Reserva (L)" Target="{Binding ElementName=Reserve}" />
+                                <TextBox x:Name="Reserve" Style="{StaticResource NumberBox}" Text="{Binding ReserveL, Mode=TwoWay}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <Label Style="{StaticResource FieldLabel}" Content="Média móvel (voltas)" Target="{Binding ElementName=Mean}" />
+                                <TextBox x:Name="Mean" Style="{StaticResource NumberBox}" Text="{Binding MeanWindow, Mode=TwoWay}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="4">
+                                <Label Style="{StaticResource FieldLabel}" Content="Economia máxima (%)" Target="{Binding ElementName=Saving}" />
+                                <TextBox x:Name="Saving" Style="{StaticResource NumberBox}" Text="{Binding MaxSavingPercent, Mode=TwoWay}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="6">
+                                <Label Style="{StaticResource FieldLabel}" Content="Voltas extras" Target="{Binding ElementName=Extra}" />
+                                <TextBox x:Name="Extra" Style="{StaticResource NumberBox}" Text="{Binding ExtraLaps, Mode=TwoWay}" />
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock Margin="0,14,0,0" FontSize="13" Foreground="{StaticResource TextLabel}" Text="Voltas restantes" />
+                        <RadioButton Margin="0,8,0,0" GroupName="LapsMode" Content="{Binding LapsAutoText}" IsChecked="{Binding LapsAuto, Mode=TwoWay}" />
+                        <StackPanel Margin="0,10,0,0" Orientation="Horizontal">
+                            <RadioButton GroupName="LapsMode" Content="Manual · stint de" AutomationProperties.Name="{Binding LapsStintText}"
+                                         IsChecked="{Binding LapsAuto, Mode=TwoWay, Converter={StaticResource Not}}" VerticalAlignment="Center" />
+                            <TextBox x:Name="Stint" Style="{StaticResource NumberBox}" Width="56" Height="30" Margin="8,0,8,0" Padding="6,0"
+                                     Text="{Binding StintLaps, Mode=TwoWay}" IsEnabled="{Binding LapsAuto, Converter={StaticResource Not}}"
+                                     AutomationProperties.Name="Voltas do stint" />
+                            <TextBlock Text="voltas" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{StaticResource Text}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding LapsAuto}" Value="True">
+                                                <Setter Property="Foreground" Value="{StaticResource TextDim}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ATALHOS -->
+                <Border Margin="0,22,0,0" Style="{StaticResource Section}">
+                    <StackPanel>
+                        <local:SpacedText Style="{StaticResource H2}" Text="ATALHOS" AutomationProperties.HeadingLevel="Level2" />
+                        <WrapPanel Margin="0,10,0,0">
+                            <ContentControl Content="{Binding ToggleEdit}" ContentTemplate="{StaticResource Hotkey}" Focusable="False" />
+                            <ContentControl Content="{Binding ToggleVisible}" ContentTemplate="{StaticResource Hotkey}" Focusable="False" />
+                            <ContentControl Content="{Binding DebugMark}" ContentTemplate="{StaticResource Hotkey}" Focusable="False"
+                                            Visibility="{Binding ShowDebugMark, Converter={StaticResource BoolVisible}}" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- PRÉVIA -->
+        <StackPanel Grid.Column="2" AutomationProperties.Name="Prévia">
+            <local:SpacedText Style="{StaticResource H2}" Text="{Binding PreviewTitle}" />
+            <Grid Margin="0,10,0,0" Width="320" Height="170" ClipToBounds="True">
+                <Grid.Clip>
+                    <RectangleGeometry Rect="0,0,320,170" RadiusX="8" RadiusY="8" />
+                </Grid.Clip>
+                <Rectangle Fill="#3B4048" />
+                <Rectangle Height="70" VerticalAlignment="Top" Fill="#3A4552" />
+                <local:WpfDrawListRenderer List="{Binding Preview}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,24,0,0"
+                                           AutomationProperties.Name="Prévia do overlay" />
+            </Grid>
+            <Button Margin="0,10,0,0" Height="40" Style="{StaticResource OutlineButton}" Content="{Binding PositionInGameText}"
+                    Command="{Binding PosicionarNoJogoCommand}" AutomationProperties.HelpText="{Binding PositionInGameHelp}" />
+            <TextBlock Margin="0,10,0,0" Style="{StaticResource SmallHelp}" Text="{Binding PositionInGameHelp}" />
+        </StackPanel>
+    </Grid>
+</UserControl>

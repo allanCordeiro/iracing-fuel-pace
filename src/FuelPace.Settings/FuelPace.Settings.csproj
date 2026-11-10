@@ -5,10 +5,22 @@
     <UseWPF>true</UseWPF>
     <IsPackable>false</IsPackable>
     <RootNamespace>FuelPace.Settings</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\assets\icon.ico</ApplicationIcon>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- UseWPF drops System.IO from the implicit usings (System.Windows.Shapes.Path); nothing here uses Shapes -->
+    <Using Include="System.IO" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\FuelPace.Core\FuelPace.Core.csproj" />
     <ProjectReference Include="..\FuelPace.App\FuelPace.App.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Decision 8: Inter and JetBrains Mono (OFL) as WPF resources (pack://application:,,,/FuelPace.Settings;component/Fonts/);
+         nothing is installed on the system. -->
+    <Resource Include="..\..\assets\fonts\*.ttf" Link="Fonts\%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />

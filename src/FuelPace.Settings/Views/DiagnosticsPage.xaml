@@ -1,0 +1,87 @@
+<UserControl x:Class="FuelPace.Settings.Views.DiagnosticsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:FuelPace.Settings">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="../Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <StackPanel Margin="32,24,32,24" MaxWidth="760" HorizontalAlignment="Left">
+            <TextBlock Style="{StaticResource H1}" Text="Diagnóstico" AutomationProperties.HeadingLevel="Level1" />
+
+            <!-- Version and overlay backend -->
+            <Grid Margin="0,22,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Style="{StaticResource Card}" Padding="16,14">
+                    <StackPanel>
+                        <local:SpacedText Style="{StaticResource CardTitle}" Text="VERSÃO" />
+                        <TextBlock Margin="0,6,0,0" FontFamily="{StaticResource Mono}" FontSize="18" FontWeight="SemiBold" Text="{Binding Version}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="2" Style="{StaticResource Card}" Padding="16,14">
+                    <StackPanel>
+                        <local:SpacedText Style="{StaticResource CardTitle}" Text="BACKEND DO OVERLAY" />
+                        <TextBlock Margin="0,6,0,0" FontFamily="{StaticResource Mono}" FontSize="18" FontWeight="SemiBold" Text="{Binding OverlayBackend}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Debug mode -->
+            <Border Margin="0,18,0,0" Style="{StaticResource Card}" Padding="20,18">
+                <CheckBox Style="{StaticResource CaptureBox}" HorizontalAlignment="Left" IsChecked="{Binding DebugMode, Mode=TwoWay}"
+                          AutomationProperties.Name="Modo debug">
+                    <StackPanel>
+                        <TextBlock Text="Modo debug" FontSize="17" FontWeight="SemiBold" />
+                        <TextBlock Style="{StaticResource Help}" Margin="0,4,0,0" MaxWidth="560" HorizontalAlignment="Left"
+                                   Text="Registra mais detalhes no log e grava a telemetria completa da sessão. O overlay e os cálculos no jogo continuam iguais." />
+                    </StackPanel>
+                </CheckBox>
+            </Border>
+
+            <!-- Diagnostic bundle -->
+            <Border Margin="0,22,0,0" Style="{StaticResource Section}">
+                <StackPanel>
+                    <local:SpacedText Style="{StaticResource H2}" Text="PACOTE DE DIAGNÓSTICO" AutomationProperties.HeadingLevel="Level2" />
+                    <TextBlock Margin="0,10,0,0" Style="{StaticResource Help}"
+                               Text="Um zip na Área de Trabalho com os logs, as configurações e os perfis, para enviar a quem está ajudando você." />
+                    <CheckBox Margin="0,14,0,0" Content="Incluir gravações" IsChecked="{Binding IncludeRecordings, Mode=TwoWay}" HorizontalAlignment="Left" />
+                    <TextBlock Margin="26,4,0,0" Style="{StaticResource SmallHelp}"
+                               Text="As gravações têm os nomes dos outros pilotos da sessão: envie o pacote em particular, não em um fórum público." />
+                    <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
+                        <Button Style="{StaticResource PrimaryButton}" Content="Gerar pacote" Command="{Binding GerarPacoteCommand}" />
+                        <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}" Text="Gerando o pacote…"
+                                   Visibility="{Binding Busy, Converter={StaticResource BoolVisible}}" />
+                    </StackPanel>
+                    <Border Margin="0,14,0,0" Style="{StaticResource Card}" Padding="16,12"
+                            Visibility="{Binding BundlePath, Converter={StaticResource NotEmptyVisible}}">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" VerticalAlignment="Center" Margin="16,0,0,0"
+                                    Content="Abrir pasta" Command="{Binding AbrirPastaDoPacoteCommand}" AutomationProperties.Name="Abrir a pasta do pacote" />
+                            <TextBlock VerticalAlignment="Center" FontFamily="{StaticResource Mono}" FontSize="13" Text="{Binding BundlePath}"
+                                       TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- Logs -->
+            <Border Margin="0,22,0,0" Style="{StaticResource Section}">
+                <StackPanel>
+                    <local:SpacedText Style="{StaticResource H2}" Text="LOGS" AutomationProperties.HeadingLevel="Level2" />
+                    <Button Margin="0,14,0,0" HorizontalAlignment="Left" Style="{StaticResource SecondaryButton}" Content="Abrir pasta de logs"
+                            Command="{Binding AbrirPastaDeLogsCommand}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

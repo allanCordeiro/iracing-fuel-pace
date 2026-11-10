@@ -1,8 +1,122 @@
 <Window x:Class="FuelPace.Settings.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="FuelPace" Height="480" Width="720">
-    <Grid>
-        <TextBlock x:Name="VersionText" Margin="16" />
-    </Grid>
+        xmlns:views="clr-namespace:FuelPace.Settings.Views"
+        Title="{Binding Title, FallbackValue='FuelPace · Configurações'}"
+        Width="1120" Height="820" MinWidth="960" MinHeight="700"
+        WindowStartupLocation="CenterScreen" Background="#121418"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Ideal">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="40" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
+    <Window.Resources>
+        <ResourceDictionary Source="Theme.xaml" />
+    </Window.Resources>
+    <Window.Style>
+        <Style TargetType="Window">
+            <Style.Triggers>
+                <!-- Maximized, the window extends past the screen by its resize border -->
+                <Trigger Property="WindowState" Value="Maximized">
+                    <Setter Property="BorderThickness" Value="7" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Style>
+
+    <Border x:Name="Root" Background="{StaticResource ContentBg}" BorderBrush="{StaticResource OuterBorder}" BorderThickness="1"
+            TextElement.FontFamily="{StaticResource Inter}" TextElement.FontSize="14" TextElement.Foreground="{StaticResource Text}"
+            UseLayoutRounding="True" SnapsToDevicePixels="True">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="41" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Title bar: 40 px + 1 px border, #0C0E11 -->
+            <Border Background="{StaticResource TitleBg}" BorderBrush="{StaticResource InnerBorder}" BorderThickness="0,0,0,1">
+                <DockPanel Margin="16,0,8,0" LastChildFill="True">
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource ChromeButton}" Click="OnMinimize" WindowChrome.IsHitTestVisibleInChrome="True"
+                                AutomationProperties.Name="Minimizar" ToolTip="Minimizar">
+                            <Path Width="12" Height="12" Data="M 1,6 H 11" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                  StrokeThickness="1.2" />
+                        </Button>
+                        <Button Style="{StaticResource CloseButton}" Click="OnClose" WindowChrome.IsHitTestVisibleInChrome="True"
+                                AutomationProperties.Name="Fechar" ToolTip="Fechar">
+                            <Path Width="12" Height="12" Data="M 1.5,1.5 L 10.5,10.5 M 10.5,1.5 L 1.5,10.5"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.2" />
+                        </Button>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Title, FallbackValue='FuelPace · Configurações'}" FontSize="13" Foreground="{StaticResource TextNav}"
+                               VerticalAlignment="Center" />
+                </DockPanel>
+            </Border>
+
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <!-- the mock's nav: 200 px of content, 12 px padding each side, 1 px border -->
+                    <ColumnDefinition Width="225" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Background="{StaticResource NavBg}" BorderBrush="{StaticResource InnerBorder}" BorderThickness="0,0,1,0" Padding="12,20">
+                    <ListBox Style="{StaticResource Nav}" ItemsSource="{Binding Sections}" SelectedItem="{Binding SelectedSection, Mode=TwoWay}"
+                             AutomationProperties.Name="Seções" KeyboardNavigation.TabNavigation="Once" />
+                </Border>
+
+                <DockPanel Grid.Column="1">
+                    <!-- Banners -->
+                    <StackPanel DockPanel.Dock="Top" Margin="32,16,32,0">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Style.Triggers>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding ShowAgentOfflineBanner}" Value="False" />
+                                            <Condition Binding="{Binding ShowFullscreenBanner}" Value="False" />
+                                            <Condition Binding="{Binding Message}" Value="{x:Null}" />
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <Border Style="{StaticResource Banner}" Margin="0,0,0,8"
+                                Visibility="{Binding ShowAgentOfflineBanner, Converter={StaticResource BoolVisible}}">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}" Height="32" Content="Iniciar Agent"
+                                        Command="{Binding IniciarAgentCommand}" />
+                                <Ellipse Width="10" Height="10" Fill="{StaticResource Warn}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding AgentOfflineText}" FontWeight="SemiBold" />
+                                    <TextBlock Style="{StaticResource Help}" Margin="0,2,16,0"
+                                               Text="As mudanças só valem com o Agent aberto. Esta janela se conecta sozinha quando ele iniciar." />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <Border Style="{StaticResource Banner}" Margin="0,0,0,8"
+                                Visibility="{Binding ShowFullscreenBanner, Converter={StaticResource BoolVisible}}">
+                            <TextBlock Text="{Binding FullscreenText}" TextWrapping="Wrap" Foreground="{StaticResource Warn}" />
+                        </Border>
+                        <Border Style="{StaticResource Banner}" Margin="0,0,0,8"
+                                Visibility="{Binding Message, Converter={StaticResource NotEmptyVisible}}">
+                            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="{StaticResource Warn}" />
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Pages -->
+                    <Grid>
+                        <views:CapturePage DataContext="{Binding Capture}"
+                                           Visibility="{Binding DataContext.SelectedSection, RelativeSource={RelativeSource AncestorType=DockPanel}, Converter={StaticResource SectionVisible}, ConverterParameter=Captura}" />
+                        <views:OverlayPage DataContext="{Binding Overlay}"
+                                           Visibility="{Binding DataContext.SelectedSection, RelativeSource={RelativeSource AncestorType=DockPanel}, Converter={StaticResource SectionVisible}, ConverterParameter='Overlay e cálculo'}" />
+                        <views:ProfilesPage DataContext="{Binding Profiles}"
+                                            Visibility="{Binding DataContext.SelectedSection, RelativeSource={RelativeSource AncestorType=DockPanel}, Converter={StaticResource SectionVisible}, ConverterParameter=Perfis}" />
+                        <views:DiagnosticsPage DataContext="{Binding Diagnostics}"
+                                               Visibility="{Binding DataContext.SelectedSection, RelativeSource={RelativeSource AncestorType=DockPanel}, Converter={StaticResource SectionVisible}, ConverterParameter=Diagnóstico}" />
+                    </Grid>
+                </DockPanel>
+            </Grid>
+        </Grid>
+    </Border>
 </Window>

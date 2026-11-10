@@ -51,6 +51,7 @@ public sealed class IpcAgentConnection : IAgentConnection
     readonly Action _launch;
     readonly TimeSpan _timeout;
     volatile bool _connected;
+    int _drops;
 
     public IpcAgentConnection(IpcClient client, Action launchAgent, TimeSpan? connectTimeout = null)
     {
@@ -58,14 +59,27 @@ public sealed class IpcAgentConnection : IAgentConnection
         _launch = launchAgent;
         _timeout = connectTimeout ?? TimeSpan.FromMilliseconds(500);
         _client.Received += m => Received?.Invoke(m);
-        _client.Disconnected += () => { _connected = false; Disconnected?.Invoke(); };
+        _client.Disconnected += () =>
+        {
+            Interlocked.Increment(ref _drops);
+            _connected = false;
+            Disconnected?.Invoke();
+        };
     }
 
     public event Action<IpcMessage>? Received;
     public event Action? Disconnected;
     public bool IsConnected => _connected;
 
-    public async Task<bool> ConnectAsync() => _connected = await _client.ConnectAsync(_timeout).ConfigureAwait(false);
+    /// <summary>A link the Agent dropped before this returns (its read loop already reported it) counts as not connected.</summary>
+    public async Task<bool> ConnectAsync()
+    {
+        int drops = Volatile.Read(ref _drops);
+        bool ok = await _client.ConnectAsync(_timeout).ConfigureAwait(false);
+        _connected = ok;
+        if (ok && Volatile.Read(ref _drops) != drops) _connected = ok = false;
+        return ok;
+    }
     public ValueTask SendAsync(IpcMessage m) => _client.SendAsync(m);
     public void LaunchAgent() => _launch();
 }
