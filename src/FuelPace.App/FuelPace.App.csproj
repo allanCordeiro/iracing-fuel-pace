@@ -9,5 +9,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="FuelPace.App.Tests" />
     <InternalsVisibleTo Include="FuelPace.Windows.Tests" />
+    <!-- Program reads AgentHost.Log for the live reader (TornRead) -->
+    <InternalsVisibleTo Include="FuelPace.Agent" />
   </ItemGroup>
 </Project>

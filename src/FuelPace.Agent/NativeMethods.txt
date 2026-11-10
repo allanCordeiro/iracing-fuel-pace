@@ -1,1 +1,29 @@
-GetCurrentProcessId
+// MessageWindow
+RegisterClassEx
+UnregisterClass
+CreateWindowEx
+DestroyWindow
+DefWindowProc
+GetMessage
+TranslateMessage
+DispatchMessage
+PostMessage
+PostQuitMessage
+GetModuleHandle
+WM_APP
+WM_DISPLAYCHANGE
+WM_DPICHANGED
+WM_SETTINGCHANGE
+// Monitors
+EnumDisplayMonitors
+GetMonitorInfo
+MONITORINFOEXW
+MONITORINFOF_PRIMARY
+GetDpiForMonitor
+MonitorFromWindow
+// System info
+GetWindowLong
+GetWindowRect
+IsWindow
+// Fullscreen
+SHQueryUserNotificationState
