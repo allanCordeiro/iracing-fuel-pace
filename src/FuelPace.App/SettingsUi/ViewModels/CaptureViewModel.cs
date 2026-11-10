@@ -45,6 +45,11 @@ public sealed partial class CaptureViewModel : ObservableObject
     /// <summary>Two-way: a change made by the user sends <c>SetCapture</c>; one that comes from the Agent does not.</summary>
     [ObservableProperty] public partial bool Capturing { get; set; }
 
+    /// <summary>False while the Agent is not reachable: the switch is disabled.</summary>
+    [ObservableProperty] public partial bool CanToggle { get; private set; }
+
+    internal void SetOnline(bool online) => CanToggle = online;
+
     [ObservableProperty] public partial string SessionLine { get; private set; } = "";
     [ObservableProperty] public partial string CounterText { get; private set; } = "";
     [ObservableProperty] public partial string StatusText { get; private set; } = "";
@@ -61,7 +66,18 @@ public sealed partial class CaptureViewModel : ObservableObject
 
     partial void OnCapturingChanged(bool value)
     {
-        if (!_applying) _out.Send(new SetCapture(value));
+        if (!_applying)
+        {
+            if (!_out.IsConnected)
+            {
+                // Offline: the switch cannot do anything, so it goes back instead of lying.
+                _applying = true;
+                try { Capturing = !value; }
+                finally { _applying = false; }
+                return;
+            }
+            _out.Send(new SetCapture(value));
+        }
         RefreshState();
     }
 

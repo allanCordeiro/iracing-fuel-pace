@@ -14,11 +14,15 @@ public sealed class FakeConnection : IAgentConnection
     public event Action<IpcMessage>? Received;
     public event Action? Disconnected;
 
-    public Task<bool> ConnectAsync()
+    /// <summary>When set, ConnectAsync stays pending until the test completes it.</summary>
+    public TaskCompletionSource? ConnectGate;
+
+    public async Task<bool> ConnectAsync()
     {
         ConnectCalls++;
+        if (ConnectGate is { } g) await g.Task;
         IsConnected = Reachable;
-        return Task.FromResult(Reachable);
+        return Reachable;
     }
 
     public ValueTask SendAsync(IpcMessage m)
@@ -88,7 +92,7 @@ public sealed class SettingsRig
         Lap(16, 80.897, 2.382, 64), Lap(17, 80.272, 2.404, 64), Lap(18, 79.964, 2.373, 64),
         Lap(19, 93.175, 2.388, 55, "incident", "offtrack"),
         Lap(20, 79.133, 2.386, 65, "incident"),
-        Lap(21, 79.514, 2.403, 65), Lap(22, 79.134, 2.389, 67), Lap(23, 81.0615, 2.289, 58), // unrounded: the mean must read 1:20.140 as in the mock, not 1:20.141
+        Lap(21, 79.514, 2.403, 65), Lap(22, 79.134, 2.389, 67), Lap(23, 81.062, 2.289, 58),
     ];
 
     public static AgentSnapshot Snap(AppSettings? settings = null, bool capturing = true, IReadOnlyList<CapturedLapDto>? laps = null,

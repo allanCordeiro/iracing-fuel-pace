@@ -97,7 +97,8 @@ public class CaptureViewModelTests
         Assert.Equal("L/v", c.ConsumptionUnit);
         Assert.Equal("mediana 2.386 · mín 2.289", c.ConsumptionDetail);
         Assert.Equal("TEMPO MÉDIO", c.TimeTitle);
-        Assert.Equal("1:20.140", c.TimeValue);
+        // The mock reads 1:20.140 (illustrative): the mean of these rows is exactly 80.1405 s, which rounds half up to 1:20.141.
+        Assert.Equal("1:20.141", c.TimeValue);
         Assert.Equal("mediana 1:20.118 · melhor 1:19.134", c.TimeDetail);
         Assert.Equal("AUTONOMIA", c.AutonomyTitle);
         Assert.Equal("42.1", c.AutonomyValue);

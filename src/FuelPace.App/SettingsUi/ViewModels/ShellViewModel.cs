@@ -16,8 +16,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     readonly IAgentConnection _conn;
     readonly ISynchronizationContext _ui;
     readonly IDelayScheduler _sched;
+    readonly AgentSender _sender;
     IDisposable? _retry;
-    bool _disposed;
+    bool _disposed, _connecting;
 
     public ShellViewModel(IAgentConnection connection, ISynchronizationContext ui, IDelayScheduler scheduler, IShellServices shell,
         ITextMeasurer? measurer = null)
@@ -25,7 +26,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _conn = connection;
         _ui = ui;
         _sched = scheduler;
-        var sender = new AgentSender(connection);
+        var sender = _sender = new AgentSender(connection);
         Capture = new CaptureViewModel(sender);
         Overlay = new OverlayViewModel(sender, ui, scheduler, measurer);
         Profiles = new ProfilesViewModel(sender);
@@ -59,15 +60,18 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     /// <summary>Connects and asks for the state; while the Agent is not there it keeps trying every 2 s.</summary>
     public async Task ConnectAsync()
     {
-        if (_disposed) return;
+        if (_disposed || _connecting) return;
+        _connecting = true;
         _retry?.Dispose();
         _retry = null;
         bool ok;
         try { ok = await _conn.ConnectAsync(); }
         catch (Exception e) when (e is IOException or InvalidOperationException or TimeoutException or UnauthorizedAccessException) { ok = false; }
+        finally { _connecting = false; }
         AgentOnline = ok;
+        Capture.SetOnline(ok);
         if (!ok) { ScheduleReconnect(); return; }
-        Send(new Hello(AppInfo.Version));
+        _sender.Send(new Hello(AppInfo.Version));
     }
 
     [RelayCommand]
@@ -75,12 +79,6 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         _conn.LaunchAgent();
         if (!AgentOnline && _retry is null) ScheduleReconnect();
-    }
-
-    void Send(IpcMessage m)
-    {
-        try { _ = _conn.SendAsync(m).AsTask().ContinueWith(static _ => { }, TaskContinuationOptions.OnlyOnFaulted); }
-        catch (InvalidOperationException) { }
     }
 
     void ScheduleReconnect()
@@ -96,6 +94,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         if (_disposed) return;
         AgentOnline = false;
+        Capture.SetOnline(false);
+        Overlay.OnDisconnected();
         ScheduleReconnect();
     });
 
@@ -106,6 +106,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         {
             case Snapshot s:
                 AgentOnline = true;
+                Capture.SetOnline(true);
                 ShowFullscreenBanner = s.S.FullscreenExclusive;
                 Message = null;
                 Capture.Apply(s.S);

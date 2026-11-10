@@ -37,6 +37,30 @@ public class ShellViewModelTests
     }
 
     [Fact]
+    public async Task Overlapping_connect_calls_connect_once()
+    {
+        var r = new SettingsRig();
+        r.Conn.ConnectGate = new TaskCompletionSource();
+        var a = r.Vm.ConnectAsync();
+        var b = r.Vm.ConnectAsync();
+        r.Conn.ConnectGate.SetResult();
+        await Task.WhenAll(a, b);
+        Assert.Equal(1, r.Conn.ConnectCalls);
+    }
+
+    [Fact]
+    public async Task Capture_switch_is_reverted_while_offline()
+    {
+        var r = new SettingsRig();
+        r.Conn.Reachable = false;
+        await r.Vm.ConnectAsync();
+        Assert.False(r.Capture.CanToggle);
+        r.Capture.Capturing = true;
+        Assert.False(r.Capture.Capturing);
+        Assert.Empty(r.Conn.Sent);
+    }
+
+    [Fact]
     public async Task Offline_controls_do_not_send_and_do_not_throw()
     {
         var r = new SettingsRig();

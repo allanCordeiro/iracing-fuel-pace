@@ -28,7 +28,9 @@ public sealed partial class OverlayViewModel : ObservableObject
     readonly OverlayState _previewState = OverlayPreviews.All.First(p => p.Name == "azul").State;
 
     AppSettings _confirmed = new();
-    AppSettings? _lastSent;
+    readonly List<AppSettings> _inFlight = [];
+    (AppSettings Old, AppSettings Edit)? _held;
+    bool _hasSnapshot, _dirty;
     IReadOnlyList<string> _deviceNames = [], _failures = [];
     IDisposable? _timer;
     DrawList _preview = new();
@@ -96,6 +98,7 @@ public sealed partial class OverlayViewModel : ObservableObject
 
     internal void Apply(AgentSnapshot s)
     {
+        HoldEdit();
         _debugMode = s.DebugMode;
         OnPropertyChanged(nameof(ShowDebugMark));
         _deviceNames = s.MonitorDeviceNames ?? [];
@@ -103,19 +106,74 @@ public sealed partial class OverlayViewModel : ObservableObject
         MonitorLabels.Clear();
         foreach (var l in s.MonitorLabels) MonitorLabels.Add(l);
         StatusMessage = null;
+        _hasSnapshot = true;
         ApplyRemote(s.Settings);
+        ReapplyHeldEdit();
     }
 
     internal void OnSettingsApplied(SettingsApplied m)
     {
+        HoldEdit();
         if (ApplyRemote(m.Settings)) StatusMessage = null;
+        ReapplyHeldEdit();
+    }
+
+    /// <summary>The link is gone: nothing may be sent until a new snapshot says what the Agent has. What the pilot typed is kept
+    /// and re-applied on top of that snapshot.</summary>
+    internal void OnDisconnected()
+    {
+        HoldEdit();
+        _hasSnapshot = false;
+        _inFlight.Clear();
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    /// <summary>Before the first snapshot (or after a disconnect) the model is not the Agent's: an edit typed meanwhile is
+    /// remembered as a difference from that model and re-applied on the next real one.</summary>
+    void HoldEdit()
+    {
+        if (_hasSnapshot || !_dirty) return;
+        var edit = Build();
+        if (edit != _confirmed) _held = (_held?.Old ?? _confirmed, edit);
+    }
+
+    void ReapplyHeldEdit()
+    {
+        if (_held is not var (old, edit) || !_hasSnapshot) return;
+        _held = null;
+        void Re<T>(T o, T e, Action<T> set) { if (!EqualityComparer<T>.Default.Equals(o, e)) set(e); }
+        Re(old.Overlay.OffsetX, edit.Overlay.OffsetX, v => OffsetX = v);
+        Re(old.Overlay.OffsetY, edit.Overlay.OffsetY, v => OffsetY = v);
+        Re(old.Overlay.Scale, edit.Overlay.Scale, v => ScalePercent = (int)Math.Round(v * 100));
+        Re(old.Overlay.BackgroundOpacity, edit.Overlay.BackgroundOpacity, v => BackgroundOpacityPercent = (int)Math.Round(v * 100));
+        Re(old.Overlay.ContentOpacity, edit.Overlay.ContentOpacity, v => ContentOpacityPercent = (int)Math.Round(v * 100));
+        Re(old.Overlay.ShowPaceLine, edit.Overlay.ShowPaceLine, v => ShowPaceLine = v);
+        Re(old.Overlay.ShowInsightLine, edit.Overlay.ShowInsightLine, v => ShowInsightLine = v);
+        Re(old.Overlay.AutoHide, edit.Overlay.AutoHide, v => AutoHide = v);
+        Re(old.Overlay.MonitorDeviceName, edit.Overlay.MonitorDeviceName, v =>
+        {
+            int i = -1;
+            for (int k = 0; k < _deviceNames.Count; k++)
+                if (string.Equals(_deviceNames[k], v, StringComparison.OrdinalIgnoreCase)) i = k;
+            if (i >= 0) SelectedMonitorIndex = i;
+        });
+        Re(old.Strategy.ReserveL, edit.Strategy.ReserveL, v => ReserveL = v);
+        Re(old.Strategy.MeanWindow, edit.Strategy.MeanWindow, v => MeanWindow = v);
+        Re(old.Strategy.MaxSavingFraction, edit.Strategy.MaxSavingFraction, v => MaxSavingPercent = Math.Round(v * 100, 2));
+        Re(old.Strategy.ExtraLaps, edit.Strategy.ExtraLaps, v => ExtraLaps = v);
+        Re(old.Strategy.Mode, edit.Strategy.Mode, v => LapsAuto = v == LapsMode.Auto);
+        Re(old.Strategy.StintLaps, edit.Strategy.StintLaps, v => StintLaps = v);
+        Re(old.Hotkeys.ToggleEdit, edit.Hotkeys.ToggleEdit, v => ToggleEdit.Text = v);
+        Re(old.Hotkeys.ToggleVisible, edit.Hotkeys.ToggleVisible, v => ToggleVisible.Text = v);
+        Re(old.Hotkeys.DebugMark, edit.Hotkeys.DebugMark, v => DebugMark.Text = v);
     }
 
     internal bool OnNotice(Notice n)
     {
         if (n.Text == AgentHost.SettingsUnreadableText)
         {
-            _lastSent = null; // the Agent did not take it: the next flush sends again
+            _inFlight.Clear(); // the Agent did not take it: the next flush sends again
             if (_retries < MaxRetries)
             {
                 _retries++;
@@ -137,14 +195,17 @@ public sealed partial class OverlayViewModel : ObservableObject
     bool ApplyRemote(AppSettings s)
     {
         _confirmed = s;
-        if (_lastSent is not null && s == _lastSent)
+        int i = _inFlight.IndexOf(s);
+        if (i >= 0)
         {
-            _lastSent = null;
+            // Our own update coming back (updates answer in order): older ones are settled, newer ones still in flight.
+            _inFlight.RemoveRange(0, i + 1);
             _retries = 0;
             Revalidate();
             return true;
         }
-        _lastSent = null;
+        _inFlight.Clear();
+        _dirty = false;
         _retries = 0;
         _timer?.Dispose();
         _timer = null;
@@ -259,6 +320,7 @@ public sealed partial class OverlayViewModel : ObservableObject
     {
         if (_loading) return;
         _retries = 0;
+        _dirty = true;
         RebuildPreview();
         Restart(Debounce);
     }
@@ -272,10 +334,10 @@ public sealed partial class OverlayViewModel : ObservableObject
     void Flush()
     {
         _timer = null;
-        if (!_out.IsConnected) return;
+        if (!_out.IsConnected || !_hasSnapshot) return; // never build on a model the Agent did not give us
         var built = Build();
-        if (built == (_lastSent ?? _confirmed)) return;
-        _lastSent = built;
+        if (built == (_inFlight.Count > 0 ? _inFlight[^1] : _confirmed)) return;
+        _inFlight.Add(built);
         _out.Send(new UpdateSettings(built));
     }
 

@@ -231,6 +231,69 @@ public class OverlayViewModelTests
     }
 
     [Fact]
+    public async Task Edit_before_the_first_snapshot_is_not_sent_until_the_snapshot_and_is_built_on_it()
+    {
+        var r = new SettingsRig();
+        await r.Vm.ConnectAsync(); // Hello sent, no snapshot yet
+        r.Overlay.ScalePercent = 150;
+        r.Sched.FireAll();
+        Assert.Empty(r.Conn.Of<UpdateSettings>());
+
+        var agent = Custom();
+        agent.Overlay.OffsetY = 77;
+        r.Conn.Raise(new Snapshot(SettingsRig.Snap(agent)));
+        Assert.Equal(150, r.Overlay.ScalePercent); // the typed edit survives
+        Assert.Equal(77, r.Overlay.OffsetY);
+        r.Sched.FireAll();
+        var u = Assert.Single(r.Conn.Of<UpdateSettings>()).Settings;
+        Assert.Equal(1.5, u.Overlay.Scale);
+        Assert.Equal(77, u.Overlay.OffsetY); // not the defaults
+        Assert.Equal(10, u.Overlay.OffsetX);
+        Assert.True(u.Debug.Enabled);
+    }
+
+    [Fact]
+    public async Task Edit_after_reconnect_waits_for_the_new_snapshot()
+    {
+        var r = new SettingsRig();
+        await r.ConnectAsync();
+        r.Conn.Drop();
+        r.Overlay.BackgroundOpacityPercent = 25;
+        r.Sched.FireAll(); // also reconnects (Reachable)
+        Assert.True(r.Vm.AgentOnline);
+        r.Sched.FireAll();
+        Assert.Empty(r.Conn.Of<UpdateSettings>());
+
+        var agent = new AppSettings();
+        agent.Overlay.OffsetX = 5; // changed meanwhile, e.g. by dragging the overlay in the game
+        r.Conn.Raise(new Snapshot(SettingsRig.Snap(agent)));
+        r.Sched.FireAll();
+        var u = Assert.Single(r.Conn.Of<UpdateSettings>()).Settings;
+        Assert.Equal(0.25, u.Overlay.BackgroundOpacity);
+        Assert.Equal(5, u.Overlay.OffsetX);
+    }
+
+    [Fact]
+    public async Task Two_updates_in_flight_do_not_flicker_the_fields()
+    {
+        var r = new SettingsRig();
+        await r.ConnectAsync();
+        r.Overlay.ScalePercent = 150;
+        r.Sched.FireAll();
+        r.Overlay.BackgroundOpacityPercent = 20;
+        r.Sched.FireAll();
+        var (a, b) = (r.Conn.Of<UpdateSettings>()[0].Settings, r.Conn.Of<UpdateSettings>()[1].Settings);
+
+        r.Conn.Raise(new SettingsApplied(a));
+        Assert.Equal(150, r.Overlay.ScalePercent);
+        Assert.Equal(20, r.Overlay.BackgroundOpacityPercent);
+        r.Conn.Raise(new SettingsApplied(b));
+        Assert.Equal(20, r.Overlay.BackgroundOpacityPercent);
+        r.Sched.FireAll();
+        Assert.Equal(2, r.Conn.Of<UpdateSettings>().Count);
+    }
+
+    [Fact]
     public async Task Echo_of_our_own_update_keeps_newer_edits()
     {
         var r = new SettingsRig();
