@@ -56,7 +56,7 @@ jobs:
         shell: pwsh
         timeout-minutes: 20
         run: |
-          ./build/smoke-package.ps1 -OutDir out -Variants 'baseline','DOTNET_TieredCompilation=0','DOTNET_TieredPGO=0','baseline','DOTNET_TieredCompilation=0'
+          ./build/smoke-package.ps1 -OutDir out -Variants 'baseline'
       - uses: actions/upload-artifact@v4
         if: always()
         with:

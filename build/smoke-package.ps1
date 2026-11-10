@@ -218,6 +218,10 @@ try {
     $rows | ConvertTo-Json | Out-File -FilePath (Join-Path $report 'perf05.json') -Encoding utf8
     Say "5. PERF-05 (normal zip, debug off, overlay visible, FakeSim speed 1 with 20 cars, $PerfSeconds s):"
     foreach ($l in ($table.Trim() -split "`r?`n")) { Say ("   " + $l) }
+    # Reported, not a gate: CI renders on WARP (software), the driver's PC on its GPU (docs/perf/agent-memory.md).
+    foreach ($r in $rows) {
+        if ($r.WsEndMB -gt 60) { Write-Host "::warning::PERF-05: $($r.Variant) working set $($r.WsEndMB) MB > 60 MB" }
+    }
 }
 catch {
     $failed = $true
