@@ -1,6 +1,6 @@
 using FuelPace.Core.Telemetry;
 
-namespace FuelPace.Tests.Support;
+namespace FuelPace.App.Simulation;
 
 /// <summary>
 /// Deterministic synthetic driver on a 4000 m track. Frames are generated lazily at <c>hz</c>; the car moves at a

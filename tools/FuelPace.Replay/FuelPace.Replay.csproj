@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FuelPace.Core\FuelPace.Core.csproj" />
+    <ProjectReference Include="..\..\src\FuelPace.App\FuelPace.App.csproj" />
   </ItemGroup>
 
 </Project>

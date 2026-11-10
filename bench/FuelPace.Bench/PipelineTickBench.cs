@@ -5,7 +5,7 @@ using BenchmarkDotNet.Jobs;
 using FuelPace.Core.Pipeline;
 using FuelPace.Core.Strategy;
 using FuelPace.Core.Telemetry;
-using FuelPace.Tests.Support;
+using FuelPace.App.Simulation;
 
 namespace FuelPace.Bench;
 

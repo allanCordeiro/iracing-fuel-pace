@@ -1,4 +1,4 @@
-namespace FuelPace.Tests.Support;
+namespace FuelPace.App.Simulation;
 
 public static class SampleYaml
 {

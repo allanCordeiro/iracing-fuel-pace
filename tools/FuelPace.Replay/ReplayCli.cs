@@ -1,4 +1,5 @@
 using System.Globalization;
+using FuelPace.App.Recording;
 using FuelPace.Core.Diagnostics;
 using FuelPace.Core.Laps;
 using FuelPace.Core.Pipeline;
@@ -13,6 +14,7 @@ public static class ReplayCli
 {
     private const string Usage =
         "usage: FuelPace.Replay <file.ibt> [--speed max|1|10] [--capture] [--profiles <dir>]\n" +
+        "       FuelPace.Replay trim <in.ibt> --from <sessionTime> --to <sessionTime> --out <file.ibt>\n" +
         "  --profiles <dir>  profile root (JSON files in <dir>/profiles); default: the app's own (%APPDATA%\\FuelPace), read only\n" +
         "  --capture         records the replay into a profile; without --profiles it goes to a new temporary root\n" +
         "                    (printed), never to the app's real profiles";
@@ -22,6 +24,7 @@ public static class ReplayCli
 
     public static int Run(string[] args, TextWriter output)
     {
+        if (args.Length > 0 && args[0] == "trim") return Trim(args[1..], output);
         if (!TryParse(args, out var path, out var speed, out var capture, out var profilesDir, out var error))
         {
             output.WriteLine(error);
@@ -61,6 +64,56 @@ public static class ReplayCli
             io.WaitIdle(TimeSpan.FromSeconds(10));
             printer.Summary(store.Load(info.CarPath, info.TrackName));
         }
+        return 0;
+    }
+
+    private static int Trim(string[] args, TextWriter output)
+    {
+        string? input = null, outPath = null;
+        double? from = null, to = null;
+        string? error = null;
+        for (int i = 0; i < args.Length && error is null; i++)
+        {
+            switch (args[i])
+            {
+                case "--from" or "--to" when i + 1 >= args.Length: error = args[i] + " needs a value"; break;
+                case "--from":
+                    if (double.TryParse(args[++i], NumberStyles.Float, CultureInfo.InvariantCulture, out var f)) from = f;
+                    else error = "invalid --from value: " + args[i];
+                    break;
+                case "--to":
+                    if (double.TryParse(args[++i], NumberStyles.Float, CultureInfo.InvariantCulture, out var t)) to = t;
+                    else error = "invalid --to value: " + args[i];
+                    break;
+                case "--out":
+                    if (++i >= args.Length) error = "--out needs a file"; else outPath = args[i];
+                    break;
+                default:
+                    if (args[i].StartsWith("--", StringComparison.Ordinal)) error = "unknown option: " + args[i];
+                    else if (input is not null) error = "unexpected argument: " + args[i];
+                    else input = args[i];
+                    break;
+            }
+        }
+        if (error is null && (input is null || from is null || to is null || outPath is null))
+            error = "trim needs <in.ibt> --from <st> --to <st> --out <file>";
+        if (error is not null)
+        {
+            output.WriteLine(error);
+            output.WriteLine(Usage);
+            return 2;
+        }
+        if (!File.Exists(input)) { output.WriteLine($"file not found: {input}"); return 2; }
+        try
+        {
+            IbtTrimmer.Trim(input!, outPath!, from!.Value, to!.Value);
+        }
+        catch (ArgumentException ex)
+        {
+            output.WriteLine(ex.Message);
+            return 2;
+        }
+        output.WriteLine($"trimmed {from.Value.ToString("F3", CultureInfo.InvariantCulture)}..{to.Value.ToString("F3", CultureInfo.InvariantCulture)} s -> {outPath}");
         return 0;
     }
 

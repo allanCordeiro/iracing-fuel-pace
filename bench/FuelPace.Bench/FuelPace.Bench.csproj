@@ -7,14 +7,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FuelPace.Core\FuelPace.Core.csproj" />
-  </ItemGroup>
-
-  <!-- The synthetic race is shared with the tests by linking the sources, not by referencing the test project. -->
-  <ItemGroup>
-    <Compile Include="..\..\tests\FuelPace.Tests\Support\SyntheticRace.cs" Link="Support\SyntheticRace.cs" />
-    <Compile Include="..\..\tests\FuelPace.Tests\Support\LapSim.cs" Link="Support\LapSim.cs" />
-    <Compile Include="..\..\tests\FuelPace.Tests\Support\IbtFileBuilder.cs" Link="Support\IbtFileBuilder.cs" />
-    <Compile Include="..\..\tests\FuelPace.Tests\Support\SampleYaml.cs" Link="Support\SampleYaml.cs" />
+    <ProjectReference Include="..\..\src\FuelPace.App\FuelPace.App.csproj" />
   </ItemGroup>
 
   <ItemGroup>

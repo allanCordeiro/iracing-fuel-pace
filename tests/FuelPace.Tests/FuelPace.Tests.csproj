@@ -8,10 +8,12 @@
   <ItemGroup>
     <Using Include="Xunit" />
     <Using Include="FuelPace.Tests.Support" />
+    <Using Include="FuelPace.App.Simulation" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FuelPace.Core\FuelPace.Core.csproj" />
+    <ProjectReference Include="..\..\src\FuelPace.App\FuelPace.App.csproj" />
     <ProjectReference Include="..\..\tools\FuelPace.Replay\FuelPace.Replay.csproj" />
   </ItemGroup>
 

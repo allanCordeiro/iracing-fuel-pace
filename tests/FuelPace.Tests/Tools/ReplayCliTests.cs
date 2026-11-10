@@ -1,4 +1,5 @@
 using FuelPace.Core.Storage;
+using FuelPace.Core.Telemetry;
 using FuelPace.Replay;
 
 namespace FuelPace.Tests.Tools;
@@ -24,6 +25,33 @@ public class ReplayCliTests
             Assert.NotEmpty(Directory.GetFiles(Path.Combine(profiles, "profiles"), "*.json"));
         }
         finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void Trim_subcommand_writes_the_requested_window()
+    {
+        var input = Fixtures.TempPath(".ibt");
+        var output = Fixtures.TempPath(".ibt");
+        try
+        {
+            SyntheticRace.WriteIbt(input, 3, withCarIdx: true);
+            var sw = new StringWriter();
+            Assert.True(ReplayCli.Run(["trim", input, "--from", "10", "--to", "20.5", "--out", output], sw) == 0, sw.ToString());
+            using var src = new IbtTelemetrySource(output);
+            var f = new TelemetryFrame();
+            int n = 0;
+            while (src.TryRead(ref f) == ReadResult.Frame) { Assert.InRange(f.SessionTime, 10, 20.5); n++; }
+            Assert.InRange(n, 600, 640);
+        }
+        finally { File.Delete(input); File.Delete(output); }
+    }
+
+    [Fact]
+    public void Trim_subcommand_rejects_missing_options()
+    {
+        var sw = new StringWriter();
+        Assert.Equal(2, ReplayCli.Run(["trim", "x.ibt", "--from", "1"], sw));
+        Assert.Contains("usage:", sw.ToString());
     }
 
     [Fact]

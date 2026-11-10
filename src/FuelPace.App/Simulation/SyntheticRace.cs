@@ -1,8 +1,9 @@
+using FuelPace.App.Recording;
 using FuelPace.Core.Baselines;
 using FuelPace.Core.Storage;
 using FuelPace.Core.Telemetry;
 
-namespace FuelPace.Tests.Support;
+namespace FuelPace.App.Simulation;
 
 /// <summary>
 /// A synthetic time race as an <c>.ibt</c>: a <see cref="LapSim"/> player (car 3, 20 s laps at 60 Hz) plus 20 cars in the
@@ -26,7 +27,9 @@ public static class SyntheticRace
     /// <summary>Writes <paramref name="laps"/> laps of the synthetic race (<c>laps × 1200 + 1</c> frames) to <paramref name="path"/>.</summary>
     public static string WriteIbt(string path, int laps, bool withCarIdx)
     {
-        IbtFileBuilder.WriteFrames(path, Yaml, Frames(laps, withCarIdx), withCarIdx);
+        using var writer = new IbtStreamWriter(path, (int)Hz, reservedYamlBytes: 16 * 1024, includeCarIdx: withCarIdx);
+        writer.WriteSessionInfo(Yaml);
+        foreach (var f in Frames(laps, withCarIdx)) writer.Append(f);
         return path;
     }
 
