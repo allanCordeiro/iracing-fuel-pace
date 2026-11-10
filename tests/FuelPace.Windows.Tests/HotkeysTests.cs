@@ -92,6 +92,38 @@ public class HotkeysTests
     }
 
     [Fact]
+    public void Register_that_times_out_leaves_the_key_unregistered()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only");
+        using var a = new UiLoop();
+        using var b = new UiLoop();
+        var keys = a.OnUi(() => new Hotkeys(a.Window));
+        var other = b.OnUi(() => new Hotkeys(b.Window));
+        using var release = new ManualResetEventSlim();
+        a.Window.Post(() => release.Wait(TimeSpan.FromSeconds(30))); // holds the UI thread
+
+        Assert.False(OffUi(() => keys.Register(1, Unusual))); // gives up after its 2 s
+        release.Set();
+        a.OnUi(() => 0); // the abandoned action has been through the queue by now
+        Assert.True(other.Register(1, Unusual)); // not held by the first window
+        other.UnregisterAll();
+    }
+
+    [Fact]
+    public void Invoke_that_times_out_never_runs_the_action()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only");
+        using var ui = new UiLoop();
+        using var release = new ManualResetEventSlim();
+        ui.Window.Post(() => release.Wait(TimeSpan.FromSeconds(30)));
+        int ran = 0;
+        Assert.False(OffUi(() => ui.Window.Invoke(() => ran++, TimeSpan.FromMilliseconds(200))));
+        release.Set();
+        ui.OnUi(() => 0);
+        Assert.Equal(0, ran);
+    }
+
+    [Fact]
     public async Task WM_HOTKEY_raises_Pressed_with_the_registered_id()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only");

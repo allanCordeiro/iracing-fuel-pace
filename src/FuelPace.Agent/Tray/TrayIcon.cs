@@ -21,7 +21,6 @@ namespace FuelPace.Agent.Tray;
 public sealed unsafe class TrayIcon : ITrayIcon, IDisposable
 {
     private const uint WM_TRAY = PInvoke.WM_APP + 10;
-    private const uint NIN_BALLOONUSERCLICK = 0x405;
     private const uint IconId = 1;
     private const int MaxTooltip = 127; // szTip holds 128 UTF-16 units including the terminator
     private const int MaxBalloonTitle = 63, MaxBalloonText = 255;
@@ -60,7 +59,7 @@ public sealed unsafe class TrayIcon : ITrayIcon, IDisposable
     public void SetTooltip(string text) => OnUi(() =>
     {
         _tooltip = Truncate(text, MaxTooltip);
-        if (_added) Notify(NOTIFY_ICON_MESSAGE.NIM_MODIFY, NOTIFY_ICON_DATA_FLAGS.NIF_TIP, null, null);
+        if (_added) Notify(NOTIFY_ICON_MESSAGE.NIM_MODIFY, NOTIFY_ICON_DATA_FLAGS.NIF_TIP | NOTIFY_ICON_DATA_FLAGS.NIF_SHOWTIP, null, null);
     });
 
     public void SetDebugMenu(bool visible) => OnUi(() => _debug = visible);

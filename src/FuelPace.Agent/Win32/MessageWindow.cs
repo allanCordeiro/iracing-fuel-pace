@@ -107,21 +107,29 @@ public sealed unsafe class MessageWindow : IUiDispatcher, IDisposable
 
     /// <summary>
     /// Runs <paramref name="a"/> on the UI thread and waits for it: at once when already there, else posted and awaited for at most
-    /// <paramref name="timeout"/>. False when it did not finish in time (UI thread blocked or loop ended; a posted action may still
-    /// run later). An exception of the action is rethrown to the caller.
+    /// <paramref name="timeout"/>. False means the action did not run and never will: on a timeout the posted action is
+    /// abandoned (it checks that before starting), so the result always matches reality. An action already running when the
+    /// timeout hits is awaited to the end. An exception of the action is rethrown to the caller.
     /// </summary>
     public bool Invoke(Action a, TimeSpan timeout)
     {
         if (IsUiThread) { a(); return true; }
+        const int Pending = 0, Running = 1, Abandoned = 2;
+        int state = Pending;
         using var done = new ManualResetEventSlim();
         Exception? error = null;
         Post(() =>
         {
+            if (Interlocked.CompareExchange(ref state, Running, Pending) != Pending) return; // the caller gave up
             try { a(); }
             catch (Exception e) { error = e; }
             finally { done.Set(); }
         });
-        if (!done.Wait(timeout)) return false;
+        if (!done.Wait(timeout))
+        {
+            if (Interlocked.CompareExchange(ref state, Abandoned, Pending) == Pending) return false;
+            done.Wait(); // started just now: it finishes shortly
+        }
         if (error is not null) ExceptionDispatchInfo.Capture(error).Throw();
         return true;
     }

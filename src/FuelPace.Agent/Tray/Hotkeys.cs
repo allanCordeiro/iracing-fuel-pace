@@ -50,6 +50,7 @@ public sealed class Hotkeys : IHotkeyService
     private bool RegisterOnUi(int id, Hotkey key)
     {
         var hwnd = new HWND(_window.Handle);
+        // Re-registering an id (settings changed) replaces its key.
         if (_ids.Remove(id)) PInvoke.UnregisterHotKey(hwnd, id);
         var mods = (HOT_KEY_MODIFIERS)(uint)key.Modifiers | HOT_KEY_MODIFIERS.MOD_NOREPEAT;
         if (!PInvoke.RegisterHotKey(hwnd, id, mods, key.VirtualKey)) return false;
