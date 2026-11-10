@@ -21,6 +21,13 @@ public sealed class IpcServerContext
     }
 }
 
+/// <param name="HandshakeTimeout">The first complete line must arrive this long after accept.</param>
+/// <param name="PartialLineTimeout">Once bytes of a line are buffered, the line must complete within this time. No idle timeout after the handshake.</param>
+public sealed record IpcServerOptions(TimeSpan HandshakeTimeout, TimeSpan PartialLineTimeout)
+{
+    public static IpcServerOptions Default { get; } = new(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(5));
+}
+
 /// <summary>
 /// Named-pipe server (current user only), newline-delimited JSON. At most <see cref="MaxClients"/> clients; a message larger than
 /// <see cref="MaxMessageBytes"/> disconnects its sender; unparsable or unknown messages are logged and skipped.
@@ -34,6 +41,7 @@ public sealed class IpcServer : IDisposable
     readonly string _pipeName;
     readonly Func<IpcMessage, IpcServerContext, ValueTask> _handler;
     readonly DiagLog _log;
+    readonly IpcServerOptions _options;
     readonly CancellationTokenSource _cts = new();
     readonly SemaphoreSlim _slots = new(MaxClients, MaxClients);
     readonly List<Client> _clients = [];
@@ -42,8 +50,9 @@ public sealed class IpcServer : IDisposable
     bool _started, _disposed;
     Task? _acceptLoop;
 
-    public IpcServer(string pipeName, Func<IpcMessage, IpcServerContext, ValueTask> handler, DiagLog log)
+    public IpcServer(string pipeName, Func<IpcMessage, IpcServerContext, ValueTask> handler, DiagLog log, IpcServerOptions? options = null)
     {
+        _options = options ?? IpcServerOptions.Default;
         _pipeName = pipeName;
         _handler = handler;
         _log = log ?? DiagLog.Null;
@@ -72,6 +81,7 @@ public sealed class IpcServer : IDisposable
     async Task AcceptLoopAsync()
     {
         var ct = _cts.Token;
+        var backoff = TimeSpan.FromMilliseconds(250);
         while (!ct.IsCancellationRequested)
         {
             NamedPipeServerStream? pipe = null;
@@ -87,6 +97,7 @@ public sealed class IpcServer : IDisposable
                 using (_gate.EnterScope()) _clients.Add(client);
                 _log.Emit(DiagLevel.Info, AppDiagEvents.IpcClient, 0, i0: 1, i1: client.Id);
                 slotHeld = false; // released by the client when it ends
+                backoff = TimeSpan.FromMilliseconds(250);
                 client.Run();
             }
             catch (OperationCanceledException) { pipe?.Dispose(); if (slotHeld) _slots.Release(); return; }
@@ -96,7 +107,8 @@ public sealed class IpcServer : IDisposable
                 if (slotHeld) _slots.Release();
                 if (_cts.IsCancellationRequested) return;
                 _log.Text(DiagLevel.Warn, "ipc", "accept failed: " + ex.Message);
-                try { await Task.Delay(250, ct).ConfigureAwait(false); } catch (OperationCanceledException) { return; }
+                try { await Task.Delay(backoff, ct).ConfigureAwait(false); } catch (OperationCanceledException) { return; }
+                backoff = TimeSpan.FromMilliseconds(Math.Min(backoff.TotalMilliseconds * 2, 5000));
             }
         }
     }
@@ -129,6 +141,7 @@ public sealed class IpcServer : IDisposable
         readonly Channel<byte[]> _queue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(SendQueueCapacity)
         { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
         readonly CancellationTokenSource _cts;
+        readonly CancellationToken _ct;
         int _closed;
 
         public int Id { get; }
@@ -137,6 +150,7 @@ public sealed class IpcServer : IDisposable
         {
             _server = server; _pipe = pipe; Id = id;
             _cts = CancellationTokenSource.CreateLinkedTokenSource(server._cts.Token);
+            _ct = _cts.Token;
         }
 
         public void Run()
@@ -162,11 +176,13 @@ public sealed class IpcServer : IDisposable
         {
             var ctx = new IpcServerContext(this);
             var reader = new IpcLineReader(_pipe, MaxMessageBytes);
+            bool handshake = true;
             try
             {
                 while (true)
                 {
-                    var line = await reader.ReadLineAsync(_cts.Token).ConfigureAwait(false);
+                    var line = await reader.ReadLineAsync(_ct, handshake ? _server._options.HandshakeTimeout : null, _server._options.PartialLineTimeout).ConfigureAwait(false);
+                    handshake = false;
                     if (line == null) break;
                     if (line.Length == 0) continue;
                     if (!IpcJson.TryDeserialize(line, out var msg, out var err))
@@ -175,11 +191,19 @@ public sealed class IpcServer : IDisposable
                         continue;
                     }
                     try { await _server._handler(msg!, ctx).ConfigureAwait(false); }
+                    catch (OperationCanceledException) when (!_ct.IsCancellationRequested)
+                    {
+                        _server._log.Text(DiagLevel.Debug, "ipc", $"handler for {msg!.GetType().Name} was canceled");
+                    }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
                         _server._log.Text(DiagLevel.Error, "ipc", $"handler failed for {msg!.GetType().Name}: {ex}");
                     }
                 }
+            }
+            catch (TimeoutException)
+            {
+                _server._log.Text(DiagLevel.Warn, "ipc", $"client {Id}: read deadline exceeded; disconnecting");
             }
             catch (InvalidDataException)
             {
@@ -194,8 +218,8 @@ public sealed class IpcServer : IDisposable
         {
             try
             {
-                await foreach (var line in _queue.Reader.ReadAllAsync(_cts.Token).ConfigureAwait(false))
-                    await _pipe.WriteAsync(line, _cts.Token).ConfigureAwait(false);
+                await foreach (var line in _queue.Reader.ReadAllAsync(_ct).ConfigureAwait(false))
+                    await _pipe.WriteAsync(line, _ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is IOException or ObjectDisposedException or OperationCanceledException or InvalidOperationException) { }
             catch (Exception ex) { _server._log.Text(DiagLevel.Error, "ipc", $"client {Id} write failed: {ex}"); }
@@ -206,7 +230,7 @@ public sealed class IpcServer : IDisposable
         {
             if (Interlocked.Exchange(ref _closed, 1) != 0) return;
             _queue.Writer.TryComplete();
-            try { _cts.Cancel(); } catch (ObjectDisposedException) { }
+            try { _cts.Cancel(); _cts.Dispose(); } catch (ObjectDisposedException) { }
             try { _pipe.Dispose(); } catch (Exception ex) when (ex is IOException or ObjectDisposedException) { }
             _server.Remove(this);
         }

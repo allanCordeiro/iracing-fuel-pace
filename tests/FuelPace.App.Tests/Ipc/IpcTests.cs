@@ -33,9 +33,9 @@ public sealed class IpcTests
         throw new TimeoutException();
     }
 
-    static IpcServer Server(string name, Func<IpcMessage, IpcServerContext, ValueTask> h, DiagLog? log = null)
+    static IpcServer Server(string name, Func<IpcMessage, IpcServerContext, ValueTask> h, DiagLog? log = null, IpcServerOptions? options = null)
     {
-        var s = new IpcServer(name, h, log ?? DiagLog.Null);
+        var s = new IpcServer(name, h, log ?? DiagLog.Null, options);
         s.Start();
         return s;
     }
@@ -179,7 +179,7 @@ public sealed class IpcTests
     }
 
     [Fact]
-    public async Task Client_count_is_capped_at_four()
+    public async Task Client_count_is_capped_at_four_and_fifth_is_served_after_a_slot_frees()
     {
         var name = NewName();
         using var server = Server(name, (_, _) => ValueTask.CompletedTask);
@@ -187,13 +187,95 @@ public sealed class IpcTests
         for (int i = 0; i < 4; i++) clients.Add(await Connect(name));
         await WaitUntil(() => server.ClientCount == 4);
         var fifth = new IpcClient(name);
+        IpcMessage? got = null;
+        fifth.Received += m => got = m;
         _ = await fifth.ConnectAsync(TimeSpan.FromMilliseconds(300));
         await Task.Delay(300, TestContext.Current.CancellationToken);
         Assert.Equal(4, server.ClientCount);
         await clients[0].DisposeAsync();
-        await WaitUntil(() => server.ClientCount <= 4);
+        // On Windows a timed-out connect must be retried; on Unix the queued connection is accepted.
+        if (!await fifth.ConnectAsync(Timeout)) { fifth = new IpcClient(name); fifth.Received += m => got = m; Assert.True(await fifth.ConnectAsync(Timeout)); }
+        await WaitUntil(() => server.ClientCount == 4);
+        await server.BroadcastAsync(new Notice("info", "hi"));
+        Assert.Equal(new Notice("info", "hi"), await WaitFor(() => got));
         await fifth.DisposeAsync();
         for (int i = 1; i < 4; i++) await clients[i].DisposeAsync();
+    }
+
+    static readonly IpcServerOptions Fast = new(TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(300));
+
+    [Fact]
+    public async Task Client_that_never_sends_is_dropped_and_slot_reused()
+    {
+        var name = NewName();
+        using var server = Server(name, (_, _) => ValueTask.CompletedTask, options: Fast);
+        var idle = new List<NamedPipeClientStream>();
+        for (int i = 0; i < 4; i++)
+        {
+            var raw = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            await raw.ConnectAsync((int)Timeout.TotalMilliseconds, TestContext.Current.CancellationToken);
+            idle.Add(raw);
+        }
+        await WaitUntil(() => server.ClientCount == 4);
+        await WaitUntil(() => server.ClientCount == 0);
+        await using var ok = await Connect(name);
+        await WaitUntil(() => server.ClientCount == 1);
+        foreach (var r in idle) await r.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Client_with_partial_line_is_dropped()
+    {
+        var name = NewName();
+        // long handshake, short partial deadline: only the partial rule can fire
+        using var server = Server(name, (_, _) => ValueTask.CompletedTask, options: new(TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(300)));
+        await using var raw = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+        await raw.ConnectAsync((int)Timeout.TotalMilliseconds, TestContext.Current.CancellationToken);
+        await raw.WriteAsync("{\"type\":\"hel"u8.ToArray(), TestContext.Current.CancellationToken);
+        await raw.FlushAsync(TestContext.Current.CancellationToken);
+        await WaitUntil(() => server.ClientCount == 1);
+        await WaitUntil(() => server.ClientCount == 0);
+    }
+
+    [Fact]
+    public async Task Client_that_said_hello_and_idles_is_not_dropped()
+    {
+        var name = NewName();
+        using var server = Server(name, (_, _) => ValueTask.CompletedTask, options: Fast);
+        await using var client = await Connect(name);
+        IpcMessage? got = null;
+        client.Received += m => got = m;
+        await client.SendAsync(new Hello("0.1.0"));
+        await Task.Delay(1200, TestContext.Current.CancellationToken);
+        Assert.Equal(1, server.ClientCount);
+        await server.BroadcastAsync(new Notice("info", "still here"));
+        Assert.Equal(new Notice("info", "still here"), await WaitFor(() => got));
+    }
+
+    [Fact]
+    public async Task Handler_cancellation_does_not_drop_client()
+    {
+        var name = NewName();
+        using var server = Server(name, (m, ctx) => m is SetCapture ? throw new OperationCanceledException() : ctx.ReplyAsync(new Error("pong")));
+        await using var client = await Connect(name);
+        IpcMessage? got = null;
+        client.Received += m => got = m;
+        await client.SendAsync(new SetCapture(true));
+        await client.SendAsync(new GetSnapshot());
+        Assert.Equal(new Error("pong"), await WaitFor(() => got));
+    }
+
+    [Fact]
+    public async Task User_dispose_does_not_raise_Disconnected()
+    {
+        var name = NewName();
+        using var server = Server(name, (_, _) => ValueTask.CompletedTask);
+        var client = await Connect(name);
+        bool disc = false;
+        client.Disconnected += () => disc = true;
+        await client.DisposeAsync();
+        await WaitUntil(() => server.ClientCount == 0);
+        Assert.False(disc);
     }
 
     [Fact]

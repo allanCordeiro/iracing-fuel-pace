@@ -13,7 +13,7 @@ public sealed class IpcClient : IAsyncDisposable
     readonly CancellationTokenSource _cts = new();
     NamedPipeClientStream? _pipe;
     Task? _readLoop;
-    int _disconnected;
+    int _disconnected, _disposing;
 
     public IpcClient(string pipeName, DiagLog? log = null)
     {
@@ -86,6 +86,7 @@ public sealed class IpcClient : IAsyncDisposable
 
     void RaiseDisconnected()
     {
+        if (Volatile.Read(ref _disposing) != 0) return;
         if (Interlocked.Exchange(ref _disconnected, 1) != 0) return;
         _log.Emit(DiagLevel.Info, AppDiagEvents.IpcClient, 0, i0: 0);
         Disconnected?.Invoke();
@@ -93,6 +94,7 @@ public sealed class IpcClient : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        Volatile.Write(ref _disposing, 1);
         _cts.Cancel();
         _pipe?.Dispose();
         if (_readLoop != null) { try { await _readLoop.ConfigureAwait(false); } catch { } }
