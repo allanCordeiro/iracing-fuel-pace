@@ -15,7 +15,7 @@ internal static partial class User32
     public const long WS_EX_TOPMOST = 0x8, WS_EX_TRANSPARENT = 0x20, WS_EX_TOOLWINDOW = 0x80, WS_EX_APPWINDOW = 0x40000,
         WS_EX_LAYERED = 0x80000, WS_EX_NOACTIVATE = 0x8000000;
     public const uint WM_NCHITTEST = 0x84, WM_MOUSEMOVE = 0x200, WM_LBUTTONDOWN = 0x201, WM_LBUTTONUP = 0x202,
-        WM_NCLBUTTONDOWN = 0xA1, WM_TIMER = 0x113, WM_DPICHANGED = 0x2E0;
+        WM_NCLBUTTONDOWN = 0xA1, WM_TIMER = 0x113, WM_DPICHANGED = 0x2E0, WM_CLOSE = 0x10;
     public const int HTTRANSPARENT = -1, HTCLIENT = 1, HTBOTTOMRIGHT = 17;
 
     [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
@@ -33,6 +33,10 @@ internal static partial class User32
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool IsWindowVisible(nint hwnd);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool IsWindow(nint hwnd);
 
     [LibraryImport("user32.dll", EntryPoint = "SendMessageW")]
     public static partial nint SendMessage(nint hwnd, uint msg, nuint wParam, nint lParam);
@@ -402,6 +406,22 @@ public sealed class OverlayWindowTests
         var top = Assert.Single(buf.Take(n), r => r.Event == AppDiagEvents.TopmostReasserted);
         Assert.Equal(DiagLevel.Trace, top.Level);
         Assert.Equal(1, top.I0); // cause: timer
+    }
+
+    [Fact] // a tool closing the overlay window alone must not leave a headless Agent
+    public void Wm_close_does_not_destroy_the_overlay()
+    {
+        using var fonts = new DWriteFonts();
+        using var w = new OverlayWindow(RenderBackend.Layered, fonts);
+        var locked = Build(edit: false);
+        w.SetBounds(Bounds(locked));
+        w.Render(locked);
+        w.SetVisible(true);
+        Assert.Equal(0, (int)User32.SendMessage(w.Handle, User32.WM_CLOSE, 0, 0));
+        Screen.Settle(50);
+        Assert.True(User32.IsWindow(w.Handle));
+        Assert.True(User32.IsWindowVisible(w.Handle));
+        w.Render(Build(edit: true)); // still drawable
     }
 
     [Fact]

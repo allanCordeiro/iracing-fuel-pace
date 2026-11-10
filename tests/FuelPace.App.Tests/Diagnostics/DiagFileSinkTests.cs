@@ -158,6 +158,18 @@ public sealed class DiagFileSinkTests : IDisposable
         Assert.Contains("fatal", all);
     }
 
+    [Fact] // an unobserved task exception does not end the process: an Error, not "fatal"
+    public void Unobserved_task_exceptions_are_errors_not_fatal()
+    {
+        var log = new DiagLog(DiagLevel.Info);
+        using var sink = new DiagFileSink(log, _dir);
+        CrashHandler.HandleUnobserved(log, sink, new AggregateException(new InvalidOperationException("lost")));
+        var line = Assert.Single(Files().SelectMany(ReadLines), l => l.Contains("lost"));
+        Assert.Contains("\"lvl\":\"error\"", line);
+        Assert.Contains("\"cat\":\"task\"", line);
+        Assert.DoesNotContain("fatal", line);
+    }
+
     [Fact]
     public void Unwritable_directory_beyond_pending_cap_drops_oldest_and_counts()
     {

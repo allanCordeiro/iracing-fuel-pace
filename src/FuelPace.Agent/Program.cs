@@ -12,6 +12,7 @@ using FuelPace.App.Ipc;
 using FuelPace.App.Settings;
 using FuelPace.Core.Diagnostics;
 using Windows.Win32;
+using Windows.Win32.System.Diagnostics.Debug;
 
 namespace FuelPace.Agent;
 
@@ -29,6 +30,9 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        // A native fault in a driver or DirectComposition must not put a Windows error-reporting dialog over the sim (NFR-02);
+        // every managed thread catches and logs its own exceptions.
+        PInvoke.SetErrorMode(THREAD_ERROR_MODE.SEM_FAILCRITICALERRORS | THREAD_ERROR_MODE.SEM_NOGPFAULTERRORBOX);
         string? appData = null;
         try
         {

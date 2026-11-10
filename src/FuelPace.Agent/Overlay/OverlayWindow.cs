@@ -383,6 +383,10 @@ public sealed unsafe class OverlayWindow : IOverlaySurface
                 case WM_DESTROY_REQUEST:
                     DestroyNow();
                     return (LRESULT)0;
+                case PInvoke.WM_CLOSE:
+                    // Not DefWindowProc (it destroys the window: a headless Agent rendering into a dead HWND). taskkill and
+                    // the Restart Manager also close the message window, which ends the Agent the normal way.
+                    return (LRESULT)0;
             }
         }
         catch (Exception e)

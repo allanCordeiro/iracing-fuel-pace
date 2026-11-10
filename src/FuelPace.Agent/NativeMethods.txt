@@ -17,6 +17,8 @@ WM_SETTINGCHANGE
 WM_CLOSE
 WM_DESTROY
 WM_ENDSESSION
+// No OS error dialog over the sim
+SetErrorMode
 // Second instance
 AllowSetForegroundWindow
 ASFW_ANY
