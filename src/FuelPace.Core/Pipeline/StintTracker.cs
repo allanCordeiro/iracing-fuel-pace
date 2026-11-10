@@ -105,10 +105,10 @@ public sealed class StintTracker
     }
 
     /// <summary>Counts laps that ended inside the stint; only those with no reason enter the mean. A lap emitted
-    /// while still open (end not observed, e.g. by a flush) is ignored.</summary>
+    /// while still open (end not observed, e.g. by a flush), or before the stint's first frame (after <see cref="Reset"/>), is ignored.</summary>
     public void OnLapCompleted(in CompletedLap lap)
     {
-        if (!lap.Stats.EndObserved || !(lap.EndTime > _stintStart)) return;
+        if (!_started || !lap.Stats.EndObserved || !(lap.EndTime > _stintStart)) return;
         LapsDone++;
         if (lap.Reasons != LapReasons.None) return;
 

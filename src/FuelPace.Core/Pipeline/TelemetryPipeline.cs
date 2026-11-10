@@ -128,9 +128,18 @@ public sealed class TelemetryPipeline : ILapSink
     /// "no baseline"); otherwise installs the session with none. The next session-info change retries the load.</summary>
     public void OnSessionContextProfileUnavailable(SessionInfo info)
     {
-        var cur = Volatile.Read(ref _ctx);
-        var keep = cur is not null && cur.ProfileKey == info.ProfileKey ? cur.Profile : null;
-        Install(new SessionContext(info, keep, profileLoaded: false));
+        while (true)
+        {
+            var cur = Volatile.Read(ref _ctx);
+            bool sameKey = cur is not null && cur.ProfileKey == info.ProfileKey;
+            // A profile already in use for this key (e.g. just saved by a capture) stays, and counts as loaded.
+            var next = new SessionContext(info, sameKey ? cur!.Profile : null, profileLoaded: sameKey && cur!.ProfileLoaded);
+            if (ReferenceEquals(Interlocked.CompareExchange(ref _ctx, next, cur), cur))
+            {
+                Overlay.SetLabels(next.CarShort, next.TrackShort);
+                return;
+            }
+        }
     }
 
     private void Install(SessionContext ctx)
@@ -167,15 +176,16 @@ public sealed class TelemetryPipeline : ILapSink
         if (_capture.IsActive && ctx is not null
             && ((!ReferenceEquals(ctx, _captureCtx) && ctx.ProfileKey != _captureCtx!.ProfileKey) || f.SessionNum != _captureSessionNum))
             StopCapture(auto: true, f.SessionTime);
-        // I-5: practice or qualifying laps must not reach the race's stint mean or leader pace.
+
+        _detector.Update(in f);
+        // I-5: practice or qualifying laps (including one the detector closed on this very frame) must not reach the
+        // new session's stint, last lap or leader pace.
         if (!_hasSessionNum || f.SessionNum != _sessionNum)
         {
             if (_hasSessionNum) ResetHistory();
             _sessionNum = f.SessionNum;
             _hasSessionNum = true;
         }
-
-        _detector.Update(in f);
         _stint.Update(in f);
         var layout = Volatile.Read(ref _layout);
         if (layout?.HasCarIdx ?? f.HasCarIdx) _leader.Update(in f);

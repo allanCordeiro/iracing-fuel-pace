@@ -473,11 +473,13 @@ public class TelemetryPipelineTests
         rig.Pipeline.OnSessionContextProfileUnavailable(rig.Info with { EstLapTimeS = 70 });
         for (int i = 0; i < 6; i++) rig.Step();
         Assert.NotEqual(SignalState.NoBaseline, rig.Pipeline.Overlay.Read().State);
-        Assert.False(rig.Pipeline.TryReuseProfile(rig.Info)); // the failed read is retried by the next session info
+        Assert.True(rig.Pipeline.TryReuseProfile(rig.Info)); // the document in use stays authoritative: nothing to retry
 
-        rig.Pipeline.OnSessionContextProfileUnavailable(rig.Info with { CarPath = "othercar" });
+        var other = rig.Info with { CarPath = "othercar" };
+        rig.Pipeline.OnSessionContextProfileUnavailable(other);
         for (int i = 0; i < 6; i++) rig.Step();
         Assert.Equal(SignalState.NoBaseline, rig.Pipeline.Overlay.Read().State);
+        Assert.False(rig.Pipeline.TryReuseProfile(other)); // never read: the next session info retries
     }
 
     [Fact]

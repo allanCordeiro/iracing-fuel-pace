@@ -61,6 +61,7 @@ public class StintTrackerTests
         Assert.Equal(2, s.LapsDone);
 
         s.Reset(); // new session: SessionTime restarts
+        Complete(s, Lap(160, 170, 2.4, 80)); // closed by the detector on the change frame, before the new stint's first frame
         Assert.Equal(0, s.LapsDone);
         Assert.True(double.IsNaN(s.MeanFuelL));
         Assert.True(double.IsNaN(s.MeanLapS));
