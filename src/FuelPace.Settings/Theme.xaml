@@ -118,14 +118,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Label">
-                    <ContentPresenter RecognizesAccessKey="True">
-                        <ContentPresenter.Resources>
-                            <!-- narrow columns wrap their label, as in the mock -->
-                            <Style TargetType="AccessText">
-                                <Setter Property="TextWrapping" Value="Wrap" />
-                            </Style>
-                        </ContentPresenter.Resources>
-                    </ContentPresenter>
+                    <ContentPresenter RecognizesAccessKey="True" />
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

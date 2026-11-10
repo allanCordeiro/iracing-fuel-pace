@@ -23,11 +23,13 @@
             <!-- One shortcut: the bold mono key (editable), its action, and the error or the failed registration in red -->
             <DataTemplate x:Key="Hotkey">
                 <StackPanel>
-                    <DockPanel>
-                        <TextBox x:Name="Key" DockPanel.Dock="Left" Style="{StaticResource KeyBox}" VerticalAlignment="Top"
-                                 Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="{Binding Label}" />
-                        <TextBlock Text="{Binding Label}" Margin="4,0,0,0" Foreground="{StaticResource TextLabel}" TextWrapping="Wrap" />
-                    </DockPanel>
+                    <!-- The key flows inline with its action, as the mock's <strong> -->
+                    <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextLabel}">
+                        <InlineUIContainer BaselineAlignment="TextBottom">
+                            <TextBox x:Name="Key" Style="{StaticResource KeyBox}" Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     AutomationProperties.Name="{Binding Label}" />
+                        </InlineUIContainer><Run Text=" " /><Run Text="{Binding Label, Mode=OneWay}" />
+                    </TextBlock>
                     <TextBlock Style="{StaticResource ErrorText}" Margin="0,4,0,0" Text="{Binding Error}"
                                Visibility="{Binding Error, Converter={StaticResource NotEmptyVisible}}" />
                     <TextBlock Style="{StaticResource ErrorText}" Margin="0,4,0,0" Text="{Binding Warning}"
@@ -116,20 +118,20 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <StackPanel>
-                                <Label Style="{StaticResource FieldLabel}" Content="Reserva (L)" Target="{Binding ElementName=Reserve}" />
-                                <TextBox x:Name="Reserve" Style="{StaticResource NumberBox}" Text="{Binding ReserveL, Mode=TwoWay}" />
+                                <Label Style="{StaticResource FieldLabel}" Target="{Binding ElementName=Reserve}"><TextBlock Text="Reserva (L)" TextWrapping="Wrap" /></Label>
+                                <TextBox x:Name="Reserve" Style="{StaticResource NumberBox}" AutomationProperties.Name="Reserva (L)" Text="{Binding ReserveL, Mode=TwoWay}" />
                             </StackPanel>
                             <StackPanel Grid.Column="2">
-                                <Label Style="{StaticResource FieldLabel}" Content="Média móvel (voltas)" Target="{Binding ElementName=Mean}" />
-                                <TextBox x:Name="Mean" Style="{StaticResource NumberBox}" Text="{Binding MeanWindow, Mode=TwoWay}" />
+                                <Label Style="{StaticResource FieldLabel}" Target="{Binding ElementName=Mean}"><TextBlock Text="Média móvel (voltas)" TextWrapping="Wrap" /></Label>
+                                <TextBox x:Name="Mean" Style="{StaticResource NumberBox}" AutomationProperties.Name="Média móvel (voltas)" Text="{Binding MeanWindow, Mode=TwoWay}" />
                             </StackPanel>
                             <StackPanel Grid.Column="4">
-                                <Label Style="{StaticResource FieldLabel}" Content="Economia máxima (%)" Target="{Binding ElementName=Saving}" />
-                                <TextBox x:Name="Saving" Style="{StaticResource NumberBox}" Text="{Binding MaxSavingPercent, Mode=TwoWay}" />
+                                <Label Style="{StaticResource FieldLabel}" Target="{Binding ElementName=Saving}"><TextBlock Text="Economia máxima (%)" TextWrapping="Wrap" /></Label>
+                                <TextBox x:Name="Saving" Style="{StaticResource NumberBox}" AutomationProperties.Name="Economia máxima (%)" Text="{Binding MaxSavingPercent, Mode=TwoWay}" />
                             </StackPanel>
                             <StackPanel Grid.Column="6">
-                                <Label Style="{StaticResource FieldLabel}" Content="Voltas extras" Target="{Binding ElementName=Extra}" />
-                                <TextBox x:Name="Extra" Style="{StaticResource NumberBox}" Text="{Binding ExtraLaps, Mode=TwoWay}" />
+                                <Label Style="{StaticResource FieldLabel}" Target="{Binding ElementName=Extra}"><TextBlock Text="Voltas extras" TextWrapping="Wrap" /></Label>
+                                <TextBox x:Name="Extra" Style="{StaticResource NumberBox}" AutomationProperties.Name="Voltas extras" Text="{Binding ExtraLaps, Mode=TwoWay}" />
                             </StackPanel>
                         </Grid>
                         <TextBlock Margin="0,14,0,0" FontSize="13" Foreground="{StaticResource TextLabel}" Text="Voltas restantes" />
