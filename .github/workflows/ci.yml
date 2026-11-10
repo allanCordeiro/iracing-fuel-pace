@@ -59,6 +59,14 @@ jobs:
             out/*.zip
             tests/**/TestResults/**
             artifacts/**
+      # The overlay renders of the 9 preview states (RenderTests), small and on their own for review against the mocks.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: renders
+          retention-days: 14
+          if-no-files-found: warn
+          path: artifacts/renders/*.png
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

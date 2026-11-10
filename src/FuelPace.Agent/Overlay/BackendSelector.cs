@@ -49,7 +49,12 @@ internal static class BackendSelector
             }
         }, out reason);
         hresult = hr;
-        if (backend == RenderBackend.Composition) return (backend, hwnd, renderer!);
+        if (backend == RenderBackend.Composition)
+        {
+            if (renderer is CompositionRenderer { Hardware: false })
+                reason += "; no hardware D3D11 device, drawing on WARP (software)";
+            return (backend, hwnd, renderer!);
+        }
 
         hwnd = createWindow(false);
         try

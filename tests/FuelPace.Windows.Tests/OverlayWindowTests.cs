@@ -2,7 +2,9 @@ using System.Runtime.InteropServices;
 using FuelPace.Agent.Overlay;
 using FuelPace.App.Overlay;
 using FuelPace.App.Placement;
+using FuelPace.App.Diagnostics;
 using FuelPace.App.Settings;
+using FuelPace.Core.Diagnostics;
 
 namespace FuelPace.Windows.Tests;
 
@@ -27,6 +29,9 @@ internal static partial class User32
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool IsWindowVisible(nint hwnd);
+
+    [LibraryImport("user32.dll", EntryPoint = "SendMessageW")]
+    public static partial nint SendMessage(nint hwnd, uint msg, nuint wParam, nint lParam);
 
     [LibraryImport("dwmapi.dll")]
     public static partial int DwmIsCompositionEnabled([MarshalAs(UnmanagedType.Bool)] out bool enabled);
@@ -94,6 +99,34 @@ public sealed class OverlayWindowTests
         ex = User32.GetWindowLongPtr(w.Handle, User32.GWL_EXSTYLE);
         Assert.NotEqual(0, ex & User32.WS_EX_TRANSPARENT);
         Assert.NotEqual(w.Handle, User32.GetForegroundWindow()); // showing and toggling never took the focus
+    }
+
+    [Fact]
+    public void Logs_the_backend_on_first_use_and_each_topmost_reassertion()
+    {
+        AppDiagEvents.RegisterAll();
+        var log = new DiagLog(DiagLevel.Trace);
+        using var fonts = new DWriteFonts();
+        using var w = new OverlayWindow(RenderBackend.Layered, fonts, () => log);
+        var buf = new DiagRecord[16];
+        Assert.Equal(0, log.DrainRecords(buf)); // the host's log may not exist yet while the window is created
+
+        w.SetEditMode(false); // the host's first call (UI start)
+        int n = log.DrainRecords(buf);
+        var backend = Assert.Single(buf.Take(n), r => r.Event == AppDiagEvents.OverlayBackend);
+        Assert.Equal((int)RenderBackend.Layered, backend.I0);
+        Assert.True(log.TryDequeueText(out var text));
+        Assert.Contains("layered", text.Message);
+
+        var locked = Build(edit: false);
+        w.SetBounds(Bounds(locked));
+        w.Render(locked);
+        w.SetVisible(true);
+        User32.SendMessage(w.Handle, 0x0113 /* WM_TIMER */, 1, 0); // the 2 s timer
+        n = log.DrainRecords(buf);
+        var top = Assert.Single(buf.Take(n), r => r.Event == AppDiagEvents.TopmostReasserted);
+        Assert.Equal(DiagLevel.Trace, top.Level);
+        Assert.Equal(1, top.I0); // cause: timer
     }
 
     [Fact]
