@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using FuelPace.App.Diagnostics;
 using FuelPace.App.Live;
 using FuelPace.App.Simulation;
 using FuelPace.App.Tests.Fakes;
@@ -214,6 +215,85 @@ public class LiveConnectionTests
         var c = Connected();
         Assert.Equal("", c.ReadSessionInfoYaml(new byte[10]));
     }
+
+    /// <summary>The sim's data-valid event, scripted: whether each wait is signaled, and the back-off sleeps asked.</summary>
+    private sealed class FakeSignal : IDataValidSignal
+    {
+        public bool Signaled = true;
+        public readonly List<int> Waits = [], Backoffs = [];
+        public bool Wait(int timeoutMs) { Waits.Add(timeoutMs); return Signaled; }
+        public void Backoff(int ms) => Backoffs.Add(ms);
+    }
+
+    private ReadResult WaitRead(LiveConnection c, FakeSignal s)
+    {
+        var f = new TelemetryFrame();
+        return c.WaitAndRead(_image, ref f, s);
+    }
+
+    [Fact] // A21: an event left signaled (Set without Reset) must not let the telemetry thread spin
+    public void A_stuck_signaled_event_backs_off_after_three_stale_wakeups()
+    {
+        var c = Connected();
+        var s = new FakeSignal();
+        Write();
+        Assert.Equal(ReadResult.Frame, WaitRead(c, s));
+        for (int i = 0; i < 10; i++) Assert.Equal(ReadResult.NoData, WaitRead(c, s));
+        // wakeups 1-3 without a new tick go straight back to the wait; from then on each one sleeps first
+        Assert.Equal(7, s.Backoffs.Count);
+        Assert.All(s.Backoffs, ms => Assert.Equal(LiveConnection.BackoffMs, ms));
+        Assert.All(s.Waits, ms => Assert.Equal(LiveConnection.WaitMs, ms));
+
+        Write(); // a new tick ends the run
+        Assert.Equal(ReadResult.Frame, WaitRead(c, s));
+        for (int i = 0; i < 3; i++) WaitRead(c, s);
+        Assert.Equal(7, s.Backoffs.Count);
+        WaitRead(c, s);
+        Assert.Equal(8, s.Backoffs.Count);
+    }
+
+    [Fact]
+    public void Timed_out_waits_do_not_back_off()
+    {
+        var c = Connected();
+        var s = new FakeSignal { Signaled = false };
+        for (int i = 0; i < 10; i++) Assert.Equal(ReadResult.NoData, WaitRead(c, s));
+        Assert.Empty(s.Backoffs);
+    }
+
+    [Fact] // A21: the first in-game bundle tells how the real event behaves
+    public void Wait_counters_are_logged_once_a_minute()
+    {
+        var log = new DiagLog(DiagLevel.Info);
+        var c = new LiveConnection(_clock, log);
+        Assert.True(c.TryConnect(_image));
+        var s = new FakeSignal();
+        Write();
+        WaitRead(c, s);                                   // signaled, a frame
+        for (int i = 0; i < 5; i++) WaitRead(c, s);       // signaled, nothing new: 5 stale wakeups, 2 back-offs
+        s.Signaled = false;
+        WaitRead(c, s);                                   // timed out, nothing new
+        Write();
+        WaitRead(c, s);                                   // timed out but a new frame: the event did not fire for it
+        Assert.DoesNotContain(Drain(log), r => r.Event == AppDiagEvents.LiveStats);
+
+        _clock.Advance(TimeSpan.FromSeconds(61));
+        s.Signaled = true;
+        Write();
+        WaitRead(c, s);
+        var st = Assert.Single(Drain(log), r => r.Event == AppDiagEvents.LiveStats);
+        Assert.Equal(2, st.I0);       // waitTimeouts
+        Assert.Equal(5, st.I1);       // staleWakeups
+        Assert.Equal(3.0, st.A);      // frames
+        Assert.Equal(2.0, st.B);      // backoffs
+        Assert.Equal(5.0, st.C);      // maxStaleRun
+        Assert.Equal(1.0, st.D);      // framesAfterTimeout
+
+        _clock.Advance(TimeSpan.FromSeconds(30));
+        WaitRead(c, s);
+        Assert.DoesNotContain(Drain(log), r => r.Event == AppDiagEvents.LiveStats); // the counters restarted
+    }
+
 }
 
 [Collection(PerfCollection.Name)]
@@ -242,6 +322,43 @@ public sealed class LiveConnectionHotPathTests
             w.WriteFrame(image, e);
             if (c.TryRead(image, ref f) == ReadResult.Frame) read++;
             c.TryRead(image, ref f); // no new data
+        }
+        m.AssertNone();
+        Assert.Equal(200, read);
+    }
+
+    private sealed class StuckSignal : IDataValidSignal
+    {
+        public bool Wait(int timeoutMs) => true;
+        public void Backoff(int ms) { }
+    }
+
+    [Fact] // A21: the wait counters, the back-off and the minute's LiveStats add no allocation per tick
+    public void Waiting_and_counting_allocates_nothing()
+    {
+        var w = new IrsdkLiveImageWriter(TelemetryVars.All, 3, yamlCapacity: 4096);
+        var image = new byte[w.TotalSize];
+        w.Initialize(image, "---\n...\n");
+        var clock = new ManualClock(SyntheticRace.T0);
+        var c = new LiveConnection(clock, new DiagLog(DiagLevel.Trace));
+        Assert.True(c.TryConnect(image));
+        var signal = new StuckSignal();
+        var frames = SyntheticRace.Frames(1, withCarIdx: true).Take(300).ToArray();
+        var f = new TelemetryFrame();
+        foreach (var e in frames.AsSpan(0, 100))
+        {
+            w.WriteFrame(image, e);
+            c.WaitAndRead(image, ref f, signal);
+        }
+
+        int read = 0;
+        var m = AllocationMeasure.Start();
+        foreach (ref readonly var e in frames.AsSpan(100))
+        {
+            w.WriteFrame(image, e);
+            if (c.WaitAndRead(image, ref f, signal) == ReadResult.Frame) read++;
+            for (int i = 0; i < 5; i++) c.WaitAndRead(image, ref f, signal); // stuck: stale wakeups and back-offs
+            clock.Advance(TimeSpan.FromSeconds(1)); // a LiveStats line every 60 frames
         }
         m.AssertNone();
         Assert.Equal(200, read);

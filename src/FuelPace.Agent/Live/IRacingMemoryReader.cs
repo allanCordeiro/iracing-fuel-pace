@@ -8,8 +8,8 @@ namespace FuelPace.Agent.Live;
 /// <summary>
 /// The live iRacing source: the shared memory <c>Local\IRSDKMemMapFileName</c> mapped read-only once (pointer acquired once)
 /// and the data-valid event <c>Local\IRSDKDataValidEvent</c>. Each <see cref="TryRead"/> waits up to 200 ms on the event and
-/// reads the newest frame; the decisions (2 s without the status bit, layout change, 30 s stale, consistent session info) are
-/// <see cref="LiveConnection"/>'s, and once it reported <see cref="ReadResult.Disconnected"/> the host disposes this source and
+/// reads the newest frame; the decisions (2 s without the status bit, layout change, 30 s stale, consistent session info, the
+/// stuck-event back-off and the per-minute wait counters of ruling A21) are <see cref="LiveConnection"/>'s, and once it reported <see cref="ReadResult.Disconnected"/> the host disposes this source and
 /// opens a new one.
 /// <para>
 /// Threading: <see cref="TryRead"/> on the telemetry thread, <see cref="ReadSessionInfoYaml"/> on the loop's session-info worker
@@ -23,13 +23,13 @@ public sealed unsafe class IRacingMemoryReader : ITelemetrySource
 {
     public const string DefaultMapName = @"Local\IRSDKMemMapFileName";
     public const string DefaultEventName = @"Local\IRSDKDataValidEvent";
-    private const int WaitMs = 200;
 
     private static int s_accessDeniedLogged;
 
     private readonly MemoryMappedFile _map;
     private readonly MemoryMappedViewAccessor _view;
     private readonly EventWaitHandle _event;
+    private readonly Signal _signal;
     private readonly LiveConnection _conn;
     private readonly byte* _ptr;
     private readonly int _size;
@@ -41,6 +41,7 @@ public sealed unsafe class IRacingMemoryReader : ITelemetrySource
         _map = map;
         _view = view;
         _event = ev;
+        _signal = new Signal(ev);
         _ptr = ptr;
         _size = size;
         _conn = conn;
@@ -109,8 +110,7 @@ public sealed unsafe class IRacingMemoryReader : ITelemetrySource
         if (!Enter()) return ReadResult.Disconnected;
         try
         {
-            _event.WaitOne(WaitMs);
-            return _conn.TryRead(new ReadOnlySpan<byte>(_ptr, _size), ref frame);
+            return _conn.WaitAndRead(new ReadOnlySpan<byte>(_ptr, _size), ref frame, _signal);
         }
         finally { Exit(); }
     }
@@ -120,6 +120,13 @@ public sealed unsafe class IRacingMemoryReader : ITelemetrySource
         ObjectDisposedException.ThrowIf(!Enter(), this);
         try { return _conn.ReadSessionInfoYaml(new ReadOnlySpan<byte>(_ptr, _size)); }
         finally { Exit(); }
+    }
+
+    /// <summary>The named event; the back-off is a plain sleep (the Agent never raises the timer resolution: ~15.6 ms).</summary>
+    private sealed class Signal(EventWaitHandle ev) : IDataValidSignal
+    {
+        public bool Wait(int timeoutMs) => ev.WaitOne(timeoutMs);
+        public void Backoff(int ms) => Thread.Sleep(ms);
     }
 
     private bool Enter()

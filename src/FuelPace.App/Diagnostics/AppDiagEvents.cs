@@ -63,7 +63,7 @@ public static class AppDiagEvents
         Reg(MemoryMinute, nameof(MemoryMinute), "perf", i0: "assemblies", i1: "gen2", a: "workingSetMB", b: "privateMB",
             c: "gcHeapMB", d: "gcCommittedMB");
         Reg(LiveStats, nameof(LiveStats), "telemetry", i0: "waitTimeouts", i1: "staleWakeups", a: "frames", b: "backoffs",
-            c: "maxStaleRun");
+            c: "maxStaleRun", d: "framesAfterTimeout");
     }
 
     private static void Reg(DiagEvent e, string name, string category, string? i0 = null, string? i1 = null,

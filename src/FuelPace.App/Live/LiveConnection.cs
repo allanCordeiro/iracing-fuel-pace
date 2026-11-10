@@ -1,9 +1,20 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using FuelPace.App.Diagnostics;
 using FuelPace.Core.Diagnostics;
 using FuelPace.Core.Telemetry;
 
 namespace FuelPace.App.Live;
+
+/// <summary>The sim's data-valid event as <see cref="LiveConnection.WaitAndRead"/> uses it (the Agent wraps the named event).</summary>
+public interface IDataValidSignal
+{
+    /// <summary>True when the event was signaled within <paramref name="timeoutMs"/>.</summary>
+    bool Wait(int timeoutMs);
+
+    /// <summary>Sleeps about <paramref name="ms"/> (the stuck-event guard).</summary>
+    void Backoff(int ms);
+}
 
 /// <summary>
 /// The portable decisions of the Agent's live iRacing source, over the shared-memory span the Agent maps (the Agent adds the
@@ -17,6 +28,12 @@ namespace FuelPace.App.Live;
 /// once per connection, so a new layout needs a new connection (a full reset, by design).</item>
 /// <item>No new frame for <see cref="StaleLimit"/> with the status bit still on (the sim died without clearing it) is a
 /// disconnection: the irsdk client library uses the same 30 s timeout.</item>
+/// <item>Ruling A21, <see cref="WaitAndRead"/>: the event's real semantics are not known. If it stays signaled, every wait
+/// returns at once; after <see cref="StaleRunBeforeBackoff"/> wakeups in a row without a new tick each further one sleeps
+/// <see cref="BackoffMs"/> (about one timer tick on Windows) so the telemetry thread cannot spin. Once a minute
+/// <see cref="AppDiagEvents.LiveStats"/> logs the timed-out waits, the wakeups without a new tick, the frames, the back-offs,
+/// the longest stale run and the frames read after a timed-out wait (an event that did not fire for new data: an auto-reset
+/// event consumed by another tool).</item>
 /// </list>
 /// Threading: <see cref="TryConnect"/>, <see cref="TryRead"/>, <see cref="Layout"/> and <see cref="SessionInfoVersion"/> belong
 /// to the telemetry thread; <see cref="ReadSessionInfoYaml"/> touches no mutable state and may run concurrently on the
@@ -29,9 +46,18 @@ public sealed class LiveConnection
     /// <summary>Reads of a session info the sim keeps rewriting before the version is skipped.</summary>
     public const int YamlAttempts = 3;
     private const int SessionInfoUpdateOffset = 12;
+    /// <summary>The longest wait on the data-valid event: a missed signal costs at most this.</summary>
+    public const int WaitMs = 200;
+    public const int StaleRunBeforeBackoff = 3, BackoffMs = 2;
+    public static readonly TimeSpan StatsPeriod = TimeSpan.FromMinutes(1);
 
     private readonly LiveSnapshotReader _snap;
     private readonly TimeProvider _clock;
+    private readonly DiagLog _log;
+    // WaitAndRead's counters for the current minute (telemetry thread).
+    private long _statsStart;
+    private int _timeouts, _staleWakeups, _frames, _backoffs, _staleRun, _maxStaleRun, _framesAfterTimeout;
+    private double _lastSessionTime = double.NaN;
     private VarLayout? _layout;
     private long _notConnectedSince, _lastFrame;
     private bool _notConnected, _ended;
@@ -39,6 +65,7 @@ public sealed class LiveConnection
     public LiveConnection(TimeProvider? clock = null, DiagLog? log = null)
     {
         _clock = clock ?? TimeProvider.System;
+        _log = log ?? DiagLog.Null;
         _snap = new LiveSnapshotReader(log: log);
     }
 
@@ -61,7 +88,52 @@ public sealed class LiveConnection
         if (_snap.TryRead(memory, ref f) is not (LiveReadStatus.LayoutChanged or LiveReadStatus.Frame)) return false;
         _layout = _snap.Layout;
         _lastFrame = _clock.GetTimestamp();
+        _statsStart = _lastFrame;
         return true;
+    }
+
+    /// <summary>
+    /// Waits up to <see cref="WaitMs"/> on <paramref name="signal"/>, then <see cref="TryRead"/>; counts how the wait went and
+    /// backs off when the event looks stuck signaled (see the class remarks). Allocation-free.
+    /// </summary>
+    public ReadResult WaitAndRead(ReadOnlySpan<byte> memory, ref TelemetryFrame frame, IDataValidSignal signal)
+    {
+        bool signaled = signal.Wait(WaitMs);
+        var r = TryRead(memory, ref frame);
+        if (r == ReadResult.Frame)
+        {
+            _frames++;
+            _lastSessionTime = frame.SessionTime;
+            if (!signaled) _framesAfterTimeout++;
+        }
+        if (!signaled)
+        {
+            _timeouts++;
+            _staleRun = 0;
+        }
+        else if (r == ReadResult.NoData)
+        {
+            _staleWakeups++;
+            if (++_staleRun > _maxStaleRun) _maxStaleRun = _staleRun;
+            if (_staleRun > StaleRunBeforeBackoff)
+            {
+                _backoffs++;
+                signal.Backoff(BackoffMs);
+            }
+        }
+        else _staleRun = 0;
+        MaybeEmitStats();
+        return r;
+    }
+
+    private void MaybeEmitStats()
+    {
+        long now = _clock.GetTimestamp();
+        if (_clock.GetElapsedTime(_statsStart, now) < StatsPeriod) return;
+        _log.Emit(DiagLevel.Info, AppDiagEvents.LiveStats, _lastSessionTime, _timeouts, _staleWakeups, _frames, _backoffs,
+            _maxStaleRun, _framesAfterTimeout);
+        _statsStart = now;
+        _timeouts = _staleWakeups = _frames = _backoffs = _maxStaleRun = _framesAfterTimeout = 0;
     }
 
     public ReadResult TryRead(ReadOnlySpan<byte> memory, ref TelemetryFrame frame)
