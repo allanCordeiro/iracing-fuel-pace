@@ -392,8 +392,8 @@ public sealed class TelemetryPipeline : ILapSink
 
         if (_store is { } store && _io is { } io)
         {
-            try { io.Enqueue(() => SaveCapture(store, ctx, rec)); }
-            catch (ObjectDisposedException) { _log.Text(DiagLevel.Error, "capture", "capture not saved: I/O queue disposed"); }
+            if (!io.Enqueue(() => SaveCapture(store, ctx, rec)))
+                _log.Text(DiagLevel.Error, "capture", "capture not saved: I/O queue disposed");
         }
     }
 

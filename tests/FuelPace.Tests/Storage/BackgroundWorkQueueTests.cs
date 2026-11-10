@@ -1,3 +1,4 @@
+using FuelPace.Core.Diagnostics;
 using FuelPace.Core.Storage;
 
 namespace FuelPace.Tests.Storage;
@@ -52,5 +53,45 @@ public class BackgroundWorkQueueTests
         Assert.False(q.WaitIdle(TimeSpan.FromMilliseconds(50)));
         gate.Set();
         Assert.True(q.WaitIdle(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public void Dispose_from_the_queue_thread_exits_cleanly_after_draining()
+    {
+        var q = new BackgroundWorkQueue("test-queue");
+        int ran = 0;
+        using var gate = new ManualResetEventSlim();
+        q.Enqueue(() => gate.Wait());
+        q.Enqueue(() => q.Dispose()); // e.g. a shutdown requested from a queued action
+        q.Enqueue(() => Interlocked.Increment(ref ran));
+        gate.Set();
+        Assert.True(q.WaitIdle(TimeSpan.FromSeconds(5)));
+        Assert.Equal(1, ran); // queued before the Dispose: still run
+        Thread.Sleep(50);     // an ObjectDisposedException on the queue thread would kill the test host here
+        Assert.False(q.Enqueue(() => { }));
+        q.Dispose();
+    }
+
+    [Fact]
+    public void Dispose_twice_is_a_no_op()
+    {
+        var q = new BackgroundWorkQueue("test-queue");
+        q.Dispose();
+        q.Dispose();
+    }
+
+    [Fact]
+    public void Enqueue_after_Dispose_is_ignored_logged_and_does_not_leak_the_pending_count()
+    {
+        var log = new DiagLog(DiagLevel.Info);
+        var q = new BackgroundWorkQueue("test-queue", log);
+        q.Dispose();
+        bool ran = false;
+        Assert.False(q.Enqueue(() => ran = true));
+        Assert.True(q.WaitIdle(TimeSpan.FromMilliseconds(200)));
+        Assert.False(ran);
+        Assert.True(log.TryDequeueText(out var t));
+        Assert.Equal(DiagLevel.Error, t.Level);
+        Assert.Contains("disposed", t.Message);
     }
 }
