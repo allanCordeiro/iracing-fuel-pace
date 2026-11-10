@@ -647,6 +647,11 @@ public sealed class AgentHostTests
         var redraws = rig.Events("OverlayRedraws");
         Assert.True(redraws.Count >= 2);
         Assert.True(Int(redraws[0], "perMinute") >= 1);
+        var memory = rig.Events("MemoryMinute"); // PERF-05: where the working set goes, next to the redraws
+        Assert.Equal(redraws.Count, memory.Count);
+        Assert.True(memory[0].GetProperty("workingSetMB").GetDouble() > 0);
+        Assert.True(memory[0].GetProperty("gcHeapMB").GetDouble() > 0);
+        Assert.True(Int(memory[0], "assemblies") > 0);
     }
 
     [Fact]

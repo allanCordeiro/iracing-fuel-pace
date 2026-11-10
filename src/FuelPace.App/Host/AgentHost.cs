@@ -664,7 +664,20 @@ public sealed partial class AgentHost : IDisposable
     {
         _log.Emit(DiagLevel.Info, AppDiagEvents.OverlayRedraws, SessionTime, _redraws);
         _redraws = 0;
+        EmitMemory();
     });
+
+    /// <summary>PERF-05: working set, private bytes and the GC's share of them, once a minute.</summary>
+    private void EmitMemory()
+    {
+        if (!_log.IsEnabled(DiagLevel.Info)) return;
+        const double Mb = 1024.0 * 1024.0;
+        long privateBytes;
+        using (var self = System.Diagnostics.Process.GetCurrentProcess()) privateBytes = self.PrivateMemorySize64;
+        var gc = GC.GetGCMemoryInfo();
+        _log.Emit(DiagLevel.Info, AppDiagEvents.MemoryMinute, SessionTime, AppDomain.CurrentDomain.GetAssemblies().Length,
+            GC.CollectionCount(2), Environment.WorkingSet / Mb, privateBytes / Mb, gc.HeapSizeBytes / Mb, gc.TotalCommittedBytes / Mb);
+    }
 
     /// <summary>Every 5 s with the sim connected (Review Focus 1): a change is logged; going fullscreen notifies once per sim session.</summary>
     private void CheckFullscreen() => RunUi(() =>

@@ -28,6 +28,10 @@ public static class AppDiagEvents
     public const DiagEvent BundleCreated = (DiagEvent)1020;
     /// <summary>The overlay could not draw or show a frame (logged once per distinct HRESULT and stage until a frame succeeds).</summary>
     public const DiagEvent RenderFailed = (DiagEvent)1021;
+    /// <summary>Once a minute (UI thread, with <see cref="OverlayRedraws"/>): where the memory is (PERF-05).</summary>
+    public const DiagEvent MemoryMinute = (DiagEvent)1022;
+    /// <summary>Once a minute of a live connection: how the sim's data-valid event behaves (ruling A21).</summary>
+    public const DiagEvent LiveStats = (DiagEvent)1023;
 
     private static int _registered;
 
@@ -56,6 +60,10 @@ public static class AppDiagEvents
         Reg(RecordingStopped, nameof(RecordingStopped), "record", i0: "frames", i1: "dropped");
         Reg(BundleCreated, nameof(BundleCreated), "app");
         Reg(RenderFailed, nameof(RenderFailed), "overlay", i0: "stage", i1: "hresult");
+        Reg(MemoryMinute, nameof(MemoryMinute), "perf", i0: "assemblies", i1: "gen2", a: "workingSetMB", b: "privateMB",
+            c: "gcHeapMB", d: "gcCommittedMB");
+        Reg(LiveStats, nameof(LiveStats), "telemetry", i0: "waitTimeouts", i1: "staleWakeups", a: "frames", b: "backoffs",
+            c: "maxStaleRun");
     }
 
     private static void Reg(DiagEvent e, string name, string category, string? i0 = null, string? i1 = null,
