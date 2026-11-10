@@ -22,6 +22,18 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
     /// <summary>"Modo debug": a change made by the user sends <c>SetDebugMode</c>.</summary>
     [ObservableProperty] public partial bool DebugMode { get; set; }
 
+    /// <summary>The <c>FuelPace.debug</c> file or <c>--debug</c> keeps debug mode on: the toggle cannot turn it off.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DebugToggleEnabled))]
+    public partial bool DebugForced { get; private set; }
+
+    public bool DebugToggleEnabled => !DebugForced;
+
+    /// <summary>Why the toggle is disabled ("Ativado pelo arquivo FuelPace.debug"); null when it is not.</summary>
+    [ObservableProperty] public partial string? DebugForcedText { get; private set; }
+
+    internal const string ForcedByMarkerText = "Ativado pelo arquivo FuelPace.debug", ForcedByCommandLineText = "Ativado por --debug";
+
     /// <summary>"Incluir gravações" in the bundle.</summary>
     [ObservableProperty] public partial bool IncludeRecordings { get; set; } = true;
 
@@ -45,6 +57,13 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
         _applying = true;
         try { DebugMode = s.DebugMode; }
         finally { _applying = false; }
+        DebugForcedText = s.DebugForcedBy switch
+        {
+            "marker" => ForcedByMarkerText,
+            "commandLine" => ForcedByCommandLineText,
+            _ => null,
+        };
+        DebugForced = DebugForcedText is not null;
     }
 
     internal void OnBundleCreated(BundleCreated m)

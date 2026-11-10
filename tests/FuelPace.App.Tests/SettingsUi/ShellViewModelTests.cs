@@ -83,6 +83,20 @@ public class ShellViewModelTests
         Assert.False(r.Vm.ShowFullscreenBanner);
     }
 
+    [Fact] // the banner follows the Agent live, not only the snapshot: going and leaving fullscreen with the window open
+    public async Task Fullscreen_banner_follows_the_agent_live()
+    {
+        var r = new SettingsRig();
+        await r.ConnectAsync(SettingsRig.Snap(fullscreen: false));
+        r.Conn.Raise(new Notice("warn", AgentHost.FullscreenText));
+        Assert.True(r.Vm.ShowFullscreenBanner);
+        Assert.Null(r.Vm.Message); // the banner says it; not repeated as a generic message
+        r.Conn.Raise(new FullscreenChanged(false));
+        Assert.False(r.Vm.ShowFullscreenBanner);
+        r.Conn.Raise(new FullscreenChanged(true));
+        Assert.True(r.Vm.ShowFullscreenBanner);
+    }
+
     [Fact]
     public async Task Reconnect_restores_state_from_snapshot()
     {

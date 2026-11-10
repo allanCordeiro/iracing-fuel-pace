@@ -38,14 +38,19 @@
 
             <!-- Debug mode -->
             <Border Margin="0,18,0,0" Style="{StaticResource Card}" Padding="20,18">
-                <CheckBox Style="{StaticResource CaptureBox}" HorizontalAlignment="Left" IsChecked="{Binding DebugMode, Mode=TwoWay}"
-                          AutomationProperties.Name="Modo debug">
-                    <StackPanel>
-                        <TextBlock Text="Modo debug" FontSize="17" FontWeight="SemiBold" />
-                        <TextBlock Style="{StaticResource Help}" Margin="0,4,0,0" MaxWidth="560" HorizontalAlignment="Left"
-                                   Text="Registra mais detalhes no log e grava a telemetria completa da sessão. O overlay e os cálculos no jogo continuam iguais." />
-                    </StackPanel>
-                </CheckBox>
+                <StackPanel>
+                    <!-- Forced on by the FuelPace.debug file or by the debug command-line flag: shown on and disabled, with the reason below. -->
+                    <CheckBox Style="{StaticResource CaptureBox}" HorizontalAlignment="Left" IsChecked="{Binding DebugMode, Mode=TwoWay}"
+                              IsEnabled="{Binding DebugToggleEnabled}" AutomationProperties.Name="Modo debug">
+                        <StackPanel>
+                            <TextBlock Text="Modo debug" FontSize="17" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Help}" Margin="0,4,0,0" MaxWidth="560" HorizontalAlignment="Left"
+                                       Text="Registra mais detalhes no log e grava a telemetria completa da sessão. O overlay e os cálculos no jogo continuam iguais." />
+                        </StackPanel>
+                    </CheckBox>
+                    <TextBlock Margin="0,8,0,0" Style="{StaticResource SmallHelp}" Text="{Binding DebugForcedText}"
+                               Visibility="{Binding DebugForced, Converter={StaticResource BoolVisible}}" />
+                </StackPanel>
             </Border>
 
             <!-- Diagnostic bundle -->

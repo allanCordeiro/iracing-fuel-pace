@@ -26,6 +26,7 @@ namespace FuelPace.App.Ipc;
 [JsonDerivedType(typeof(SettingsApplied), "settingsApplied")]
 [JsonDerivedType(typeof(BundleCreated), "bundleCreated")]
 [JsonDerivedType(typeof(Notice), "notice")]
+[JsonDerivedType(typeof(FullscreenChanged), "fullscreenChanged")]
 [JsonDerivedType(typeof(Error), "error")]
 public abstract record IpcMessage;
 
@@ -54,6 +55,8 @@ public sealed record Profile(string Key, string Json) : IpcMessage;
 public sealed record SettingsApplied(AppSettings Settings) : IpcMessage;
 public sealed record BundleCreated(string Path) : IpcMessage;
 public sealed record Notice(string Level, string Text) : IpcMessage;
+/// <summary>The sim went into or out of exclusive fullscreen (the Settings window's banner follows it).</summary>
+public sealed record FullscreenChanged(bool On) : IpcMessage;
 public sealed record Error(string Text) : IpcMessage;
 
 /// <summary>Wire form of a captured lap; reasons as <see cref="LapReasonCodes"/>. NaN doubles travel as null.</summary>
@@ -69,9 +72,12 @@ public sealed record ProfileSummary(string Key, string CarName, string TrackName
 /// <param name="TankCapacityL">Of the current car (null without a session).</param>
 /// <param name="CaptureId">Id of the capture that last finished in this session, the one the lap table can edit; null while a capture runs.</param>
 /// <param name="MonitorDeviceNames">GDI device name of each entry of <paramref name="MonitorLabels"/>, same order (what <c>OverlaySettings.MonitorDeviceName</c> holds).</param>
+/// <param name="DebugForcedBy">"marker" (the <c>FuelPace.debug</c> file) or "commandLine" (<c>--debug</c>) when debug mode is on
+/// whatever the Settings toggle says; null when the toggle decides.</param>
 public sealed record AgentSnapshot(
     string Version, bool SimConnected, string? ProfileKey, string? CarName, string? TrackName, string? SessionType,
     bool CaptureActive, IReadOnlyList<CapturedLapDto> CaptureLaps, int Valid, int Total, AppSettings Settings,
     bool DebugMode, string OverlayBackend, bool FullscreenExclusive,
     IReadOnlyList<string> HotkeyFailures, IReadOnlyList<string> MonitorLabels,
-    double? TankCapacityL = null, string? CaptureId = null, IReadOnlyList<string>? MonitorDeviceNames = null);
+    double? TankCapacityL = null, string? CaptureId = null, IReadOnlyList<string>? MonitorDeviceNames = null,
+    string? DebugForcedBy = null);

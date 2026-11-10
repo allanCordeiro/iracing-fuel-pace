@@ -331,7 +331,7 @@ public sealed class IpcTests
             new ProfileCommand("a__b", "deleteCapture", "cap1", null, null), new CreateBundle(true), new SetDebugMode(true), new ShowSettingsRequest(),
             new Snapshot(Snap()), new CaptureLapAdded(lap, 1, 2), new CaptureFinished("a__b", "cap1"),
             new ProfileList([new ProfileSummary("a__b", "Car", "Track", 3, 40, "Alta"), new ProfileSummary("c__d", "Car2", "Track2", 0, 0, null)]),
-            new Profile("a__b", "{\"x\":1}"), new SettingsApplied(new AppSettings()), new BundleCreated("C:\\x.zip"), new Notice("warn", "t"), new Error("e"),
+            new Profile("a__b", "{\"x\":1}"), new SettingsApplied(new AppSettings()), new BundleCreated("C:\\x.zip"), new Notice("warn", "t"), new FullscreenChanged(true), new Error("e"),
         ];
         return all.Select(m => new object[] { m });
     }

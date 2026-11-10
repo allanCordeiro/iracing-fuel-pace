@@ -134,8 +134,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             case BundleCreated b:
                 Diagnostics.OnBundleCreated(b);
                 break;
+            case Notice n when n.Text == AgentHost.FullscreenText:
+                ShowFullscreenBanner = true; // the banner says it
+                break;
             case Notice n:
                 if (!Overlay.OnNotice(n)) Message = n.Text;
+                break;
+            case FullscreenChanged f:
+                ShowFullscreenBanner = f.On;
                 break;
             case Error e:
                 Message = e.Text;

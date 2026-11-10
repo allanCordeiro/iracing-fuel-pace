@@ -109,6 +109,25 @@ public class DiagnosticsViewModelTests
         Assert.Equal(new SetDebugMode(true), Assert.Single(r.Conn.Of<SetDebugMode>()));
     }
 
+    [Theory] // the debug zip's marker (or --debug) forces debug: the toggle shows it, says why and cannot be unchecked
+    [InlineData("marker", "Ativado pelo arquivo FuelPace.debug")]
+    [InlineData("commandLine", "Ativado por --debug")]
+    public async Task Forced_debug_mode_disables_the_toggle_and_says_why(string by, string text)
+    {
+        var r = new SettingsRig();
+        await r.ConnectAsync(SettingsRig.Snap() with { DebugMode = true, DebugForcedBy = by });
+        var d = r.Diagnostics;
+        Assert.True(d.DebugMode);
+        Assert.True(d.DebugForced);
+        Assert.False(d.DebugToggleEnabled);
+        Assert.Equal(text, d.DebugForcedText);
+
+        r.Conn.Raise(new Snapshot(SettingsRig.Snap() with { DebugMode = false, DebugForcedBy = null }));
+        Assert.False(d.DebugForced);
+        Assert.True(d.DebugToggleEnabled);
+        Assert.Null(d.DebugForcedText);
+    }
+
     [Fact]
     public async Task Bundle_creation_shows_the_path_and_opens_the_folder()
     {

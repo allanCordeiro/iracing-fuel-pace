@@ -305,7 +305,11 @@ public sealed partial class AgentHost : IDisposable
             _seenConnections = c;
             _fullscreenNotified = false;
         }
-        if (!_simConnected) _fullscreen = false;
+        if (!_simConnected && _fullscreen)
+        {
+            _fullscreen = false;
+            Broadcast(new FullscreenChanged(false));
+        }
     });
 
     /// <summary>Telemetry thread: starts or stops the recorder to match the debug settings.</summary>
@@ -691,6 +695,7 @@ public sealed partial class AgentHost : IDisposable
         if (fs == _fullscreen) return;
         _fullscreen = fs;
         _log.Emit(fs ? DiagLevel.Warn : DiagLevel.Info, AppDiagEvents.FullscreenExclusive, SessionTime, fs ? 1 : 0);
+        Broadcast(new FullscreenChanged(fs)); // an open Settings window's banner, at every change
         if (!fs || _fullscreenNotified) return;
         _fullscreenNotified = true;
         Broadcast(new Notice("warn", FullscreenText));

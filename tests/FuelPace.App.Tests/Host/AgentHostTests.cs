@@ -560,6 +560,24 @@ public sealed class AgentHostTests
         rig.Ui.Drain();
         Assert.Single(rig.Tray.Notifications);
         Assert.Equal([1, 0, 1], rig.Events("FullscreenExclusive").Select(e => Int(e, "detected")));
+        // every change reaches an open Settings window (its banner), not only the first notice
+        await probe.WaitFor<FullscreenChanged>(m => m.On, skip: 1);
+        Assert.Equal([true, false, true], probe.All<FullscreenChanged>().Select(m => m.On));
+    }
+
+    [Theory] // the Settings toggle cannot turn off a debug mode the marker or --debug forces
+    [InlineData(false, true, "marker")]
+    [InlineData(true, false, "commandLine")]
+    [InlineData(false, false, null)]
+    public async Task Snapshot_says_what_forces_debug_mode(bool commandLine, bool marker, string? by)
+    {
+        using var rig = new HostRig();
+        rig.Options = rig.Options with { DebugFromCommandLine = commandLine, DebugMarker = marker };
+        rig.Start();
+        var probe = await rig.ConnectAsync();
+        var snap = await probe.SendAndSync(new GetSnapshot());
+        Assert.Equal(by, snap.DebugForcedBy);
+        Assert.Equal(by is not null, snap.DebugMode);
     }
 
     [Fact] // Review Focus 4 (host side)

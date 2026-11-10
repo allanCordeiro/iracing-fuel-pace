@@ -146,7 +146,8 @@ public sealed partial class AgentHost
             info is null ? null : TrackLabel(info.TrackDisplayName, info.TrackConfigName),
             info?.FindSession(Volatile.Read(ref _sessionNum))?.Type, _pipeline.CaptureActive, laps, valid, laps.Count,
             _settings, _debugMode, _surface.BackendName, _fullscreen, _hotkeyFailures, labels,
-            info?.TankCapacityL, _pipeline.CaptureActive ? null : Volatile.Read(ref _lastCaptureId), devices);
+            info?.TankCapacityL, _pipeline.CaptureActive ? null : Volatile.Read(ref _lastCaptureId), devices,
+            _o.DebugMarker ? "marker" : _o.DebugFromCommandLine ? "commandLine" : null);
     }
 
     private static string TrackLabel(string display, string config) =>
