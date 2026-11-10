@@ -11,7 +11,14 @@ namespace FuelPace.Replay;
 /// <summary>Replays an .ibt file through the Core pipeline and prints what the overlay would have shown.</summary>
 public static class ReplayCli
 {
-    private const string Usage = "usage: FuelPace.Replay <file.ibt> [--speed max|1|10] [--capture] [--profiles <dir>]";
+    private const string Usage =
+        "usage: FuelPace.Replay <file.ibt> [--speed max|1|10] [--capture] [--profiles <dir>]\n" +
+        "  --profiles <dir>  profile root (JSON files in <dir>/profiles); default: the app's own (%APPDATA%\\FuelPace), read only\n" +
+        "  --capture         records the replay into a profile; without --profiles it goes to a new temporary root\n" +
+        "                    (printed), never to the app's real profiles";
+
+    /// <summary>Start of the line naming the temporary root used by <c>--capture</c> without <c>--profiles</c>.</summary>
+    public const string TempProfilesPrefix = "profiles (temporary): ";
 
     public static int Run(string[] args, TextWriter output)
     {
@@ -28,6 +35,12 @@ public static class ReplayCli
         }
 
         // --profiles is the root directory; the JSON files go in its "profiles" subfolder (same layout as %APPDATA%\FuelPace).
+        // A capture never writes into the real profiles by default: replaying a file twice would duplicate its laps there.
+        if (capture && profilesDir is null)
+        {
+            profilesDir = Path.Combine(Path.GetTempPath(), "fuelpace-replay-" + Guid.NewGuid().ToString("N"));
+            output.WriteLine(TempProfilesPrefix + profilesDir);
+        }
         var store = new ProfileStore(profilesDir ?? ProfileStore.DefaultRoot);
 
         using var io = new BackgroundWorkQueue("replay io");

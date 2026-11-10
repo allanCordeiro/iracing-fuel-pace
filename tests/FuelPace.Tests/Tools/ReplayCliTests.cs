@@ -1,3 +1,4 @@
+using FuelPace.Core.Storage;
 using FuelPace.Replay;
 
 namespace FuelPace.Tests.Tools;
@@ -23,6 +24,30 @@ public class ReplayCliTests
             Assert.NotEmpty(Directory.GetFiles(Path.Combine(profiles, "profiles"), "*.json"));
         }
         finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void Capture_without_profiles_writes_to_a_temporary_root_and_prints_it()
+    {
+        var path = Fixtures.TempPath(".ibt");
+        string? root = null;
+        try
+        {
+            SyntheticRace.WriteIbt(path, 5, withCarIdx: false);
+            var sw = new StringWriter();
+            Assert.Equal(0, ReplayCli.Run([path, "--capture"], sw));
+            var line = sw.ToString().Split('\n').Select(l => l.TrimEnd('\r'))
+                .Single(l => l.StartsWith(ReplayCli.TempProfilesPrefix, StringComparison.Ordinal));
+            root = line[ReplayCli.TempProfilesPrefix.Length..];
+            Assert.StartsWith(Path.GetFullPath(Path.GetTempPath()), Path.GetFullPath(root));
+            Assert.NotEqual(Path.GetFullPath(ProfileStore.DefaultRoot), Path.GetFullPath(root));
+            Assert.NotEmpty(Directory.GetFiles(Path.Combine(root, "profiles"), "*.json"));
+        }
+        finally
+        {
+            File.Delete(path);
+            if (root is not null && Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]
