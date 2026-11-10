@@ -1,6 +1,8 @@
 bin/
 obj/
 *.ibt
+# Small trimmed regression cuts (< 5 MB, YAML checked/anonymized; docs/feedback-loop.md) do go into git.
+!tests/fixtures/regression/*.ibt
 BenchmarkDotNet.Artifacts/
 .vs/
 *.user
