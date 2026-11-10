@@ -10,6 +10,7 @@
       "tests\\FuelPace.App.Tests\\FuelPace.App.Tests.csproj",
       "tests\\FuelPace.Tests\\FuelPace.Tests.csproj",
       "tools\\FuelPace.FakeSim\\FuelPace.FakeSim.csproj",
+      "tools\\FuelPace.Preview\\FuelPace.Preview.csproj",
       "tools\\FuelPace.Replay\\FuelPace.Replay.csproj"
     ]
   }
