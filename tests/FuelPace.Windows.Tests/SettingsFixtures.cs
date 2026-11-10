@@ -36,6 +36,31 @@ internal sealed class NeverScheduler : IDelayScheduler
     public IDisposable Schedule(TimeSpan delay, Action action) => new Nothing();
 }
 
+/// <summary>Timers that fire when the test says so.</summary>
+internal sealed class ManualScheduler : IDelayScheduler
+{
+    sealed class Entry(Action run) : IDisposable
+    {
+        public readonly Action Run = run;
+        public bool Live = true;
+        public void Dispose() => Live = false;
+    }
+
+    readonly List<Entry> _entries = [];
+
+    public IDisposable Schedule(TimeSpan delay, Action action)
+    {
+        var e = new Entry(action);
+        _entries.Add(e);
+        return e;
+    }
+
+    public void FireAll()
+    {
+        foreach (var e in _entries.Where(e => e.Live).ToList()) { e.Live = false; e.Run(); }
+    }
+}
+
 internal sealed class NoShell : IShellServices
 {
     public string LogsFolder => @"C:\logs";

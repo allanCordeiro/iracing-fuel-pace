@@ -21,7 +21,8 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        _instance = SettingsInstance.TryAcquire();
+        // Queued on the dispatcher, so a request that arrives before the window exists is served once it does.
+        _instance = SettingsInstance.TryAcquire(() => Dispatcher.BeginInvoke(() => (MainWindow as MainWindow)?.BringToFront()));
         if (_instance is null)
         {
             Shutdown(0); // the open window was asked to come forward
@@ -34,7 +35,6 @@ public partial class App : Application
             new WpfTextMeasurer(EmbeddedFonts.Shared));
         var window = new MainWindow { DataContext = _shell };
         MainWindow = window;
-        _instance.ShowRequested += () => Dispatcher.BeginInvoke(window.BringToFront);
         window.Show();
         _ = _shell.ConnectAsync();
     }
@@ -42,9 +42,14 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _shell?.Dispose();
-        // Bounded: the pipe's read loop ends at once on dispose; nothing may keep the process alive after the window closed.
-        _client?.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(2));
         _instance?.Dispose();
+        // The pipe closes on a pool thread; the UI thread only gives it a moment (the process ends right after, and Windows
+        // closes the handle anyway), so nothing keeps the process alive once the window has closed (PERF-07).
+        if (_client is { } client)
+        {
+            var closing = Task.Run(async () => await client.DisposeAsync().ConfigureAwait(false));
+            closing.Wait(TimeSpan.FromMilliseconds(300));
+        }
         base.OnExit(e);
     }
 }

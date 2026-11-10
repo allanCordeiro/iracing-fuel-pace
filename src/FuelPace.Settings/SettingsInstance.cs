@@ -5,7 +5,8 @@ namespace FuelPace.Settings;
 /// <summary>
 /// One Settings window per user session: the named mutex <c>Local\FuelPace.Settings</c> (only its existence matters) and the
 /// event <c>Local\FuelPace.Settings.Show</c>. A second launch sets the event, lets the first instance take the foreground and
-/// exits; the first one raises <see cref="ShowRequested"/> (on a background thread) and brings its window to the front.
+/// exits; the first one runs its show callback (on a background thread) and brings its window to the front. The callback is
+/// given before the listener starts, so a request that arrives during startup is not lost.
 /// </summary>
 public sealed partial class SettingsInstance : IDisposable
 {
@@ -16,27 +17,27 @@ public sealed partial class SettingsInstance : IDisposable
     readonly EventWaitHandle _show;
     readonly ManualResetEvent _stop = new(false);
     readonly Thread _listener;
+    readonly Action _onShow;
 
-    SettingsInstance(Mutex mutex, EventWaitHandle show)
+    SettingsInstance(Mutex mutex, EventWaitHandle show, Action onShow)
     {
         _mutex = mutex;
         _show = show;
+        _onShow = onShow;
         _listener = new Thread(Listen) { IsBackground = true, Name = "settings-activation" };
         _listener.Start();
     }
 
-    /// <summary>Raised on a background thread when another launch asked for the window.</summary>
-    public event Action? ShowRequested;
-
-    /// <summary>The instance guard, or null when another Settings window is already open (it has been asked to come forward).</summary>
-    public static SettingsInstance? TryAcquire()
+    /// <summary>The instance guard, or null when another Settings window is already open (it has been asked to come forward).
+    /// <paramref name="onShow"/> runs on a background thread whenever another launch asks for the window.</summary>
+    public static SettingsInstance? TryAcquire(Action onShow)
     {
         Mutex m;
         bool createdNew;
         try { m = new Mutex(initiallyOwned: false, MutexName, out createdNew); }
         catch (UnauthorizedAccessException) { createdNew = false; m = null!; }
         if (createdNew)
-            return new SettingsInstance(m, new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName));
+            return new SettingsInstance(m, new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName), onShow);
         m?.Dispose();
         SignalFirst();
         return null;
@@ -63,7 +64,7 @@ public sealed partial class SettingsInstance : IDisposable
     void Listen()
     {
         var handles = new WaitHandle[] { _show, _stop };
-        while (WaitHandle.WaitAny(handles) == 0) ShowRequested?.Invoke();
+        while (WaitHandle.WaitAny(handles) == 0) _onShow();
     }
 
     public void Dispose()

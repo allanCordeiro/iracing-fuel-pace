@@ -57,6 +57,7 @@
     <local:SectionVisibilityConverter x:Key="SectionVisible" />
     <local:NotEmptyVisibilityConverter x:Key="NotEmptyVisible" />
     <local:NotConverter x:Key="Not" />
+    <local:NumberInputConverter x:Key="Number" />
 
     <!-- Keyboard focus: a 2 px ring in the link colour around the control -->
     <Style x:Key="FocusRing">
@@ -334,7 +335,8 @@
         <Setter Property="Padding" Value="3,2" />
         <Setter Property="Margin" Value="-6,-3,0,-3" /><!-- the text starts where the mock's does -->
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderBrush" Value="Transparent" />
+        <!-- a faint frame at rest says "editable"; hover and focus strengthen it -->
+        <Setter Property="BorderBrush" Value="{StaticResource OuterBorder}" />
     </Style>
 
     <!-- CheckBox and RadioButton: 18 px, white when off, accent #2F80ED when on (as the mocks) -->

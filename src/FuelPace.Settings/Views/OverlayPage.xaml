@@ -73,11 +73,11 @@
                     </StackPanel>
                     <StackPanel Grid.Column="2">
                         <Label Style="{StaticResource FieldLabel}" Content="Posição X" Target="{Binding ElementName=PosX}" />
-                        <TextBox x:Name="PosX" Style="{StaticResource NumberBox}" Text="{Binding OffsetX, Mode=TwoWay}" />
+                        <TextBox x:Name="PosX" Style="{StaticResource NumberBox}" Text="{Binding OffsetX, Mode=TwoWay, Converter={StaticResource Number}}" />
                     </StackPanel>
                     <StackPanel Grid.Column="4">
                         <Label Style="{StaticResource FieldLabel}" Content="Posição Y" Target="{Binding ElementName=PosY}" />
-                        <TextBox x:Name="PosY" Style="{StaticResource NumberBox}" Text="{Binding OffsetY, Mode=TwoWay}" />
+                        <TextBox x:Name="PosY" Style="{StaticResource NumberBox}" Text="{Binding OffsetY, Mode=TwoWay, Converter={StaticResource Number}}" />
                     </StackPanel>
                 </Grid>
 
@@ -107,6 +107,7 @@
                 <Border Margin="0,22,0,0" Style="{StaticResource Section}">
                     <StackPanel>
                         <local:SpacedText Style="{StaticResource H2}" Text="CÁLCULO" AutomationProperties.HeadingLevel="Level2" />
+                        <!-- Labels on one row (bottom-aligned, they may wrap), the inputs on the next: all four on one line -->
                         <Grid Margin="0,14,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -117,22 +118,22 @@
                                 <ColumnDefinition Width="12" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <Label Style="{StaticResource FieldLabel}" Target="{Binding ElementName=Reserve}"><TextBlock Text="Reserva (L)" TextWrapping="Wrap" /></Label>
-                                <TextBox x:Name="Reserve" Style="{StaticResource NumberBox}" AutomationProperties.Name="Reserva (L)" Text="{Binding ReserveL, Mode=TwoWay}" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="2">
-                                <Label Style="{StaticResource FieldLabel}" Target="{Binding ElementName=Mean}"><TextBlock Text="Média móvel (voltas)" TextWrapping="Wrap" /></Label>
-                                <TextBox x:Name="Mean" Style="{StaticResource NumberBox}" AutomationProperties.Name="Média móvel (voltas)" Text="{Binding MeanWindow, Mode=TwoWay}" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="4">
-                                <Label Style="{StaticResource FieldLabel}" Target="{Binding ElementName=Saving}"><TextBlock Text="Economia máxima (%)" TextWrapping="Wrap" /></Label>
-                                <TextBox x:Name="Saving" Style="{StaticResource NumberBox}" AutomationProperties.Name="Economia máxima (%)" Text="{Binding MaxSavingPercent, Mode=TwoWay}" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="6">
-                                <Label Style="{StaticResource FieldLabel}" Target="{Binding ElementName=Extra}"><TextBlock Text="Voltas extras" TextWrapping="Wrap" /></Label>
-                                <TextBox x:Name="Extra" Style="{StaticResource NumberBox}" AutomationProperties.Name="Voltas extras" Text="{Binding ExtraLaps, Mode=TwoWay}" />
-                            </StackPanel>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Label Grid.Column="0" Style="{StaticResource FieldLabel}" VerticalAlignment="Bottom" Target="{Binding ElementName=Reserve}"><TextBlock Text="Reserva (L)" TextWrapping="Wrap" /></Label>
+                            <TextBox x:Name="Reserve" Grid.Row="1" Grid.Column="0" Style="{StaticResource NumberBox}" AutomationProperties.Name="Reserva (L)"
+                                     Text="{Binding ReserveL, Mode=TwoWay, Converter={StaticResource Number}}" />
+                            <Label Grid.Column="2" Style="{StaticResource FieldLabel}" VerticalAlignment="Bottom" Target="{Binding ElementName=Mean}"><TextBlock Text="Média móvel (voltas)" TextWrapping="Wrap" /></Label>
+                            <TextBox x:Name="Mean" Grid.Row="1" Grid.Column="2" Style="{StaticResource NumberBox}" AutomationProperties.Name="Média móvel (voltas)"
+                                     Text="{Binding MeanWindow, Mode=TwoWay, Converter={StaticResource Number}}" />
+                            <Label Grid.Column="4" Style="{StaticResource FieldLabel}" VerticalAlignment="Bottom" Target="{Binding ElementName=Saving}"><TextBlock Text="Economia máxima (%)" TextWrapping="Wrap" /></Label>
+                            <TextBox x:Name="Saving" Grid.Row="1" Grid.Column="4" Style="{StaticResource NumberBox}" AutomationProperties.Name="Economia máxima (%)"
+                                     Text="{Binding MaxSavingPercent, Mode=TwoWay, Converter={StaticResource Number}}" />
+                            <Label Grid.Column="6" Style="{StaticResource FieldLabel}" VerticalAlignment="Bottom" Target="{Binding ElementName=Extra}"><TextBlock Text="Voltas extras" TextWrapping="Wrap" /></Label>
+                            <TextBox x:Name="Extra" Grid.Row="1" Grid.Column="6" Style="{StaticResource NumberBox}" AutomationProperties.Name="Voltas extras"
+                                     Text="{Binding ExtraLaps, Mode=TwoWay, Converter={StaticResource Number}}" />
                         </Grid>
                         <TextBlock Margin="0,14,0,0" FontSize="13" Foreground="{StaticResource TextLabel}" Text="Voltas restantes" />
                         <RadioButton Margin="0,8,0,0" GroupName="LapsMode" Content="{Binding LapsAutoText}" IsChecked="{Binding LapsAuto, Mode=TwoWay}" />
@@ -140,7 +141,7 @@
                             <RadioButton GroupName="LapsMode" Content="Manual · stint de" AutomationProperties.Name="{Binding LapsStintText}"
                                          IsChecked="{Binding LapsAuto, Mode=TwoWay, Converter={StaticResource Not}}" VerticalAlignment="Center" />
                             <TextBox x:Name="Stint" Style="{StaticResource NumberBox}" Width="56" Height="30" Margin="8,0,8,0" Padding="6,0"
-                                     Text="{Binding StintLaps, Mode=TwoWay}" IsEnabled="{Binding LapsAuto, Converter={StaticResource Not}}"
+                                     Text="{Binding StintLaps, Mode=TwoWay, Converter={StaticResource Number}}" IsEnabled="{Binding LapsAuto, Converter={StaticResource Not}}"
                                      AutomationProperties.Name="Voltas do stint" />
                             <TextBlock Text="voltas" VerticalAlignment="Center">
                                 <TextBlock.Style>
@@ -162,6 +163,7 @@
                 <Border Margin="0,22,0,0" Style="{StaticResource Section}">
                     <StackPanel>
                         <local:SpacedText Style="{StaticResource H2}" Text="ATALHOS" AutomationProperties.HeadingLevel="Level2" />
+                        <TextBlock Margin="0,6,0,0" Style="{StaticResource SmallHelp}" Text="clique e digite o atalho, ex.: Ctrl+Shift+F" />
                         <!-- Two columns 28 px apart, as the mock's flex row -->
                         <Grid Margin="0,10,0,0">
                             <Grid.ColumnDefinitions>
