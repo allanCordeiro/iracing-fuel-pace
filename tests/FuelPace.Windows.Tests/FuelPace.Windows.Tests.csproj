@@ -6,6 +6,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- SettingsScreenshotTests and SettingsRenderingTests build and render the Settings views -->
     <UseWPF>true</UseWPF>
+    <!-- WPF's font cache looks up culture data (MS.Internal.FontCache.MajorLanguages) and fails in invariant mode; every
+         number the views show is formatted with InvariantCulture by the view models, and bindings parse with xml:lang en-US. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
   <ItemGroup>
     <Using Include="Xunit" />

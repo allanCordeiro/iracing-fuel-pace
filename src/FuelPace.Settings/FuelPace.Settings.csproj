@@ -8,6 +8,9 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>..\..\assets\icon.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- WPF's font cache looks up culture data (MS.Internal.FontCache.MajorLanguages) and fails in invariant mode; every
+         number the views show is formatted with InvariantCulture by the view models, and bindings parse with xml:lang en-US. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
   <ItemGroup>
     <!-- UseWPF drops System.IO from the implicit usings (System.Windows.Shapes.Path); nothing here uses Shapes -->

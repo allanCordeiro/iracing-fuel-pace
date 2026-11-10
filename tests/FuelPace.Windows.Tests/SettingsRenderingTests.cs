@@ -72,8 +72,10 @@ public sealed class SettingsRenderingTests
             {
                 float a = agent.Width(r.Text, r.Role, r.Weight, r.Size, r.Spacing);
                 float m = mine.Width(r.Text, r.Role, r.Weight, r.Size, r.Spacing);
-                // DirectWrite also applies kerning, which the glyph runs here do not: a fraction of a pixel on these runs.
-                Assert.True(Math.Abs(a - m) <= 0.75f, $"'{r.Text}' {r.Role} {r.Weight}: Agent {a}, Settings {m}");
+                // DirectWrite also applies kerning, which the glyph runs here do not: about a pixel at most on these runs
+                // ("NO ALVO": the L-V pair). Monospaced runs have no kerning and match exactly.
+                float tolerance = r.Role is FontRole.Value or FontRole.ValueBold ? 0.05f : 1.25f;
+                Assert.True(Math.Abs(a - m) <= tolerance, $"'{r.Text}' {r.Role} {r.Weight}: Agent {a}, Settings {m}");
             }
             foreach (var role in new[] { FontRole.Label, FontRole.Value })
                 Assert.Equal(agent.Ascent(role, 20), mine.Ascent(role, 20), 1);
