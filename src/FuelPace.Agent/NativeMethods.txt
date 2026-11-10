@@ -81,3 +81,26 @@ SelectObject
 DeleteObject
 AC_SRC_OVER
 AC_SRC_ALPHA
+// Hotkeys
+RegisterHotKey
+UnregisterHotKey
+WM_HOTKEY
+// Tray
+Shell_NotifyIcon
+NOTIFYICONDATAW
+CreatePopupMenu
+AppendMenu
+TrackPopupMenuEx
+DestroyMenu
+SetForegroundWindow
+RegisterWindowMessage
+CreateIconFromResourceEx
+DestroyIcon
+LoadIcon
+IDI_APPLICATION
+GetSystemMetrics
+WM_NULL
+WM_CONTEXTMENU
+WM_LBUTTONDBLCLK
+TRACK_POPUP_MENU_FLAGS
+NOTIFYICON_VERSION_4

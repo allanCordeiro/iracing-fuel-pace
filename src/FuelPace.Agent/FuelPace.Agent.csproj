@@ -8,6 +8,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsPackable>false</IsPackable>
     <RootNamespace>FuelPace.Agent</RootNamespace>
+    <!-- NOTIFYICONDATAW is only generated for a specific architecture; the Agent ships for x64 (the CI runner and every iRacing PC). -->
+    <CsWin32PlatformTarget>x64</CsWin32PlatformTarget>
+    <ApplicationIcon>..\..\assets\icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\FuelPace.Core\FuelPace.Core.csproj" />
@@ -16,6 +19,9 @@
   <ItemGroup>
     <!-- Decision 8: Inter and JetBrains Mono (OFL), loaded by DirectWrite from memory; nothing is installed. -->
     <EmbeddedResource Include="..\..\assets\fonts\*.ttf" LogicalName="FuelPace.Fonts.%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\assets\icon.ico" LogicalName="FuelPace.icon.ico" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.369">

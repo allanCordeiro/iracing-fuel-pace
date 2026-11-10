@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime;
 using FuelPace.Agent.Live;
 using FuelPace.Agent.Overlay;
+using FuelPace.Agent.Tray;
 using FuelPace.Agent.Win32;
 using FuelPace.App;
 using FuelPace.App.Diagnostics;
@@ -77,7 +78,9 @@ internal static class Program
         var backend = new SettingsStore(options.AppDataRoot).Load(retryLocked: false).Overlay.RenderBackend;
         using var overlay = new OverlayWindow(backend, fonts, HostLog);
         overlay.DpiChanged += monitors.Recheck; // the overlay's own monitor (the message window hears only the primary)
-        var host = hostRef = new AgentHost(options, sources, overlay, window, new NullHotkeys(), new NullTrayIcon(), monitors,
+        var hotkeys = new Hotkeys(window, HostLog);
+        using var tray = new TrayIcon(window, HostLog);
+        var host = hostRef = new AgentHost(options, sources, overlay, window, hotkeys, tray, monitors,
             new SystemServices(), new DWriteTextMeasurer(fonts), TimeProvider.System);
         window.SessionEnding += () =>
         {

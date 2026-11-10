@@ -46,11 +46,13 @@ public sealed unsafe class MessageWindow : IUiDispatcher, IDisposable
     private readonly HWND _hwnd;
     private readonly HINSTANCE _instance;
     private ExceptionDispatchInfo? _failure;
+    private readonly uint _threadId;
     private int _signaled, _disposed;
 
     public MessageWindow()
     {
         _proc = WndProc;
+        _threadId = PInvoke.GetCurrentThreadId();
         _className = $"FuelPace.Agent.MessageWindow.{Environment.ProcessId}.{Interlocked.Increment(ref s_count)}";
         HINSTANCE instance = _instance = PInvoke.GetModuleHandle((PCWSTR)null);
         fixed (char* name = _className)
@@ -98,6 +100,30 @@ public sealed unsafe class MessageWindow : IUiDispatcher, IDisposable
         _queue.Enqueue(a);
         if (Interlocked.Exchange(ref _signaled, 1) == 0 && !PInvoke.PostMessage(_hwnd, WM_DISPATCH, default, default))
             Volatile.Write(ref _signaled, 0); // window gone (shutting down): nothing will run; a later post tries again
+    }
+
+    /// <summary>True on the window's thread (the only one that may call <c>RegisterHotKey</c> or touch the tray icon).</summary>
+    public bool IsUiThread => PInvoke.GetCurrentThreadId() == _threadId;
+
+    /// <summary>
+    /// Runs <paramref name="a"/> on the UI thread and waits for it: at once when already there, else posted and awaited for at most
+    /// <paramref name="timeout"/>. False when it did not finish in time (UI thread blocked or loop ended; a posted action may still
+    /// run later). An exception of the action is rethrown to the caller.
+    /// </summary>
+    public bool Invoke(Action a, TimeSpan timeout)
+    {
+        if (IsUiThread) { a(); return true; }
+        using var done = new ManualResetEventSlim();
+        Exception? error = null;
+        Post(() =>
+        {
+            try { a(); }
+            catch (Exception e) { error = e; }
+            finally { done.Set(); }
+        });
+        if (!done.Wait(timeout)) return false;
+        if (error is not null) ExceptionDispatchInfo.Capture(error).Throw();
+        return true;
     }
 
     /// <summary>Ends <see cref="Run"/> (any thread).</summary>
