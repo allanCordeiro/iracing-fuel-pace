@@ -185,8 +185,12 @@ try {
         $start = [Diagnostics.Stopwatch]::StartNew()
         while ($start.Elapsed.TotalSeconds -lt 30) { Start-Sleep -Milliseconds 500 }
         $s30 = Sample $agent
+        $cpu30 = $agent.TotalProcessorTime.TotalMilliseconds; $wall30 = $start.Elapsed.TotalMilliseconds
         while ($start.Elapsed.TotalSeconds -lt ($PerfSeconds - 3)) { Start-Sleep -Milliseconds 500 }
         $sEnd = Sample $agent
+        $agent.Refresh()
+        # PERF-02's unit: percent of ONE core, between the two samples (steady state, telemetry flowing, overlay drawn).
+        $cpuPct = [math]::Round(100 * ($agent.TotalProcessorTime.TotalMilliseconds - $cpu30) / ($start.Elapsed.TotalMilliseconds - $wall30), 2)
         $null = Wait-Exit $sim 60 'FakeSim (PERF-05)'
         $code = Wait-Exit $agent 90 'Agent (PERF-05)'
         if ($code -ne 0) { throw "Agent (PERF-05, $variant) exited with $code" }
@@ -197,19 +201,20 @@ try {
         $mem = Events $log 'MemoryMinute' | Select-Object -Last 1
         $rows.Add([pscustomobject]@{
             Variant = $variant
+            CpuPctOneCore = $cpuPct
             Ws30MB = $s30.WsMB; WsEndMB = $sEnd.WsMB; PrivateWsMB = $sEnd.PrivateWsMB; PrivateBytesMB = $sEnd.PrivateBytesMB
             PeakWsMB = $sEnd.PeakWsMB
             PerfMinuteWsMB = if ($perf) { [math]::Round($perf.workingSetMB, 1) } else { '-' }
             TickP99Us = if ($perf) { [math]::Round($perf.tickP99Us, 0) } else { '-' }
-            GcHeapMB = if ($mem) { [math]::Round($mem.gcHeapMB, 1) } else { '-' }
-            GcCommittedMB = if ($mem) { [math]::Round($mem.gcCommittedMB, 1) } else { '-' }
+            GcHeapMB = if ($mem -and $null -ne $mem.gcHeapMB) { [math]::Round($mem.gcHeapMB, 1) } else { '-' }
             Assemblies = if ($mem) { $mem.assemblies } else { '-' }
             Visible = if ($vis) { $vis.visible } else { '-' }
             Backend = (($log | Where-Object { $_.ev -eq 'OverlayBackend' } | Select-Object -Last 1).backend)
         })
         Stop-Leftovers
     }
-    $table = $rows | Format-Table -AutoSize | Out-String -Width 400
+    $table = $rows | Format-Table Variant, CpuPctOneCore, WsEndMB, PrivateWsMB, PrivateBytesMB, PeakWsMB, PerfMinuteWsMB, TickP99Us,
+        GcHeapMB, Visible -AutoSize | Out-String -Width 300
     $rows | ConvertTo-Json | Out-File -FilePath (Join-Path $report 'perf05.json') -Encoding utf8
     Say "5. PERF-05 (normal zip, debug off, overlay visible, FakeSim speed 1 with 20 cars, $PerfSeconds s):"
     foreach ($l in ($table.Trim() -split "`r?`n")) { Say ("   " + $l) }

@@ -682,9 +682,11 @@ public sealed partial class AgentHost : IDisposable
         const double Mb = 1024.0 * 1024.0;
         long privateBytes;
         using (var self = System.Diagnostics.Process.GetCurrentProcess()) privateBytes = self.PrivateMemorySize64;
+        // The heap in use now; the committed size is known only as of the last GC (none at all while nothing allocates).
         var gc = GC.GetGCMemoryInfo();
         _log.Emit(DiagLevel.Info, AppDiagEvents.MemoryMinute, SessionTime, AppDomain.CurrentDomain.GetAssemblies().Length,
-            GC.CollectionCount(2), Environment.WorkingSet / Mb, privateBytes / Mb, gc.HeapSizeBytes / Mb, gc.TotalCommittedBytes / Mb);
+            GC.CollectionCount(2), Environment.WorkingSet / Mb, privateBytes / Mb, GC.GetTotalMemory(false) / Mb,
+            gc.Index == 0 ? double.NaN : gc.TotalCommittedBytes / Mb);
     }
 
     /// <summary>Every 5 s with the sim connected (Review Focus 1): a change is logged; going fullscreen notifies once per sim session.</summary>
