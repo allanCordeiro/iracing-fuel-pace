@@ -25,8 +25,15 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
 $csv = Join-Path $dir ("{0}-{1}.csv" -f $Label, (Get-Date -Format 'yyyyMMdd-HHmmss'))
 
 Write-Host "Capturando $ProcessName por $Minutes min -> $csv"
-# Options accepted by PresentMon 1.x and 2.x (single dash).
-& $PresentMon -process_name $ProcessName -timed ($Minutes * 60) -output_file $csv -terminate_after_timed
-if ($LASTEXITCODE -ne 0) { throw "PresentMon exited with code $LASTEXITCODE" }
-if (-not (Test-Path -LiteralPath $csv)) { throw "PresentMon wrote no CSV (iRacing running and on track?)" }
+# PresentMon 2.x uses --options, 1.x uses -options: pick by the exe's version, and retry once with the other style on failure.
+$major = (Get-Item -LiteralPath $PresentMon).VersionInfo.FileMajorPart
+$styles = if ($major -ge 2) { @('--', '-') } else { @('-', '--') }
+$ok = $false
+foreach ($d in $styles) {
+    $pmArgs = @("${d}process_name", $ProcessName, "${d}timed", ($Minutes * 60), "${d}output_file", $csv, "${d}terminate_after_timed")
+    & $PresentMon @pmArgs
+    if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $csv)) { $ok = $true; break }
+    Write-Warning "PresentMon failed with '${d}' options (exit $LASTEXITCODE)."
+}
+if (-not $ok) { throw "PresentMon produced no CSV (iRacing running and on track? running as administrator?)" }
 Write-Host "Pronto: $csv"

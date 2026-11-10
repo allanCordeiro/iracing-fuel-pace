@@ -4,7 +4,7 @@ Este guia vem no zip como `LEIA-ME.md`. Leva uns 15 minutos para o primeiro test
 
 ## 1. Baixar
 
-- No GitHub: aba **Actions**, último run verde da branch `feat/fuelpace`, seção **Artifacts**, baixar `fuelpace-windows` (um zip com dois zips dentro):
+- No GitHub: aba **Actions**, último run verde da branch `feat/fuelpace`, seção **Artifacts**, baixar `fuelpace-windows` (um zip; descompactado, tem a pasta `out/` com os dois zips):
   - `FuelPace-<versão>-win-x64-debug.zip`: **use este para testar** (traz o modo debug ligado e o FakeSim).
   - `FuelPace-<versão>-win-x64.zip`: versão normal, sem debug.
 - A página de **Releases** só passa a ter os zips quando uma versão (tag `v…`) for publicada.
@@ -79,7 +79,7 @@ Marque o que funcionou; anote o que não.
 
 Meta: o app não pode derrubar o desempenho do iRacing (fps médio ≥ 99,5% do fps sem o app, 1% low ≥ 99%, sem mais quadros > 2× o frametime médio).
 
-1. Baixe você mesmo o PresentMon (console) em https://github.com/GameTechDev/PresentMon/releases. O script não baixa nada.
+1. Baixe você mesmo o PresentMon (console) em https://github.com/GameTechDev/PresentMon/releases. O script não baixa nada. Se o exe do iRacing tiver outro nome, use `-ProcessName <nome.exe>`.
 2. Mesmo carro, pista e clima, replay ou test drive, iRacing em 120 fps. Faça **3 rodadas de 5 min sem o app** e **3 com o app** (Agent aberto, overlay visível).
 3. Num PowerShell como administrador, com o iRacing na pista (o script está na pasta do app):
    `.\presentmon.ps1 -PresentMon C:\Caminho\PresentMon.exe -Label sem` e depois `-Label com`. Os CSVs ficam em `%APPDATA%\FuelPace\perf\` e entram no pacote de diagnóstico.

@@ -30,7 +30,7 @@ public class PresentMonCliTests
     [Fact]
     public void Fails_perf01_when_average_drops_and_spikes_appear()
     {
-        // 59.5 fps with a 5% spike every 50 frames vs. a steady 60 fps
+        // ~59.5 fps average (a 60 ms spike every 50 frames, the rest slightly faster) vs. a steady 60 fps
         var withApp = Enumerable.Range(0, 3000).Select(i => i % 50 == 0 ? 60.0 : 1000.0 / 60.0 * 0.99).ToList();
         string a = Csv("MsBetweenPresents", withApp), b = Csv("MsBetweenPresents", Steady(60, 3000));
         try
@@ -71,6 +71,22 @@ public class PresentMonCliTests
             var text = Run(a, b, out _);
             Assert.Contains("9.1", text);
             Assert.Contains("PERF-01: REPROVADO", text);
+        }
+        finally { File.Delete(a); File.Delete(b); }
+    }
+
+    [Fact]
+    public void Compares_spike_rates_not_counts_and_matches_columns_ignoring_case()
+    {
+        // with: 2 spikes in 6000 frames (0.33/1000); without: 1 in 1000 (1/1000) -> rate did not increase
+        var with = Steady(60, 5998).Concat([100.0, 100.0]);
+        var without = Steady(60, 999).Concat([100.0]);
+        string a = Csv("frametime", with), b = Csv("FRAMETIME", without);
+        try
+        {
+            var text = Run(a, b, out int code);
+            Assert.Contains("PERF-01: APROVADO", text);
+            Assert.Equal(0, code);
         }
         finally { File.Delete(a); File.Delete(b); }
     }

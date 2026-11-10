@@ -7,7 +7,7 @@ namespace FuelPace.Replay;
 /// time column (<c>FrameTime</c> of PresentMon 2.x, else <c>MsBetweenPresents</c> of 1.x; milliseconds, decimal point).
 /// Method, per file, over its N frames: average fps = 1000 / mean frame time (frames over total time); 1% low = 1000 / mean of the
 /// slowest ceil(1% of N) frame times (at least one); spikes = frames longer than 2x the mean frame time.
-/// Verdict: average fps with &gt;= 99.5% of without, 1% low with &gt;= 99% of without, spikes with &lt;= spikes without.
+/// Verdict: average fps with &gt;= 99.5% of without, 1% low with &gt;= 99% of without, spikes per 1000 frames with &lt;= without (rates, since the runs may differ in length).
 /// Exit code: 0 approved, 1 rejected, 2 usage or unreadable input.
 /// </summary>
 internal static class PresentMonSummary
@@ -31,15 +31,17 @@ internal static class PresentMonSummary
         Row(w, "sem", without);
 
         double avgRatio = with.AvgFps / without.AvgFps, lowRatio = with.Low1Fps / without.Low1Fps;
-        bool avgOk = avgRatio >= 0.995, lowOk = lowRatio >= 0.99, spikesOk = with.Spikes <= without.Spikes;
+        bool avgOk = avgRatio >= 0.995, lowOk = lowRatio >= 0.99, spikesOk = Rate(with) <= Rate(without);
         w.WriteLine();
         w.WriteLine($"fps médio: {Pct(avgRatio)} do sem o app (mínimo 99,5%) {(avgOk ? "ok" : "FALHOU")}");
         w.WriteLine($"1% low: {Pct(lowRatio)} do sem o app (mínimo 99%) {(lowOk ? "ok" : "FALHOU")}");
-        w.WriteLine($"quadros > 2× o médio: {with.Spikes} com, {without.Spikes} sem (não pode aumentar) {(spikesOk ? "ok" : "FALHOU")}");
+        w.WriteLine($"quadros > 2× o médio: {with.Spikes} com ({Rate(with).ToString("F2", Inv)}/1000), {without.Spikes} sem ({Rate(without).ToString("F2", Inv)}/1000); a taxa por 1000 quadros não pode aumentar {(spikesOk ? "ok" : "FALHOU")}");
         bool pass = avgOk && lowOk && spikesOk;
         w.WriteLine(pass ? "PERF-01: APROVADO" : "PERF-01: REPROVADO");
         return pass ? 0 : 1;
     }
+
+    private static double Rate(Stats s) => s.Spikes * 1000.0 / s.Frames;
 
     private static string Pct(double r) => (r * 100).ToString("F2", Inv) + "%";
 
@@ -57,7 +59,7 @@ internal static class PresentMonSummary
             int col = -1;
             if (header is not null)
                 foreach (var name in Columns)
-                    if ((col = Array.IndexOf(header, name)) >= 0) break;
+                    if ((col = Array.FindIndex(header, h => string.Equals(h, name, StringComparison.OrdinalIgnoreCase))) >= 0) break;
             if (col < 0) { w.WriteLine($"{path}: no FrameTime or MsBetweenPresents column"); return false; }
             string? line;
             while ((line = r.ReadLine()) is not null)
