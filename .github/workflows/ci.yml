@@ -1,21 +1,61 @@
 name: ci
 on:
   push:
+    branches: ['**']
+    tags: ['v*']
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+  linux:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - run: dotnet test -c Release
+      - run: dotnet test FuelPace.Linux.slnf -c Release
       # The benchmark project must keep compiling; it is never run in CI.
       - run: dotnet build bench/FuelPace.Bench -c Release
-      - if: matrix.os == 'windows-latest'
-        run: dotnet publish tools/FuelPace.Replay -c Release -r win-x64 --self-contained false
+
+  windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Compute version
+        shell: pwsh
+        run: |
+          $v = "0.1.0+${{ github.run_number }}.$('${{ github.sha }}'.Substring(0,7))"
+          "FP_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Test (full solution)
+        run: dotnet test FuelPace.sln -c Release "-p:InformationalVersion=$env:FP_VERSION"
+      - name: Package
+        shell: pwsh
+        run: pwsh build/package.ps1 -Version $env:FP_VERSION -OutDir out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fuelpace-windows
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            out/*.zip
+            tests/**/TestResults/**
+            artifacts/**
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zips = Get-ChildItem out -Filter *.zip | ForEach-Object { $_.FullName }
+          gh release create "${{ github.ref_name }}" @zips --generate-notes

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>FuelPace.App</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FuelPace.Core\FuelPace.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="FuelPace.App.Tests" />
+    <InternalsVisibleTo Include="FuelPace.Windows.Tests" />
+  </ItemGroup>
+</Project>

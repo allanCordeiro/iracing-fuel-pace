@@ -1,0 +1,16 @@
+{
+  "solution": {
+    "path": "FuelPace.sln",
+    "projects": [
+      "bench\\FuelPace.Bench\\FuelPace.Bench.csproj",
+      "src\\FuelPace.Agent\\FuelPace.Agent.csproj",
+      "src\\FuelPace.App\\FuelPace.App.csproj",
+      "src\\FuelPace.Core\\FuelPace.Core.csproj",
+      "src\\FuelPace.Settings\\FuelPace.Settings.csproj",
+      "tests\\FuelPace.App.Tests\\FuelPace.App.Tests.csproj",
+      "tests\\FuelPace.Tests\\FuelPace.Tests.csproj",
+      "tools\\FuelPace.FakeSim\\FuelPace.FakeSim.csproj",
+      "tools\\FuelPace.Replay\\FuelPace.Replay.csproj"
+    ]
+  }
+}
