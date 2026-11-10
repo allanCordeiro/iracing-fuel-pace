@@ -4,7 +4,9 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ServerGarbageCollection>false</ServerGarbageCollection>
-    <TieredPGO>true</TieredPGO>
+    <!-- PERF-05 (docs/perf/agent-memory.md): the shipped code is ReadyToRun; without tiering it is never re-jitted, which
+         saves ~4.5 MB of working set (no tier-1 copies, call counting or PGO data) at the same tick time and CPU on CI. -->
+    <TieredCompilation>false</TieredCompilation>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsPackable>false</IsPackable>
     <RootNamespace>FuelPace.Agent</RootNamespace>
