@@ -43,6 +43,18 @@ public sealed class StintTracker
         Recompute();
     }
 
+    /// <summary>Forgets the stint and its laps (new session or new connection, I-5); the next <see cref="Update"/> starts a
+    /// new stint, like the first frame did.</summary>
+    public void Reset()
+    {
+        _started = _prevOnPit = _followRise = _refuelStartedThisStop = false;
+        _prevFuel = _minFuel = 0;
+        _stintStart = 0;
+        _head = _count = 0;
+        LapsDone = 0;
+        MeanFuelL = MeanLapS = double.NaN;
+    }
+
     private static void CheckWindow(int window)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(window, 1);

@@ -46,6 +46,8 @@ public sealed class TelemetryPipeline : ILapSink
     private SessionContext? _appliedCtx;
     private SessionContext? _captureCtx;
     private int _captureSessionNum;
+    private int _sessionNum;
+    private bool _hasSessionNum;
     private long _ticks;
     private int _strategyRuns;
     private double _lastSessionTime;
@@ -90,6 +92,9 @@ public sealed class TelemetryPipeline : ILapSink
 
     /// <summary>Track name for the no-baseline insight (decision 3); empty before the first session context.</summary>
     public string TrackShort => Volatile.Read(ref _ctx)?.TrackShort ?? "";
+
+    /// <summary>The race leader's pace as the strategy sees it. Telemetry thread only (diagnostics and tests).</summary>
+    public LeaderPace Leader => _leader.Current;
 
     internal TimeProvider Clock => _clock;
 
@@ -162,6 +167,13 @@ public sealed class TelemetryPipeline : ILapSink
         if (_capture.IsActive && ctx is not null
             && ((!ReferenceEquals(ctx, _captureCtx) && ctx.ProfileKey != _captureCtx!.ProfileKey) || f.SessionNum != _captureSessionNum))
             StopCapture(auto: true, f.SessionTime);
+        // I-5: practice or qualifying laps must not reach the race's stint mean or leader pace.
+        if (!_hasSessionNum || f.SessionNum != _sessionNum)
+        {
+            if (_hasSessionNum) ResetHistory();
+            _sessionNum = f.SessionNum;
+            _hasSessionNum = true;
+        }
 
         _detector.Update(in f);
         _stint.Update(in f);
@@ -171,7 +183,8 @@ public sealed class TelemetryPipeline : ILapSink
         if (_ticks++ % StrategyEvery == 0) RunStrategy(ctx, layout, in f);
     }
 
-    /// <summary>End of data: an active capture is stopped (and saved), then the detector emits the lap in progress.</summary>
+    /// <summary>End of data (end of file or lost connection): an active capture is stopped (and saved), the detector emits
+    /// the lap in progress, and the stint, leader history and last lap are cleared so a new connection starts fresh (I-5).</summary>
     public void Flush()
     {
         if (_capture.IsActive)
@@ -180,6 +193,17 @@ public sealed class TelemetryPipeline : ILapSink
             StopCapture(auto: !manual, _lastSessionTime);
         }
         _detector.Flush();
+        ResetHistory();
+        _hasSessionNum = false;
+    }
+
+    /// <summary>Forgets what belongs to the previous session or connection: stint, per-car leader history, last lap.</summary>
+    private void ResetHistory()
+    {
+        _stint.Reset();
+        _leader.Reset();
+        _lastLapL = _lastLapTimeS = double.NaN;
+        _lastLapInvalid = false;
     }
 
     public void OnLapCompleted(in CompletedLap lap)

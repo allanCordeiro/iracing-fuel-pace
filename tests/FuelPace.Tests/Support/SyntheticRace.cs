@@ -45,7 +45,8 @@ public static class SyntheticRace
 
     private static double CarLapTimeS(int car) => 19.0 + 0.2 * (car * 7 % Cars);
 
-    private static IEnumerable<TelemetryFrame> Frames(int laps, bool withCarIdx)
+    /// <summary>The frames <see cref="WriteIbt"/> writes.</summary>
+    public static IEnumerable<TelemetryFrame> Frames(int laps, bool withCarIdx)
     {
         var sim = new LapSim(lapTimeS: LapTimeS, fuelPerLapL: 2.4, startFuelL: 80, hz: Hz)
             .TimeRace(3600)

@@ -323,6 +323,75 @@ public class TelemetryPipelineTests
         Assert.Equal(Key, key);
     }
 
+    /// <summary>Lap 4 · 50 % (70 s): laps 1–3 done (lap 3 resolved by the 5 s timeout), well before the lap-5 pit stop.</summary>
+    const int ResetAt = 3 * SyntheticRace.FramesPerLap + SyntheticRace.FramesPerLap / 2;
+
+    static readonly StrategyConfig StintCfg = new() { Mode = LapsMode.Stint, StintLaps = 30 };
+
+    /// <summary>The synthetic race with CarIdx; from frame <see cref="ResetAt"/> on, <paramref name="change"/> is applied.</summary>
+    static TelemetryFrame[] SyntheticWith(Func<TelemetryFrame, TelemetryFrame> change)
+    {
+        var frames = SyntheticRace.Frames(4, withCarIdx: true).ToArray();
+        for (int i = 0; i < frames.Length; i++)
+        {
+            frames[i].HasCarIdx = true; // set by the frame reader when replayed from a file
+            if (i >= ResetAt) frames[i] = change(frames[i]);
+        }
+        return frames;
+    }
+
+    static readonly string PracticeThenRaceYaml = SampleYaml.WithSessions(
+        SampleYaml.SessionBlock(0, "Practice", "unlimited", "3600.0000 sec"),
+        SampleYaml.SessionBlock(1, "Race", "unlimited", "3600.0000 sec"));
+
+    /// <summary>Stint mode: <c>LapsRemaining = StintLaps − laps done in the stint − LapDistPct</c> shows the stint's lap count.</summary>
+    static void AssertHistory(TelemetryPipeline p, in TelemetryFrame published, bool reset)
+    {
+        var s = p.Overlay.Read();
+        if (!reset)
+        {
+            Assert.True(p.Leader.PaceS > 0, "leader pace expected before the change");
+            Assert.Equal(2.4, s.LastLapL, 2);
+            Assert.Equal(30 - 3 - published.LapDistPct, s.LapsRemaining, 1e-6);
+        }
+        else
+        {
+            Assert.True(double.IsNaN(p.Leader.PaceS), "laps of the previous session leaked into the leader pace");
+            Assert.True(double.IsNaN(s.LastLapL), "the previous session's last lap is still shown");
+            Assert.Equal(30 - 0 - published.LapDistPct, s.LapsRemaining, 1e-6); // laps of the previous session left the stint
+        }
+    }
+
+    [Fact]
+    public void Session_number_change_resets_stint_leader_pace_and_last_lap()   // I-5
+    {
+        var frames = SyntheticWith(f => { f.SessionNum = 1; return f; });
+        using var rig = new Rig(frames, PracticeThenRaceYaml, includeCarIdx: true, cfg: StintCfg);
+        rig.Step();
+        rig.Pipeline.OnSessionContext(rig.Info, SyntheticRace.Profile(rig.Info));
+        while (rig.Index < ResetAt) rig.Step();
+        AssertHistory(rig.Pipeline, rig.LastPublishedFrame, reset: false);
+
+        for (int i = 0; i < TelemetryPipeline.StrategyEvery; i++) rig.Step();
+        AssertHistory(rig.Pipeline, rig.LastPublishedFrame, reset: true);
+    }
+
+    [Fact]
+    public void Flush_resets_stint_leader_pace_and_last_lap_for_the_next_connection()   // I-5
+    {
+        var frames = SyntheticWith(f => f);
+        var info = SessionInfoParser.Parse(SyntheticRace.Yaml);
+        var pipeline = new TelemetryPipeline(StintCfg, new FixedTimeProvider(T0), null, null);
+        pipeline.OnSessionContext(info, SyntheticRace.Profile(info));
+        int i = 0;
+        for (; i < ResetAt; i++) pipeline.Tick(in frames[i]);
+        AssertHistory(pipeline, frames[(i - 1) - (i - 1) % 6], reset: false);
+
+        pipeline.Flush(); // disconnected; iRacing comes back with the same session
+        for (int k = 0; k < TelemetryPipeline.StrategyEvery; k++, i++) pipeline.Tick(in frames[i]);
+        AssertHistory(pipeline, frames[(i - 1) - (i - 1) % 6], reset: true);
+    }
+
     [Fact]
     public void Pit_road_makes_overlay_inactive()
     {

@@ -51,6 +51,30 @@ public class StintTrackerTests
     }
 
     [Fact]
+    public void Reset_forgets_the_stint_and_the_next_frame_starts_a_new_one()   // I-5
+    {
+        var s = new StintTracker(5);
+        Drive(s, 0, 100);
+        Complete(s, Lap(0, 80, 2.4, 80));
+        Complete(s, Lap(80, 160, 2.5, 81));
+        Drive(s, 170, 95);
+        Assert.Equal(2, s.LapsDone);
+
+        s.Reset(); // new session: SessionTime restarts
+        Assert.Equal(0, s.LapsDone);
+        Assert.True(double.IsNaN(s.MeanFuelL));
+        Assert.True(double.IsNaN(s.MeanLapS));
+
+        Drive(s, 5, 100);
+        Complete(s, Lap(-60, 4, 2.4, 64)); // ended before the new stint started
+        Assert.Equal(0, s.LapsDone);
+        Complete(s, Lap(5, 85, 2.2, 80));
+        Complete(s, Lap(85, 165, 2.4, 82));
+        Assert.Equal(2, s.LapsDone);
+        Assert.Equal(2.3, s.MeanFuelL, 9);
+    }
+
+    [Fact]
     public void Lap_that_ended_before_the_stint_started_is_ignored()
     {
         var s = new StintTracker(5);
