@@ -11,12 +11,17 @@ public static partial class SessionInfoParser
     [GeneratedRegex(@"^(\s*(?:- )?[A-Za-z0-9_]+: )(.+?)\s*$")]
     private static partial Regex KeyValueLine();
 
+    /// <summary>One complete YAML scalar in double quotes (backslash escapes) or single quotes (<c>''</c> escapes).</summary>
+    [GeneratedRegex(@"^(?:""(?:[^""\\]|\\.)*""|'(?:[^']|'')*')$")]
+    private static partial Regex FullyQuoted();
+
     private static readonly IDeserializer Deserializer = new DeserializerBuilder()
         .IgnoreUnmatchedProperties()
         .Build();
 
-    /// <summary>Normalizes line endings and single-quotes every unquoted scalar value so that
-    /// colons, hashes and quotes inside iRacing names do not break the YAML parser.</summary>
+    /// <summary>Normalizes line endings and single-quotes every scalar value that is not already one complete quoted
+    /// scalar, so that colons, hashes and quotes inside iRacing names do not break the YAML parser. A value that only
+    /// starts with a quote (<c>'Til Death Racing</c>, <c>"Rocket" Joe</c>) is quoted like any other.</summary>
     public static string Sanitize(string yaml)
     {
         var lines = yaml.Replace("\0", "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
@@ -25,7 +30,7 @@ public static partial class SessionInfoParser
             var m = KeyValueLine().Match(lines[i]);
             if (!m.Success) continue;
             var value = m.Groups[2].Value;
-            if (value[0] == '\'' || value[0] == '"') continue;
+            if (FullyQuoted().IsMatch(value)) continue;
             lines[i] = m.Groups[1].Value + "'" + value.Replace("'", "''") + "'";
         }
         return string.Join('\n', lines);

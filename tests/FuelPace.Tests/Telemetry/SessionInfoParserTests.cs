@@ -45,6 +45,35 @@ public class SessionInfoParserTests
         Assert.Equal("'it''s: x'", SessionInfoParser.Sanitize("A: it's: x").Substring(3));
     }
 
+    [Theory]
+    [InlineData("UserName: 'Til Death Racing", "'Til Death Racing")]
+    [InlineData("TeamName: \"Rocket\" Joe", "\"Rocket\" Joe")]
+    [InlineData("AbbrevName: O'Neil, J", "O'Neil, J")]
+    [InlineData("UserName: 'a' b 'c'", "'a' b 'c'")]
+    [InlineData("UserName: \"x\\\"", "\"x\\\"")]
+    public void Values_that_only_start_with_a_quote_are_quoted_and_parse(string line, string expected)   // I-1
+    {
+        var yaml = SampleYaml.Zolder.Replace("   UserName: Allan Cordeiro\n", "   " + line + "\n");
+        Assert.Contains(line, yaml);
+        var clean = SessionInfoParser.Sanitize(yaml);
+        Assert.Contains(line[..(line.IndexOf(':') + 2)] + "'" + expected.Replace("'", "''") + "'", clean);
+        var s = SessionInfoParser.Parse(yaml);
+        Assert.Equal("ligierjsp320", s.CarPath);
+        Assert.Equal("Ligier", s.CarScreenNameShort);
+    }
+
+    [Theory]
+    [InlineData("CarNumber: \"7\"")]
+    [InlineData("TeamName: 'Rock''n Roll'")]
+    [InlineData("UserName: \"Joe \\\"Rocket\\\" Smith\"")]
+    [InlineData("UserName: ''")]
+    public void Fully_quoted_values_are_left_unchanged(string line)
+    {
+        Assert.Equal(" " + line, SessionInfoParser.Sanitize(" " + line));
+        var yaml = SampleYaml.Zolder.Replace("   UserName: Allan Cordeiro\n", "   " + line + "\n");
+        Assert.Equal("ligierjsp320", SessionInfoParser.Parse(yaml).CarPath);
+    }
+
     [Fact]
     public void Crlf_yaml_parses_identically()
     {
