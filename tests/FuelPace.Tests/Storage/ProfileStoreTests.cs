@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using FuelPace.Core.Baselines;
 using FuelPace.Core.Capture;
@@ -173,6 +174,203 @@ public class ProfileStoreTests : IDisposable
         File.WriteAllText(path, "{ again");
         Assert.Null(store.Load("car", "track"));
         Assert.Equal("{ again", File.ReadAllText(path + ".corrupt"));
+    }
+
+    // ---- I-3: semantic validation, quarantine robustness, newer schema ----
+
+    /// <summary>Saves <see cref="SampleDoc"/>, then rewrites the file after <paramref name="edit"/> on its JSON tree.</summary>
+    string WriteEdited(ProfileStore store, Action<JsonObject> edit)
+    {
+        var doc = SampleDoc();
+        store.Save(doc);
+        var path = store.PathFor(doc.Car.Path, doc.Track.Name);
+        var root = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        edit(root);
+        File.WriteAllText(path, root.ToJsonString());
+        return path;
+    }
+
+    static JsonObject Capture0(JsonObject root) => root["captures"]![0]!.AsObject();
+
+    public static TheoryData<string> NullFields => ["car", "track", "captures", "capture", "capture.id", "capture.laps", "capture.lap",
+        "capture.conditions", "capture.sessionType", "car.path", "track.name", "baseline.conditions[0]"];
+
+    [Theory]
+    [MemberData(nameof(NullFields))]
+    public void Null_required_field_is_quarantined_as_corrupt(string field)
+    {
+        var log = new DiagLog(DiagLevel.Trace, 64);
+        var store = new ProfileStore(_root, log);
+        var path = WriteEdited(store, root =>
+        {
+            switch (field)
+            {
+                case "car": root["car"] = null; break;
+                case "track": root["track"] = null; break;
+                case "captures": root["captures"] = null; break;
+                case "capture": root["captures"]![0] = null; break;
+                case "capture.id": Capture0(root)["id"] = null; break;
+                case "capture.laps": Capture0(root)["laps"] = null; break;
+                case "capture.lap": Capture0(root)["laps"]![0] = null; break;
+                case "capture.conditions": Capture0(root)["conditions"] = null; break;
+                case "capture.sessionType": Capture0(root)["sessionType"] = null; break;
+                case "car.path": root["car"]!["path"] = null; break;
+                case "track.name": root["track"]!["name"] = null; break;
+                case "baseline.conditions[0]": root["baseline"]!["conditions"]![0] = null; break;
+            }
+        });
+        Drain(log);
+        Assert.Null(store.Load("ligierjsp320", "zolder alt"));
+        Assert.True(File.Exists(path + ".corrupt"));
+        Assert.False(File.Exists(path));
+        Assert.Contains(Drain(log), r => r.Event == DiagEvent.ProfileQuarantined);
+    }
+
+    [Fact]
+    public void Quarantine_failure_does_not_escape_Load()
+    {
+        var log = new DiagLog(DiagLevel.Trace, 64);
+        var store = new ProfileStore(_root, log);
+        var path = store.PathFor("car", "track");
+        Directory.CreateDirectory(path + ".corrupt"); // the move target is a directory: File.Move throws
+        File.WriteAllText(path, "{ trunc");
+        Assert.Null(store.Load("car", "track"));
+        Assert.True(File.Exists(path)); // left in place, nothing overwritten
+        bool logged = false;
+        while (log.TryDequeueText(out var t)) logged |= t.Level == DiagLevel.Warn && t.Message.Contains("not quarantined");
+        Assert.True(logged);
+    }
+
+    const string NewerSchemaJson =
+        """{ "schemaVersion": 2, "car": { "path": "ligierjsp320", "name": "Ligier" }, "track": { "name": "zolder alt" }, "captures": { "v2": "shape" }, "future": [1, 2] }""";
+
+    [Fact]
+    public void Newer_schema_is_neither_loaded_nor_quarantined_nor_overwritten()
+    {
+        var log = new DiagLog(DiagLevel.Trace, 64);
+        var store = new ProfileStore(_root, log);
+        var doc = SampleDoc();
+        var path = store.PathFor(doc.Car.Path, doc.Track.Name);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, NewerSchemaJson);
+
+        Assert.Null(store.Load(doc.Car.Path, doc.Track.Name));
+        Assert.Equal(NewerSchemaJson, File.ReadAllText(path));
+        Assert.False(File.Exists(path + ".corrupt"));
+        bool warned = false;
+        while (log.TryDequeueText(out var t)) warned |= t.Level == DiagLevel.Warn && t.Message.Contains("schemaVersion 2");
+        Assert.True(warned);
+
+        Assert.ThrowsAny<Exception>(() => store.Save(doc));
+        Assert.Equal(NewerSchemaJson, File.ReadAllText(path));
+        Assert.Contains(Drain(log), r => r.Event == DiagEvent.ProfileSaveFailed);
+    }
+
+    // ---- I-2a: AppendCapture never loses a capture ----
+
+    static SessionInfo Info => new(0, "ligierjsp320", "Ligier JS P320", "Ligier", "zolder alt", "Zolder", "Circuit Zolder", "Alternate",
+        4.011, 100.5, 0.75, 80, []);
+
+    static CaptureRecord Rec(string id, int laps = 8)
+    {
+        var rec = new CaptureRecord { Id = id, SessionType = "Practice", Conditions = new CaptureConditions(30, 20, 1, 0, 0, 100.5) };
+        for (int i = 1; i <= laps; i++)
+            rec.Laps.Add(new CapturedLap { Lap = i, TimeS = 80 + 0.1 * i, FuelL = 2.4 + 0.01 * i, FullThrottlePct = 60, Reasons = LapReasons.None });
+        return rec;
+    }
+
+    string[] PendingFiles() =>
+        Directory.Exists(Path.Combine(_root, "profiles"))
+            ? Directory.GetFiles(Path.Combine(_root, "profiles"), "*.pending-*.json") : [];
+
+    [Fact]
+    public void AppendCapture_creates_the_profile_with_a_baseline()
+    {
+        var log = new DiagLog(DiagLevel.Trace, 64);
+        var store = new ProfileStore(_root, log);
+        var doc = store.AppendCapture(Info, Rec("2026-11-09T12:00:00Z"), T0);
+        Assert.NotNull(doc);
+        Assert.NotNull(doc.Baseline);
+        var back = store.Load(Info.CarPath, Info.TrackName)!;
+        Assert.Equal("2026-11-09T12:00:00Z", Assert.Single(back.Captures).Id);
+        Assert.Empty(PendingFiles());
+        Assert.Contains(Drain(log), r => r.Event == DiagEvent.ProfileSaved);
+    }
+
+    [Fact]
+    public void AppendCapture_keeps_the_capture_in_a_pending_file_when_the_profile_cannot_be_read_and_merges_it_later()
+    {
+        var log = new DiagLog(DiagLevel.Trace, 256);
+        var store = new ProfileStore(_root, log);
+        store.AppendCapture(Info, Rec("2026-11-09T12:00:00Z"), T0);
+        var path = store.PathFor(Info.CarPath, Info.TrackName);
+
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None)) // AV scanner / backup tool
+            Assert.Null(store.AppendCapture(Info, Rec("2026-11-09T12:30:00Z"), T0));
+
+        var pending = Assert.Single(PendingFiles());
+        Assert.Equal(store.PendingPathFor(Info.CarPath, Info.TrackName, "2026-11-09T12:30:00Z"), pending);
+        Assert.Single(store.Load(Info.CarPath, Info.TrackName)!.Captures); // the profile itself is untouched
+        Assert.Contains(Drain(log), r => r.Event == DiagEvent.ProfileSaveFailed && r.Level == DiagLevel.Error);
+
+        var doc = store.AppendCapture(Info, Rec("2026-11-09T13:00:00Z"), T0);
+        Assert.NotNull(doc);
+        Assert.Equal(["2026-11-09T12:00:00Z", "2026-11-09T12:30:00Z", "2026-11-09T13:00:00Z"],
+            store.Load(Info.CarPath, Info.TrackName)!.Captures.Select(c => c.Id).Order());
+        Assert.Equal(24, doc.Baseline!.ValidLaps);
+        Assert.Empty(PendingFiles());
+    }
+
+    [Fact]
+    public void AppendCapture_keeps_the_capture_when_the_save_fails_and_still_returns_the_document()
+    {
+        var store = new ProfileStore(_root, new DiagLog(DiagLevel.Trace, 256));
+        var path = store.PathFor(Info.CarPath, Info.TrackName);
+        Directory.CreateDirectory(path); // the rename onto the profile path fails
+        var doc = store.AppendCapture(Info, Rec("2026-11-09T12:00:00Z"), T0);
+        Assert.NotNull(doc?.Baseline); // usable in memory for this session
+        Assert.Single(PendingFiles());
+
+        Directory.Delete(path);
+        store.AppendCapture(Info, Rec("2026-11-09T13:00:00Z"), T0);
+        Assert.Equal(2, store.Load(Info.CarPath, Info.TrackName)!.Captures.Count);
+        Assert.Empty(PendingFiles());
+    }
+
+    [Fact]
+    public void AppendCapture_does_not_overwrite_a_newer_schema_file()
+    {
+        var store = new ProfileStore(_root, new DiagLog(DiagLevel.Trace, 256));
+        var path = store.PathFor(Info.CarPath, Info.TrackName);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, NewerSchemaJson);
+        Assert.Null(store.AppendCapture(Info, Rec("2026-11-09T12:00:00Z"), T0));
+        Assert.Equal(NewerSchemaJson, File.ReadAllText(path));
+        Assert.Single(PendingFiles());
+    }
+
+    [Fact]
+    public void AppendCapture_on_a_corrupt_profile_quarantines_it_and_saves()
+    {
+        var store = new ProfileStore(_root);
+        var path = WriteEdited(store, root => root["captures"] = null);
+        var doc = store.AppendCapture(Info, Rec("2026-11-09T12:00:00Z"), T0);
+        Assert.NotNull(doc);
+        Assert.True(File.Exists(path + ".corrupt"));
+        Assert.Single(store.Load(Info.CarPath, Info.TrackName)!.Captures);
+    }
+
+    [Fact]
+    public void A_corrupt_pending_file_is_quarantined_and_does_not_block_the_save()
+    {
+        var store = new ProfileStore(_root);
+        var pending = store.PendingPathFor(Info.CarPath, Info.TrackName, "2026-11-09T11:00:00Z");
+        Directory.CreateDirectory(Path.GetDirectoryName(pending)!);
+        File.WriteAllText(pending, "{ trunc");
+        Assert.NotNull(store.AppendCapture(Info, Rec("2026-11-09T12:00:00Z"), T0));
+        Assert.Single(store.Load(Info.CarPath, Info.TrackName)!.Captures);
+        Assert.True(File.Exists(pending + ".corrupt"));
+        Assert.Empty(PendingFiles());
     }
 
     [Fact] public void Missing_file_returns_null() { Assert.Null(new ProfileStore(_root).Load("car", "nowhere")); }

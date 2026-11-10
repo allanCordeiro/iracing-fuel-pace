@@ -204,6 +204,47 @@ public class TelemetryPipelineTests
     }
 
     [Fact]
+    public void Capture_is_kept_as_a_pending_file_when_the_profile_cannot_be_read()   // I-2a
+    {
+        using var dir = new TempDir();
+        using var io = new BackgroundWorkQueue("test-io");
+        var log = new DiagLog(DiagLevel.Info, 1 << 16);
+        var store = new ProfileStore(dir.Path, log);
+        var info = SessionInfoParser.Parse(LapsRaceYaml(30));
+        store.Save(ProfileDocument.CreateFor(info)); // an existing profile, locked by an AV scanner during the save
+        var path = store.PathFor(info.CarPath, info.TrackName);
+        using var rig = new Rig(new LapSim(lapTimeS: 20).SessionLaps(30).Run(6, endPct: 0.5), LapsRaceYaml(30),
+            store: store, io: io, log: log);
+        CaptureRecord? record = null;
+        rig.Pipeline.CaptureCompleted += (r, _) => record = r;
+
+        rig.Pipeline.RequestCaptureStart();
+        rig.StepUntil(f => f.Lap == 6 && f.LapDistPct >= 0.35);
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            rig.Pipeline.RequestCaptureStop();
+            rig.Step();
+            Assert.True(io.WaitIdle(TimeSpan.FromSeconds(10)));
+        }
+
+        Assert.NotNull(record);
+        var pending = store.PendingPathFor(info.CarPath, info.TrackName, record.Id);
+        Assert.True(File.Exists(pending));
+        Assert.Empty(store.Load(info.CarPath, info.TrackName)!.Captures);
+        Assert.Contains(Drain(log), r => r.Event == DiagEvent.ProfileSaveFailed);
+
+        // The next capture of this profile merges the pending one.
+        rig.Pipeline.RequestCaptureStart();
+        rig.StepAll();
+        rig.Pipeline.Flush();
+        Assert.True(io.WaitIdle(TimeSpan.FromSeconds(10)));
+        var doc = store.Load(info.CarPath, info.TrackName)!;
+        Assert.Equal(2, doc.Captures.Count);
+        Assert.Contains(doc.Captures, c => c.Id == record.Id && c.Laps.Count == record.Laps.Count);
+        Assert.False(File.Exists(pending));
+    }
+
+    [Fact]
     public void Capture_stop_while_lap_waits_for_its_official_time_keeps_that_lap()
     {
         using var rig = new Rig(new LapSim(lapTimeS: 20).Run(7, endPct: 0.5), LapsRaceYaml(30));

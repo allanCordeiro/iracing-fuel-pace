@@ -339,13 +339,13 @@ public sealed class TelemetryPipeline : ILapSink
         }
     }
 
-    /// <summary>I/O thread: append the capture to the profile it started in, save, and use the result if that profile is still current.</summary>
+    /// <summary>I/O thread: append the capture to the profile it started in, save, and use the result if that profile is
+    /// still current. <see cref="ProfileStore.AppendCapture"/> never throws; when the profile cannot be read or written the
+    /// capture is kept in a pending file next to it, merged by the next save of that profile.</summary>
     private void SaveCapture(ProfileStore store, SessionContext ctx, CaptureRecord rec)
     {
-        var info = ctx.Info;
-        var doc = store.Load(info.CarPath, info.TrackName) ?? ProfileDocument.CreateFor(info);
-        ProfileOperations.AddCapture(doc, rec, _clock.GetUtcNow());
-        store.Save(doc);
+        var doc = store.AppendCapture(ctx.Info, rec, _clock.GetUtcNow());
+        if (doc is null) return;
 
         // OnSessionContext with the new document, unless the session moved to another profile meanwhile.
         while (true)
