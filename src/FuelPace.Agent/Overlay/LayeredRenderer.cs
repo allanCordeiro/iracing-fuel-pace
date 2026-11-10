@@ -36,6 +36,7 @@ internal sealed unsafe class LayeredRenderer : IOverlayRenderer
     private readonly HDC _memDc;
     private HGDIOBJ _dib, _original;
     private int _w, _h;
+    private RenderFailures _failures;
 
     public LayeredRenderer(nint hwnd, DWriteFonts fonts, Func<DiagLog>? log = null)
     {
@@ -63,12 +64,43 @@ internal sealed unsafe class LayeredRenderer : IOverlayRenderer
 
     private DiagLog Log => _log?.Invoke() ?? DiagLog.Null;
 
+    /// <summary>The DC render target and its drawer, or both null (nothing half-built is left behind on failure).</summary>
     private void CreateTarget()
     {
-        _rt = _factory.CreateDCRenderTarget(new RenderTargetProperties(RenderTargetType.Software,
+        ReleaseTarget();
+        var rt = _factory.CreateDCRenderTarget(new RenderTargetProperties(RenderTargetType.Software,
             new D2DPixelFormat(Format.B8G8R8A8_UNorm, Vortice.DCommon.AlphaMode.Premultiplied), 0, 0, RenderTargetUsage.None,
             Vortice.Direct2D1.FeatureLevel.Default));
-        _drawer = new D2DDrawListRenderer(_rt, _fonts);
+        try { _drawer = new D2DDrawListRenderer(rt, _fonts); }
+        catch
+        {
+            rt.Dispose();
+            throw;
+        }
+        _rt = rt;
+    }
+
+    private void ReleaseTarget()
+    {
+        _drawer?.Dispose(); _drawer = null;
+        _rt?.Dispose(); _rt = null;
+    }
+
+    /// <summary>At most once a second; a failure is logged once per HRESULT and the overlay stays blank meanwhile.</summary>
+    private bool TryCreateTarget()
+    {
+        if (!_failures.MayRetry()) return false;
+        try
+        {
+            CreateTarget();
+            return true;
+        }
+        catch (Exception e)
+        {
+            ReleaseTarget();
+            _failures.Report(Log, RenderFailures.StageRebuild, e.HResult, "layered render target could not be created: " + e.Message);
+            return false;
+        }
     }
 
     public void Resize(int width, int height)
@@ -96,18 +128,18 @@ internal sealed unsafe class LayeredRenderer : IOverlayRenderer
 
     public void Render(DrawList list, float scale, bool hitTestable)
     {
+        if (_rt is null && !TryCreateTarget()) return;
         int hr = Draw(list, scale, hitTestable);
         if (hr == D2DRecreateTarget)
         {
             Log.Emit(DiagLevel.Warn, AppDiagEvents.DeviceLost, 0, 0, hr);
-            _drawer?.Dispose();
-            _rt?.Dispose();
-            CreateTarget();
+            ReleaseTarget();
+            if (!TryCreateTarget()) return;
             hr = Draw(list, scale, hitTestable);
         }
         if (hr < 0)
         {
-            Log.Emit(DiagLevel.Error, AppDiagEvents.DeviceLost, 0, 0, hr);
+            _failures.Report(Log, RenderFailures.StageDraw, hr);
             return;
         }
         var size = new SIZE(_w, _h);
@@ -117,7 +149,8 @@ internal sealed unsafe class LayeredRenderer : IOverlayRenderer
             BlendOp = (byte)PInvoke.AC_SRC_OVER, SourceConstantAlpha = 255, AlphaFormat = (byte)PInvoke.AC_SRC_ALPHA,
         };
         if (!PInvoke.UpdateLayeredWindow(_hwnd, HDC.Null, null, &size, _memDc, &src, default, &blend, UPDATE_LAYERED_WINDOW_FLAGS.ULW_ALPHA))
-            Log.Emit(DiagLevel.Error, AppDiagEvents.DeviceLost, 0, 0, Marshal.GetHRForLastWin32Error());
+            _failures.Report(Log, RenderFailures.StageShow, Marshal.GetHRForLastWin32Error());
+        else _failures.Succeeded();
     }
 
     private int Draw(DrawList list, float scale, bool hitTestable)
@@ -134,8 +167,7 @@ internal sealed unsafe class LayeredRenderer : IOverlayRenderer
 
     public void Dispose()
     {
-        _drawer?.Dispose(); _drawer = null;
-        _rt?.Dispose(); _rt = null;
+        ReleaseTarget();
         _factory.Dispose();
         if (!_dib.IsNull)
         {

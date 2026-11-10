@@ -311,6 +311,24 @@ public sealed class AgentHostTests
         Assert.Equal(placed, rig.Surface.LastBounds);
     }
 
+    [Fact] // the edit chrome's width is known from the last render, not from bounds the first gesture invalidated
+    public void Two_gestures_before_a_render_both_leave_out_the_edit_chrome()
+    {
+        using var rig = new HostRig();
+        var settings = new AppSettings();
+        settings.Overlay.AutoHide = false;
+        rig.WriteSettings(settings);
+        rig.Start();
+        rig.Hotkeys.Press(AgentHost.HotkeyToggleEdit);
+        rig.WaitUntil(() => rig.Surface.LastBounds is { X: 40 - 7 }, "edit-mode placement", pump: Tick);
+        var placed = rig.Surface.LastBounds!.Value;
+
+        rig.Surface.RaiseResized(placed); // same size twice, no render in between: the scale stays 100%
+        rig.Surface.RaiseResized(placed);
+        rig.Ui.Drain();
+        Assert.Equal(1.0, rig.Host.Settings.Overlay.Scale);
+    }
+
     static AppSettings UserSettings()
     {
         var mine = new AppSettings();

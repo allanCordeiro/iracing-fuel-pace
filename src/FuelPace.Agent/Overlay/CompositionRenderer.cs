@@ -48,6 +48,7 @@ internal sealed class CompositionRenderer : IOverlayRenderer
     private D2DDrawListRenderer? _drawer;
     private int _w = 1, _h = 1;
     private bool _broken;
+    private RenderFailures _failures;
 
     public CompositionRenderer(nint hwnd, DWriteFonts fonts, Func<DiagLog>? log = null)
     {
@@ -128,35 +129,37 @@ internal sealed class CompositionRenderer : IOverlayRenderer
         if (width == _w && height == _h) return;
         _w = width;
         _h = height;
-        if (_swap is null) return; // broken: the next render rebuilds at this size
-        _dc!.Target = null;
-        _bitmap?.Dispose();
-        _bitmap = null;
-        var r = _swap.ResizeBuffers(2, (uint)width, (uint)height, BufferFormat, SwapChainFlags.None);
-        if (IsLost(r.Code))
+        if (_swap is null) return; // broken: the next successful rebuild uses this size
+        try
         {
-            Recover(r.Code);
-            return;
+            _dc!.Target = null;
+            _bitmap?.Dispose();
+            _bitmap = null;
+            _swap.ResizeBuffers(2, (uint)width, (uint)height, BufferFormat, SwapChainFlags.None).CheckError();
+            BindTarget();
         }
-        r.CheckError();
-        BindTarget();
+        catch (Exception e)
+        {
+            // Lost or not, a swap chain that cannot take the new size is rebuilt at it.
+            if (!IsLost(e.HResult)) _failures.Report(Log, RenderFailures.StageResize, e.HResult, "overlay resize failed: " + e.Message);
+            Recover(e.HResult);
+        }
     }
 
     public void Render(DrawList list, float scale, bool hitTestable)
     {
         if (_drawer is null && !TryCreate()) return;
-        int hr = Draw(list, scale);
-        if (!IsLost(hr))
+        var (stage, hr) = Draw(list, scale);
+        if (IsLost(hr))
         {
-            if (hr < 0) Log.Emit(DiagLevel.Error, AppDiagEvents.DeviceLost, 0, 0, hr); // not a device loss: logged, kept
-            return;
+            if (!Recover(hr)) return;
+            (stage, hr) = Draw(list, scale);
         }
-        if (!Recover(hr)) return;
-        hr = Draw(list, scale);
-        if (hr < 0) Log.Emit(DiagLevel.Error, AppDiagEvents.DeviceLost, 0, 0, hr);
+        if (hr < 0) _failures.Report(Log, stage, hr); // not a device loss: logged once per HRESULT, the device is kept
+        else _failures.Succeeded();
     }
 
-    private int Draw(DrawList list, float scale)
+    private (int Stage, int Hr) Draw(DrawList list, float scale)
     {
         var dc = _dc!;
         dc.BeginDraw();
@@ -165,25 +168,26 @@ internal sealed class CompositionRenderer : IOverlayRenderer
         _drawer!.Draw(list);
         dc.Transform = Matrix3x2.Identity;
         var r = dc.EndDraw();
-        if (r.Failure) return r.Code;
+        if (r.Failure) return (RenderFailures.StageDraw, r.Code);
         r = _swap!.Present(0, PresentFlags.None);
-        if (r.Failure) return r.Code;
-        return _dcomp!.Commit().Code;
+        if (r.Failure) return (RenderFailures.StagePresent, r.Code);
+        return (RenderFailures.StageCommit, _dcomp!.Commit().Code);
     }
 
     private static bool IsLost(int hr) => hr is DxgiDeviceRemoved or DxgiDeviceReset or D2DRecreateTarget;
 
     private bool Recover(int hr)
     {
-        Log.Emit(DiagLevel.Warn, AppDiagEvents.DeviceLost, 0, 0, hr);
+        if (IsLost(hr)) Log.Emit(DiagLevel.Warn, AppDiagEvents.DeviceLost, 0, 0, hr);
         Release();
         return TryCreate();
     }
 
-    /// <summary>Rebuilds the device chain; while that fails (driver update, GPU reset in progress) every render retries
-    /// quietly: the first failure is logged, the overlay stays blank until a rebuild succeeds.</summary>
+    /// <summary>Rebuilds the device chain, at most once a second; while that fails (driver update, GPU reset in progress) the
+    /// overlay stays blank and each distinct failure is logged once.</summary>
     private bool TryCreate()
     {
+        if (!_failures.MayRetry()) return false;
         try
         {
             Create();
@@ -194,11 +198,7 @@ internal sealed class CompositionRenderer : IOverlayRenderer
         catch (Exception e)
         {
             Release();
-            if (!_broken)
-            {
-                Log.Emit(DiagLevel.Error, AppDiagEvents.DeviceLost, 0, 0, e.HResult);
-                Log.Text(DiagLevel.Error, "overlay", "composition device could not be rebuilt: " + e.Message);
-            }
+            _failures.Report(Log, RenderFailures.StageRebuild, e.HResult, "composition device could not be rebuilt: " + e.Message);
             _broken = true;
             return false;
         }

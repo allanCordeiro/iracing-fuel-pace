@@ -104,7 +104,7 @@ public sealed partial class AgentHost : IDisposable
 
     // UI thread only.
     private bool _userVisible = true, _shown, _hasShown, _hotkeysNotified, _rendered, _inactive, _hasPanel, _fullscreenNotified;
-    private int _marks, _redraws, _seenConnections;
+    private int _marks, _redraws, _seenConnections, _chromeW;
     private long _lastHash, _inactiveSince;
     private readonly DrawList _list = new(), _measure = new();
     private PixelRect _panel;
@@ -558,9 +558,8 @@ public sealed partial class AgentHost : IDisposable
         if (monitors.Count == 0) return;
         double dpi = _monitor?.DpiScale ?? 1.0;
         var off = OverlayLayout.PanelOffset(_editMode, dpi);
-        int chromeW = _bounds is { } b && _hasPanel ? b.Width - _panel.Width : 0;
         var panel = new PixelRect(window.X + Px(off.W), window.Y + Px(off.H),
-            Math.Max(1, window.Width - chromeW), _hasPanel ? _panel.Height : window.Height);
+            Math.Max(1, window.Width - _chromeW), _hasPanel ? _panel.Height : window.Height);
         _bounds = null; // the user moved the window: the next render sends the bounds even if the placement resolves the same
         ApplyUserChange(s =>
         {
@@ -749,6 +748,7 @@ public sealed partial class AgentHost : IDisposable
             var off = OverlayLayout.PanelOffset(_editMode, dpi);
             var bounds = new PixelRect(_panel.X - Px(off.W), _panel.Y - Px(off.H),
                 (int)Math.Ceiling(_list.Size.W), (int)Math.Ceiling(_list.Size.H));
+            _chromeW = bounds.Width - _panel.Width; // kept: a gesture clears _bounds, a second one before the next render needs this
             if (_bounds != bounds)
             {
                 _surface.SetBounds(bounds);

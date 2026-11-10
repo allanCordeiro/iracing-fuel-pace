@@ -1,3 +1,4 @@
+using FuelPace.App.Diagnostics;
 using FuelPace.App.Overlay;
 using FuelPace.App.Settings;
 using FuelPace.Core.Diagnostics;
@@ -13,6 +14,39 @@ internal interface IOverlayRenderer : IDisposable
     /// <summary>Draws <paramref name="list"/> scaled by <paramref name="scale"/> (1, except while a corner is dragged) and
     /// shows it. <paramref name="hitTestable"/>: edit mode, where every pixel of the window must take the mouse.</summary>
     void Render(DrawList list, float scale, bool hitTestable);
+}
+
+/// <summary>
+/// Logs a failed frame as <c>RenderFailed</c> (I0 stage, I1 HRESULT) once per distinct (stage, HRESULT) until a frame
+/// succeeds, so a persistent failure at 10 redraws/s does not flood the log. Also throttles device rebuilds to one a second.
+/// </summary>
+internal struct RenderFailures
+{
+    public const int StageDraw = 0, StagePresent = 1, StageCommit = 2, StageShow = 3, StageRebuild = 4, StageResize = 5;
+    private const long RetryMs = 1000;
+
+    private long _last; // stage << 32 | hresult; 0 = none since the last success
+    private long _lastAttempt;
+
+    public void Report(DiagLog log, int stage, int hresult, string? detail = null)
+    {
+        long key = ((long)stage << 32) | (uint)hresult;
+        if (key == _last) return;
+        _last = key;
+        log.Emit(DiagLevel.Error, AppDiagEvents.RenderFailed, 0, stage, hresult);
+        if (detail is not null) log.Text(DiagLevel.Error, "overlay", detail);
+    }
+
+    public void Succeeded() => _last = 0;
+
+    /// <summary>True at most once a second (device rebuilds while a GPU reset or driver update is in progress).</summary>
+    public bool MayRetry()
+    {
+        long now = Environment.TickCount64;
+        if (_lastAttempt != 0 && now - _lastAttempt < RetryMs) return false;
+        _lastAttempt = now;
+        return true;
+    }
 }
 
 /// <summary>
@@ -34,16 +68,16 @@ internal static class BackendSelector
         int hr = 0;
         var backend = BackendSelection.Choose(requested, () =>
         {
-            hwnd = createWindow(true);
             try
             {
+                hwnd = createWindow(true);
                 renderer = new CompositionRenderer(hwnd, fonts, log);
                 return true;
             }
             catch (Exception e)
             {
-                hr = e.HResult;
-                destroyWindow(hwnd);
+                hr = e.HResult; // a CreateWindowEx failure too (Win32Exception carries it)
+                if (hwnd != 0) destroyWindow(hwnd);
                 hwnd = 0;
                 throw;
             }

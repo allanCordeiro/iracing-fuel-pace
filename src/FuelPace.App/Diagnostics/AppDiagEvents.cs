@@ -26,6 +26,8 @@ public static class AppDiagEvents
     public const DiagEvent RecordingStarted = (DiagEvent)1018;
     public const DiagEvent RecordingStopped = (DiagEvent)1019;
     public const DiagEvent BundleCreated = (DiagEvent)1020;
+    /// <summary>The overlay could not draw or show a frame (logged once per distinct HRESULT and stage until a frame succeeds).</summary>
+    public const DiagEvent RenderFailed = (DiagEvent)1021;
 
     private static int _registered;
 
@@ -53,6 +55,7 @@ public static class AppDiagEvents
         Reg(RecordingStarted, nameof(RecordingStarted), "record");
         Reg(RecordingStopped, nameof(RecordingStopped), "record", i0: "frames", i1: "dropped");
         Reg(BundleCreated, nameof(BundleCreated), "app");
+        Reg(RenderFailed, nameof(RenderFailed), "overlay", i0: "stage", i1: "hresult");
     }
 
     private static void Reg(DiagEvent e, string name, string category, string? i0 = null, string? i1 = null,

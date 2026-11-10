@@ -22,11 +22,13 @@ namespace FuelPace.Agent.Overlay;
 /// <list type="bullet">
 /// <item>Locked: <c>WS_EX_TRANSPARENT</c> as well, so every click goes to the game (NFR-02).</item>
 /// <item>Edit mode: no <c>WS_EX_TRANSPARENT</c>; <c>WM_NCHITTEST</c> answers the corner codes on the handles and
-/// <c>HTCAPTION</c> elsewhere. A drag is Windows' move loop and ends in <c>WM_EXITSIZEMOVE</c> → <see cref="UserMoved"/>.
-/// A corner is dragged by the window itself (mouse capture; a <c>WS_POPUP</c> without <c>WS_THICKFRAME</c> gets no system
-/// size loop, and a thick frame would bring Aero Snap): the ratio is kept (<see cref="OverlayEditGeometry"/>), the picture
-/// is redrawn scaled while dragging, and the button release raises <see cref="UserResized"/>. Both report the whole window
-/// rect. While the user drags, <see cref="SetBounds"/> is held back so the host does not pull the window away.</item>
+/// <c>HTCLIENT</c> elsewhere. Both gestures are driven by the window itself under mouse capture (a never-activated window
+/// may not move live in the system move loop, a <c>WS_POPUP</c> without <c>WS_THICKFRAME</c> gets no size loop, and a thick
+/// frame would bring Aero Snap): a drag moves the window, a corner resizes it keeping the ratio
+/// (<see cref="OverlayEditGeometry"/>) with the picture redrawn scaled. The button release raises <see cref="UserMoved"/>
+/// or <see cref="UserResized"/> with the whole window rect. While the user drags, <see cref="SetBounds"/> is held back so the
+/// host does not pull the window away.</item>
+/// <item>DPI: <c>WM_DPICHANGED</c> raises <see cref="DpiChanged"/> (the host re-places the window).</item>
 /// <item>Topmost: re-asserted (<c>SetWindowPos(HWND_TOPMOST, …, SWP_NOACTIVATE)</c>) on every foreground change
 /// (<c>SetWinEventHook(EVENT_SYSTEM_FOREGROUND)</c>, out of context) and every 2 s; logged as <c>TopmostReasserted</c>
 /// (Trace).</item>
@@ -56,7 +58,7 @@ public sealed unsafe class OverlayWindow : IOverlaySurface
     private readonly HWND _hwnd;
     private readonly IOverlayRenderer _renderer;
     private readonly HWINEVENTHOOK _hook;
-    private bool _reported, _visible, _edit, _moving, _sizing;
+    private bool _reported, _visible, _edit, _gesture;
     private PixelRect _windowRect, _requestedBounds, _dragStart;
     private System.Drawing.Point _cursorStart;
     private OverlayHit _corner;
@@ -108,6 +110,10 @@ public sealed unsafe class OverlayWindow : IOverlaySurface
 
     public event Action<PixelRect>? UserMoved;
     public event Action<PixelRect>? UserResized;
+
+    /// <summary><c>WM_DPICHANGED</c> on the overlay (UI thread): its monitor's scaling changed or it moved to another DPI.
+    /// Program wires it to <see cref="Win32.MonitorProvider.Recheck"/>.</summary>
+    public event Action? DpiChanged;
 
     private DiagLog Log => _log?.Invoke() ?? DiagLog.Null;
 
@@ -162,7 +168,7 @@ public sealed unsafe class OverlayWindow : IOverlaySurface
     {
         OnUiCall();
         _requestedBounds = r;
-        if (_moving || _sizing) return; // the user is dragging; the host sends new bounds after the drop
+        if (_gesture) return; // the user is dragging; the host sends new bounds after the drop
         Apply(r);
     }
 
@@ -181,7 +187,7 @@ public sealed unsafe class OverlayWindow : IOverlaySurface
     {
         OnUiCall();
         _last = list;
-        _renderer.Render(list, _sizing ? _liveScale : 1, _edit);
+        _renderer.Render(list, _gesture ? _liveScale : 1, _edit);
     }
 
     public void SetVisible(bool v)
@@ -189,7 +195,7 @@ public sealed unsafe class OverlayWindow : IOverlaySurface
         OnUiCall();
         if (v == _visible) return;
         _visible = v;
-        if (!v) CancelResize();
+        if (!v) CancelGesture();
         PInvoke.ShowWindow(_hwnd, v ? SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE : SHOW_WINDOW_CMD.SW_HIDE);
         if (v) PutOnTop();
     }
@@ -199,7 +205,7 @@ public sealed unsafe class OverlayWindow : IOverlaySurface
         OnUiCall();
         if (on == _edit) return;
         _edit = on;
-        if (!on) CancelResize();
+        if (!on) CancelGesture();
         int ex = PInvoke.GetWindowLong(_hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE); // extended styles are 32 bits
         int transparent = (int)WINDOW_EX_STYLE.WS_EX_TRANSPARENT;
         ex = on ? ex & ~transparent : ex | transparent;
@@ -215,7 +221,7 @@ public sealed unsafe class OverlayWindow : IOverlaySurface
 
     private void Reassert(int cause)
     {
-        if (!_visible || _moving || _sizing || Volatile.Read(ref _destroyed) != 0) return;
+        if (!_visible || _gesture || Volatile.Read(ref _destroyed) != 0) return;
         PutOnTop();
         Log.Emit(DiagLevel.Trace, AppDiagEvents.TopmostReasserted, 0, cause);
     }
@@ -234,10 +240,11 @@ public sealed unsafe class OverlayWindow : IOverlaySurface
         return new PixelRect(r.left, r.top, r.right - r.left, r.bottom - r.top);
     }
 
+    /// <summary>Locked: transparent. Edit mode: the corner codes on the handles, <c>HTCLIENT</c> (drag to move) elsewhere.</summary>
     private uint HitTest(nint lParam)
     {
         if (!_edit) return unchecked((uint)PInvoke.HTTRANSPARENT);
-        if (_last is null) return PInvoke.HTCAPTION;
+        if (_last is null) return PInvoke.HTCLIENT;
         int x = (short)(lParam & 0xFFFF), y = (short)((lParam >> 16) & 0xFFFF);
         var r = WindowRect();
         return OverlayEditGeometry.HitTest(_last, x - r.X, y - r.Y) switch
@@ -246,7 +253,7 @@ public sealed unsafe class OverlayWindow : IOverlaySurface
             OverlayHit.TopRight => PInvoke.HTTOPRIGHT,
             OverlayHit.BottomLeft => PInvoke.HTBOTTOMLEFT,
             OverlayHit.BottomRight => PInvoke.HTBOTTOMRIGHT,
-            _ => PInvoke.HTCAPTION,
+            _ => PInvoke.HTCLIENT,
         };
     }
 
@@ -259,10 +266,12 @@ public sealed unsafe class OverlayWindow : IOverlaySurface
         _ => OverlayHit.Caption,
     };
 
-    private void BeginResize(OverlayHit corner)
+    /// <summary>A drag: <see cref="OverlayHit.Caption"/> moves, a corner resizes. The window follows the mouse itself under
+    /// capture (no system move or size loop, which may not move a never-activated window live, and no Aero Snap).</summary>
+    private void BeginGesture(OverlayHit what)
     {
-        _sizing = true;
-        _corner = corner;
+        _gesture = true;
+        _corner = what;
         _dragStart = WindowRect();
         _windowRect = _dragStart;
         PInvoke.GetCursorPos(out _cursorStart);
@@ -270,10 +279,20 @@ public sealed unsafe class OverlayWindow : IOverlaySurface
         PInvoke.SetCapture(_hwnd);
     }
 
-    private void UpdateResize()
+    private void UpdateGesture()
     {
         PInvoke.GetCursorPos(out var p);
-        var r = OverlayEditGeometry.ProportionalResize(_dragStart, _corner, p.X - _cursorStart.X, p.Y - _cursorStart.Y, MinSide, out float f);
+        int dx = p.X - _cursorStart.X, dy = p.Y - _cursorStart.Y;
+        if (_corner == OverlayHit.Caption)
+        {
+            var moved = _dragStart with { X = _dragStart.X + dx, Y = _dragStart.Y + dy };
+            if (moved == _windowRect) return;
+            PInvoke.SetWindowPos(_hwnd, HWND.Null, moved.X, moved.Y, 0, 0,
+                SET_WINDOW_POS_FLAGS.SWP_NOSIZE | SET_WINDOW_POS_FLAGS.SWP_NOZORDER | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE);
+            _windowRect = moved;
+            return;
+        }
+        var r = OverlayEditGeometry.ProportionalResize(_dragStart, _corner, dx, dy, MinSide, out float f);
         if (r == _windowRect) return;
         PInvoke.SetWindowPos(_hwnd, HWND.Null, r.X, r.Y, r.Width, r.Height,
             SET_WINDOW_POS_FLAGS.SWP_NOZORDER | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE);
@@ -283,23 +302,30 @@ public sealed unsafe class OverlayWindow : IOverlaySurface
         if (_last is not null) _renderer.Render(_last, f, true);
     }
 
-    private void EndResize()
+    /// <summary>Button released (or the capture went elsewhere): what was reached is reported, whole window rect.</summary>
+    private void EndGesture()
     {
-        if (!_sizing) return;
-        _sizing = false; // first: releasing the capture sends WM_CAPTURECHANGED
+        if (!_gesture) return;
+        _gesture = false; // first: releasing the capture sends WM_CAPTURECHANGED
         if (PInvoke.GetCapture() == _hwnd) PInvoke.ReleaseCapture();
+        bool resize = _corner != OverlayHit.Caption;
         _liveScale = 1;
         var now = WindowRect();
         _windowRect = now;
-        if (now != _dragStart) UserResized?.Invoke(now);
-        else if (_last is not null) _renderer.Render(_last, 1, _edit);
+        if (now == _dragStart)
+        {
+            if (resize && _last is not null) _renderer.Render(_last, 1, _edit);
+            return;
+        }
+        if (resize) UserResized?.Invoke(now);
+        else UserMoved?.Invoke(now);
     }
 
     /// <summary>Edit mode ended or the overlay hid mid-drag: back to the host's bounds, nothing reported.</summary>
-    private void CancelResize()
+    private void CancelGesture()
     {
-        if (!_sizing) return;
-        _sizing = false;
+        if (!_gesture) return;
+        _gesture = false;
         if (PInvoke.GetCapture() == _hwnd) PInvoke.ReleaseCapture();
         _liveScale = 1;
         _windowRect = default; // forces the resize and redraw
@@ -319,47 +345,41 @@ public sealed unsafe class OverlayWindow : IOverlaySurface
                 case PInvoke.WM_NCHITTEST:
                     return (LRESULT)(nint)(int)HitTest(lParam.Value);
                 case PInvoke.WM_SETCURSOR:
-                    if (_edit && (lParam.Value & 0xFFFF) == PInvoke.HTCAPTION)
+                    if (_edit && (lParam.Value & 0xFFFF) == PInvoke.HTCLIENT)
                     {
                         PInvoke.SetCursor(PInvoke.LoadCursor(HINSTANCE.Null, PInvoke.IDC_SIZEALL));
                         return (LRESULT)1;
                     }
+                    break; // corners: DefWindowProc shows the sizing cursors
+                case PInvoke.WM_LBUTTONDOWN:
+                    if (_edit) { BeginGesture(OverlayHit.Caption); return (LRESULT)0; }
                     break;
                 case PInvoke.WM_NCLBUTTONDOWN:
                     if (_edit && Corner(wParam.Value) is var corner and not OverlayHit.Caption)
                     {
-                        BeginResize(corner);
+                        BeginGesture(corner);
                         return (LRESULT)0;
                     }
-                    break; // HTCAPTION: Windows' move loop
-                case PInvoke.WM_NCLBUTTONDBLCLK:
-                    return (LRESULT)0; // no maximize or restore on a double click
-                case PInvoke.WM_ENTERSIZEMOVE:
-                    _moving = true;
-                    _dragStart = WindowRect();
                     break;
-                case PInvoke.WM_EXITSIZEMOVE:
-                {
-                    _moving = false;
-                    var now = WindowRect();
-                    _windowRect = now;
-                    if (now != _dragStart) UserMoved?.Invoke(now);
-                    return (LRESULT)0;
-                }
+                case PInvoke.WM_NCLBUTTONDBLCLK:
+                    return (LRESULT)0; // no system action on a double click
                 case PInvoke.WM_MOUSEMOVE:
-                    if (_sizing) { UpdateResize(); return (LRESULT)0; }
+                    if (_gesture) { UpdateGesture(); return (LRESULT)0; }
                     break;
                 case PInvoke.WM_LBUTTONUP:
-                    if (_sizing) { EndResize(); return (LRESULT)0; }
+                    if (_gesture) { EndGesture(); return (LRESULT)0; }
                     break;
                 case PInvoke.WM_CAPTURECHANGED:
-                    EndResize(); // the capture went elsewhere mid-drag: keep what was reached
+                    EndGesture(); // the capture went elsewhere mid-drag: keep what was reached
                     return (LRESULT)0;
                 case PInvoke.WM_TIMER:
                     if (wParam.Value == TopmostTimer) { Reassert(CauseTimer); return (LRESULT)0; }
                     break;
                 case PInvoke.WM_DPICHANGED:
-                    return (LRESULT)0; // the host sizes the window for the new monitor after the drop
+                    // Review Focus 5: the hidden message window only hears the primary monitor's DPI; this one sits on the
+                    // overlay's monitor. The host re-reads the monitors and re-places the window (no suggested-rect resize).
+                    DpiChanged?.Invoke();
+                    return (LRESULT)0;
                 case WM_DESTROY_REQUEST:
                     DestroyNow();
                     return (LRESULT)0;

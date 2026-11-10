@@ -17,7 +17,8 @@ public sealed class DWriteTextMeasurer(DWriteFonts fonts) : ITextMeasurer
     public float Width(ReadOnlySpan<char> text, FontRole role, int weight, float sizePx, float letterSpacingEm)
     {
         if (text.IsEmpty) return 0;
-        ulong key = Key(text, role, weight, sizePx, letterSpacingEm) | 1; // 0 marks an empty slot
+        ulong key = Key(text, role, weight, sizePx, letterSpacingEm);
+        if (key == 0) key = 1; // 0 marks an empty slot
         int slot = (int)(key % Slots);
         if (_keys[slot] == key) return _widths[slot];
         using (fonts.CreateLayout(new string(text), role, weight, sizePx, letterSpacingEm, false, out float width))

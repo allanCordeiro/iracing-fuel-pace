@@ -76,6 +76,7 @@ internal static class Program
         // Only the backend is needed before the host starts (it reads, and owns, settings.json); a locked file means "auto".
         var backend = new SettingsStore(options.AppDataRoot).Load(retryLocked: false).Overlay.RenderBackend;
         using var overlay = new OverlayWindow(backend, fonts, HostLog);
+        overlay.DpiChanged += monitors.Recheck; // the overlay's own monitor (the message window hears only the primary)
         var host = hostRef = new AgentHost(options, sources, overlay, window, new NullHotkeys(), new NullTrayIcon(), monitors,
             new SystemServices(), new DWriteTextMeasurer(fonts), TimeProvider.System);
         window.SessionEnding += () =>

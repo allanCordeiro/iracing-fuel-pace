@@ -165,6 +165,11 @@ public sealed class RenderTests
                 var list = Build(p, dpi, measurer);
                 int w = (int)Math.Ceiling(list.Size.W), h = (int)Math.Ceiling(list.Size.H);
                 var px = warp.Render(list, w, h);
+                int pad = Padding * dpi, sw = w + 2 * pad, sh = h + 2 * pad;
+                var scene = warp.Render(list, sw, sh, dc => Scene(dc, sw, sh), new Vector2(pad, pad));
+                string path = Path.Combine(dir, $"{p.Name}@{dpi}x.png");
+                WritePng(path, scene, sw, sh);
+                Assert.True(new FileInfo(path).Length > 1000, path + " is empty");
                 int painted = 0;
                 for (int i = 3; i < px.Length; i += 4) if (px[i] != 0) painted++;
                 Assert.True(painted > w * h / 4, $"{p.Name}@{dpi}x: only {painted} of {w * h} pixels painted");
@@ -185,12 +190,6 @@ public sealed class RenderTests
                     Assert.True(Math.Abs(got.G - expected.G) <= 8, what);
                     Assert.True(Math.Abs(got.B - expected.B) <= 8, what);
                 }
-
-                int pad = Padding * dpi, sw = w + 2 * pad, sh = h + 2 * pad;
-                var scene = warp.Render(list, sw, sh, dc => Scene(dc, sw, sh), new Vector2(pad, pad));
-                string path = Path.Combine(dir, $"{p.Name}@{dpi}x.png");
-                WritePng(path, scene, sw, sh);
-                Assert.True(new FileInfo(path).Length > 1000, path + " is empty");
             }
     }
 
