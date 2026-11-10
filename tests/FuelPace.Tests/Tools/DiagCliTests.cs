@@ -134,6 +134,34 @@ public class DiagCliTests
         finally { Directory.Delete(dir, true); }
     }
 
+    [Fact] // PERF-02/04/05 are read from this table: columns apart, numbers rounded
+    public void Diag_cli_perf_table_columns_are_separated_and_rounded()
+    {
+        var dir = Fixtures.TempPath(".d");
+        Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        File.WriteAllText(Path.Combine(dir, "logs", "fuelpace-20261109-1.jsonl"),
+            Line("2026-11-09T14:01:00.000Z", 1, "info", "\"st\":60,\"cat\":\"perf\",\"ev\":\"PerfMinute\",\"gen0Delta\":123456,\"publishes\":600,\"tickP99Us\":41.7,\"tickMaxUs\":1234567.891,\"workingSetMB\":73.43359375,\"droppedDiag\":0") + "\n" +
+            Line("2026-11-09T14:01:00.500Z", 2, "info", "\"cat\":\"perf\",\"ev\":\"MemoryMinute\",\"assemblies\":41,\"gen2\":3,\"workingSetMB\":73.4,\"privateMB\":51.25,\"gcHeapMB\":3.14159,\"gcCommittedMB\":6.5") + "\n" +
+            Line("2026-11-09T14:01:01.000Z", 3, "info", "\"st\":61,\"cat\":\"telemetry\",\"ev\":\"LiveStats\",\"waitTimeouts\":2,\"staleWakeups\":7,\"frames\":3600,\"backoffs\":4,\"maxStaleRun\":7,\"framesAfterTimeout\":1") + "\n");
+        try
+        {
+            var text = Run(dir, out int code);
+            Assert.Equal(0, code);
+            var lines = text.Split('\n');
+            int h = Array.FindIndex(lines, l => l.StartsWith("-- PerfMinute --", StringComparison.Ordinal));
+            string row = lines[h + 2];
+            var cells = row.Split("  ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            // hora, tick p99, tick máx, gen0, WS, privada, GC, redesenhos
+            Assert.Equal(["2026-11-09 14:01:00.000Z", "42", "1234568", "123456", "73.4", "51.3", "3.1", "-"], cells);
+            Assert.Contains("WS 73 MB", text); // the maxima line
+            int ls = Array.FindIndex(lines, l => l.StartsWith("-- LiveStats --", StringComparison.Ordinal));
+            Assert.True(ls > 0, text);
+            var live = lines[ls + 2].Split("  ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            Assert.Equal(["2026-11-09 14:01:01.000Z", "2", "7", "3600", "4", "7", "1"], live);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
     [Fact]
     public void Diag_cli_rejects_missing_path()
     {

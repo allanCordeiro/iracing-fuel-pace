@@ -161,21 +161,58 @@ internal static class DiagSummary
         w.WriteLine();
         w.WriteLine("-- PerfMinute --");
         var perf = events.Where(e => e.Name == "PerfMinute").ToList();
-        if (perf.Count == 0) { w.WriteLine("(nenhum)"); return; }
-        var redraws = events.Where(e => e.Name == "OverlayRedraws").ToList();
-        w.WriteLine($"{"hora (UTC)",-24}{"tick p99 µs",12}{"tick máx µs",12}{"gen0",6}{"WS MB",8}{"redesenhos/min",16}");
-        foreach (var p in perf.Take(MaxLinesPerSection))
+        if (perf.Count == 0) { w.WriteLine("(nenhum)"); }
+        else
         {
-            var r = redraws.FirstOrDefault(x => Math.Abs((x.T - p.T).TotalSeconds) <= 30);
-            w.WriteLine($"{Stamp(p.T),-24}{Num(p.Json, "tickP99Us"),12}{Num(p.Json, "tickMaxUs"),12}{Num(p.Json, "gen0Delta"),6}{Num(p.Json, "workingSetMB"),8}{(r is null ? "-" : Num(r.Json, "perMinute")),16}");
+            var redraws = events.Where(e => e.Name == "OverlayRedraws").ToList();
+            var memory = events.Where(e => e.Name == "MemoryMinute").ToList();
+            int[] widths = [24, 11, 11, 8, 7, 10, 7, 14];
+            w.WriteLine(Row(widths, "hora (UTC)", "tick p99 µs", "tick máx µs", "gen0", "WS MB", "privada MB", "GC MB", "redesenhos/min"));
+            foreach (var p in perf.Take(MaxLinesPerSection))
+            {
+                var r = Near(redraws, p);
+                var m = Near(memory, p);
+                w.WriteLine(Row(widths, Stamp(p.T), Num(p.Json, "tickP99Us", 0), Num(p.Json, "tickMaxUs", 0), Num(p.Json, "gen0Delta", 0),
+                    Num(p.Json, "workingSetMB", 1), m is null ? "-" : Num(m.Json, "privateMB", 1),
+                    m is null ? "-" : Num(m.Json, "gcHeapMB", 1), r is null ? "-" : Num(r.Json, "perMinute", 0)));
+            }
+            if (perf.Count > MaxLinesPerSection) w.WriteLine($"... mais {perf.Count - MaxLinesPerSection} omitido(s)");
+            double Max(string k) => perf.Max(p => p.Json.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : 0);
+            w.WriteLine($"máximos: tick p99 {Max("tickP99Us").ToString("F0", Inv)} µs, tick máx {Max("tickMaxUs").ToString("F0", Inv)} µs, WS {Max("workingSetMB").ToString("F0", Inv)} MB");
         }
-        if (perf.Count > MaxLinesPerSection) w.WriteLine($"... mais {perf.Count - MaxLinesPerSection} omitido(s)");
-        double Max(string k) => perf.Max(p => p.Json.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : 0);
-        w.WriteLine($"máximos: tick p99 {Max("tickP99Us").ToString("F0", Inv)} µs, tick máx {Max("tickMaxUs").ToString("F0", Inv)} µs, WS {Max("workingSetMB").ToString("F0", Inv)} MB");
+
+        // Ruling A21: how the sim's data-valid event behaves (timed-out waits, wakeups without a new tick, back-offs).
+        w.WriteLine();
+        w.WriteLine("-- LiveStats --");
+        var live = events.Where(e => e.Name == "LiveStats").ToList();
+        if (live.Count == 0) { w.WriteLine("(nenhum)"); return; }
+        int[] lw = [24, 17, 16, 8, 7, 10, 20];
+        w.WriteLine(Row(lw, "hora (UTC)", "esperas expiradas", "acordou sem tick", "quadros", "pausas", "maior seq.", "quadros após timeout"));
+        foreach (var l in live.Take(MaxLinesPerSection))
+            w.WriteLine(Row(lw, Stamp(l.T), Num(l.Json, "waitTimeouts", 0), Num(l.Json, "staleWakeups", 0), Num(l.Json, "frames", 0),
+                Num(l.Json, "backoffs", 0), Num(l.Json, "maxStaleRun", 0), Num(l.Json, "framesAfterTimeout", 0)));
+        if (live.Count > MaxLinesPerSection) w.WriteLine($"... mais {live.Count - MaxLinesPerSection} omitido(s)");
     }
 
-    private static string Num(JsonElement j, string key) =>
-        j.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetRawText() : "-";
+    private static Ev? Near(List<Ev> list, Ev p) => list.FirstOrDefault(x => Math.Abs((x.T - p.T).TotalSeconds) <= 30);
+
+    /// <summary>The first cell left-aligned, the others right-aligned, always two spaces apart (a wide value never touches
+    /// its neighbor).</summary>
+    private static string Row(int[] widths, params string[] cells)
+    {
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < cells.Length; i++)
+        {
+            if (i > 0) sb.Append("  ");
+            sb.Append(i == 0 ? cells[i].PadRight(widths[i]) : cells[i].PadLeft(widths[i]));
+        }
+        return sb.ToString().TrimEnd();
+    }
+
+    private static string Num(JsonElement j, string key, int decimals) =>
+        j.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Number
+            ? Math.Round(v.GetDouble(), decimals, MidpointRounding.AwayFromZero).ToString("F" + decimals.ToString(Inv), Inv)
+            : "-";
 
     private static void Recordings(Source src, TextWriter w)
     {
