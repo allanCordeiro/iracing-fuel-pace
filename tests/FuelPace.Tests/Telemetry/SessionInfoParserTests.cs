@@ -63,15 +63,19 @@ public class SessionInfoParserTests
     }
 
     [Theory]
-    [InlineData("TeamName: \"C:\\Users\\bob\"", "\"C:\\Users\\bob\"")]
-    [InlineData("UserName: \"x\\y\"", "\"x\\y\"")]
-    [InlineData("UserName: \"a\\tb\"", "\"a\\tb\"")]
-    public void Double_quoted_values_with_unknown_escapes_are_taken_literally(string line, string expected)   // N-1
+    [InlineData("TeamName", "\"C:\\Users\\bob\"", "C:\\Users\\bob")]
+    [InlineData("UserName", "\"x\\y\"", "x\\y")]
+    [InlineData("UserName", "\"a\\tb\"", "a\\tb")]
+    [InlineData("UserName", "\"x\\\\y\"", "x\\y")]            // valid escape: unchanged, YAML unescapes it
+    [InlineData("UserName", "\"a \\\"b\\\" c\"", "a \"b\" c")]
+    public void Double_quoted_values_parse_to_their_text(string key, string value, string expected)   // N-1
     {
-        var yaml = SampleYaml.Zolder.Replace("   UserName: Allan Cordeiro\n", "   " + line + "\n");
-        Assert.Contains(line, yaml);
-        Assert.Contains(line[..(line.IndexOf(':') + 2)] + "'" + expected + "'", SessionInfoParser.Sanitize(yaml));
+        var yaml = SampleYaml.Zolder.Replace("   UserName: Allan Cordeiro\n", "   " + key + ": " + value + "\n");
+        Assert.Contains(value, yaml);
         Assert.Equal("ligierjsp320", SessionInfoParser.Parse(yaml).CarPath);
+        var parsed = new YamlDotNet.Serialization.DeserializerBuilder().Build()
+            .Deserialize<Dictionary<string, string>>(SessionInfoParser.Sanitize(key + ": " + value));
+        Assert.Equal(expected, parsed[key]);
     }
 
     [Theory]

@@ -31,9 +31,22 @@ public static partial class SessionInfoParser
             if (!m.Success) continue;
             var value = m.Groups[2].Value;
             if (FullyQuoted().IsMatch(value)) continue;
+            // A complete "..." scalar whose escapes YAML would reject (a Windows path, "x\y"): its text is literal, so drop
+            // the outer quotes. A value that merely starts with a quote ("Rocket" Joe, "x\") is quoted whole.
+            if (value.Length >= 2 && value[0] == '"' && value[^1] == '"' && IsLiteralInner(value.AsSpan(1, value.Length - 2)))
+                value = value[1..^1];
             lines[i] = m.Groups[1].Value + "'" + value.Replace("'", "''") + "'";
         }
         return string.Join('\n', lines);
+    }
+
+    /// <summary>No quote inside and no trailing odd run of backslashes (that last <c>"</c> would be an escaped quote, not a closer).</summary>
+    private static bool IsLiteralInner(ReadOnlySpan<char> inner)
+    {
+        if (inner.Contains('"')) return false;
+        int slashes = 0;
+        for (int i = inner.Length - 1; i >= 0 && inner[i] == '\\'; i--) slashes++;
+        return slashes % 2 == 0;
     }
 
     public static SessionInfo Parse(string yaml)
