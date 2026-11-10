@@ -51,7 +51,7 @@ public class ProfileStoreTests : IDisposable
     public void File_name_is_windows_safe(string car, string track, string expected) { Assert.Equal(expected, ProfileStore.FileNameFor(car, track)); }
 
     [Fact]
-    public async Task Save_retries_when_target_is_locked()
+    public void Save_retries_when_target_is_locked()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "rename over an open file only fails on Windows");
         var store = new ProfileStore(_root);
@@ -59,9 +59,11 @@ public class ProfileStoreTests : IDisposable
         store.Save(doc);
         var path = store.PathFor(doc.Car.Path, doc.Track.Name);
         using var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
-        var release = Task.Run(async () => { await Task.Delay(150, TestContext.Current.CancellationToken); locked.Dispose(); }, TestContext.Current.CancellationToken);
+        // A thread of its own: a pool task can be starved on a busy CI runner past the save's retry budget (1.5 s).
+        var release = new Thread(() => { Thread.Sleep(150); locked.Dispose(); }) { IsBackground = true };
+        release.Start();
         store.Save(doc);
-        await release;
+        release.Join();
         Assert.NotNull(store.Load(doc.Car.Path, doc.Track.Name));
     }
 
