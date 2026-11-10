@@ -53,7 +53,10 @@ public sealed class EndToEndTests
         Assert.Equal(1, first.Count("SourceOpened"));
         Assert.Equal(1, first.Events("SourceEnded").Single().GetProperty("reason").GetInt32()); // disconnected, not EOF
 
-        // Started only now: a sim back within 2 s would be the same connection (the sim reloading), by design.
+        // Started only now: a sim back within 2 s would be the same connection (the sim reloading), by design. And not
+        // right after SourceEnded is logged: the Agent closes its view of the old mapping just after, and FakeSim refuses
+        // to start while a mapping of that name still exists.
+        await Task.Delay(TimeSpan.FromSeconds(1.5), run.Token);
         var sim2 = run.StartFakeSim("sim2", "--synthetic-race", "80", "--speed", "10", "--cars", "20", "--disconnect-after", "300");
         await run.WaitForLogAsync(l => l.Count("SourceOpened") == 2, "the Agent reconnecting");
         double reconnectedAtS = run.AgentElapsed.TotalSeconds;
