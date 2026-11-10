@@ -28,7 +28,7 @@ internal static class DiagSummary
         public virtual string? ReadText(string path)
         {
             try { using var r = new StreamReader(Open(path)); return r.ReadToEnd(); }
-            catch (Exception ex) when (ex is IOException or FileNotFoundException) { return null; }
+            catch (Exception ex) when (ex is IOException or InvalidDataException) { return null; }
         }
         /// <summary>A real file for <paramref name="path"/> (extracted to a temporary file for zips); <paramref name="temp"/> is true when it must be deleted.</summary>
         public abstract string Materialize(string path, out bool temp);
@@ -100,7 +100,7 @@ internal static class DiagSummary
         var logFiles = src.List("logs/").Where(f => f.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase)).ToArray();
         int invalid = 0;
         var events = new List<Ev>();
-        foreach (var f in logFiles) invalid += ReadLog(src, f, e => IsStructured(e) || e.Lvl is "error" or "warn" or "info", events);
+        foreach (var f in logFiles) invalid += ReadLog(src, f, e => e.Lvl is "error" or "warn" or "info", events);
         Sort(events);
         w.WriteLine();
         w.WriteLine($"Eventos: {events.Count} em {logFiles.Length} arquivo(s)" +
@@ -146,8 +146,6 @@ internal static class DiagSummary
         Recordings(src, w);
     }
 
-    private static bool IsStructured(Ev e) => e.Name is not null;
-
     private static void Section(TextWriter w, string title, IEnumerable<Ev> items, Action<Ev> print)
     {
         w.WriteLine();
@@ -187,9 +185,11 @@ internal static class DiagSummary
         if (files.Length == 0) { w.WriteLine("(nenhuma)"); return; }
         foreach (var f in files)
         {
-            string path = src.Materialize(f, out bool temp);
+            string path = "";
+            bool temp = false;
             try
             {
+                path = src.Materialize(f, out temp);
                 long size = new FileInfo(path).Length;
                 var (duration, laps, records) = Analyze(path);
                 string name = f["recordings/".Length..];
@@ -197,13 +197,13 @@ internal static class DiagSummary
                     ? $"{name}: {size.ToString("N0", Inv)} bytes, sem registros legíveis"
                     : $"{name}: {size.ToString("N0", Inv)} bytes, {records.ToString(Inv)} registros, {duration.ToString("F1", Inv)} s, {laps.ToString(Inv)} voltas detectadas");
             }
-            catch (Exception ex) when (ex is IOException or InvalidDataException or EndOfStreamException or ArgumentException)
+            catch (Exception ex)
             {
-                w.WriteLine($"{f}: ilegível ({ex.Message})");
+                w.WriteLine($"{f}: ilegível ({ex.GetType().Name}: {ex.Message})");
             }
             finally
             {
-                if (temp) try { File.Delete(path); } catch { }
+                if (temp && path.Length > 0) try { File.Delete(path); } catch { }
             }
         }
     }

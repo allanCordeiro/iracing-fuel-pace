@@ -34,7 +34,7 @@ public static class DiagnosticBundle
             zipPath = Path.Combine(destDir, baseName + "-" + n.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".zip");
 
         string tmp = zipPath + ".tmp";
-        var files = new List<(string Path, long Size)>();
+        var files = new List<(string Path, long Size, bool Partial)>();
         var skipped = new List<string>();
         int marks = 0;
         try
@@ -44,20 +44,32 @@ public static class DiagnosticBundle
             {
                 void Add(string source, string entry, bool countMarks = false)
                 {
+                    FileStream src;
                     try
                     {
-                        using var src = new FileStream(source, FileMode.Open, FileAccess.Read,
+                        src = new FileStream(source, FileMode.Open, FileAccess.Read,
                             FileShare.ReadWrite | FileShare.Delete, CopyBuffer, FileOptions.SequentialScan);
-                        var e = zip.CreateEntry(entry, CompressionLevel.Optimal);
-                        using var dst = e.Open();
-                        long size = countMarks ? CopyCountingMarks(src, dst, ref marks) : Copy(src, dst);
-                        files.Add((entry, size));
                     }
                     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                     {
-                        // the file vanished (log pruned) or is locked exclusively; the bundle is still worth having
-                        skipped.Add(entry + ": " + ex.Message);
-                        TryRemove(zip, entry);
+                        // vanished (log pruned) or locked exclusively; only the type is recorded (messages carry user paths)
+                        skipped.Add(Describe(entry, ex));
+                        return;
+                    }
+                    using (src)
+                    {
+                        // a failure writing the zip is not caught here: it fails the whole bundle
+                        using var dst = zip.CreateEntry(entry, CompressionLevel.Optimal).Open();
+                        try
+                        {
+                            long size = countMarks ? CopyCountingMarks(src, dst, ref marks) : Copy(src, dst);
+                            files.Add((entry, size, false));
+                        }
+                        catch (SourceReadException ex)
+                        {
+                            skipped.Add(Describe(entry, ex.InnerException!) + " (partial)");
+                            files.Add((entry, ex.Copied, true));
+                        }
                     }
                 }
 
@@ -77,7 +89,7 @@ public static class DiagnosticBundle
                 foreach (var (k, v) in systemInfo)
                     sys.Append(k).Append(": ").Append(v.Replace("\r\n", " | ").Replace('\n', ' ').Replace('\r', ' ')).Append('\n');
                 WriteText(zip, "system-info.txt", sys.ToString());
-                files.Add(("system-info.txt", Encoding.UTF8.GetByteCount(sys.ToString())));
+                files.Add(("system-info.txt", Encoding.UTF8.GetByteCount(sys.ToString()), false));
 
                 WriteText(zip, "manifest.json", BuildManifest(systemInfo, now, marks, files, skipped));
             }
@@ -90,12 +102,12 @@ public static class DiagnosticBundle
         }
 
         log.Emit(DiagLevel.Info, AppDiagEvents.BundleCreated, double.NaN, i0: files.Count + 1);
-        log.Text(DiagLevel.Info, "app", "diagnostic bundle created: " + zipPath);
+        log.Text(DiagLevel.Info, "app", "diagnostic bundle created: " + Path.GetFileName(zipPath));
         return zipPath;
     }
 
     private static string BuildManifest(IReadOnlyDictionary<string, string> info, DateTimeOffset now, int marks,
-        List<(string Path, long Size)> files, List<string> skipped)
+        List<(string Path, long Size, bool Partial)> files, List<string> skipped)
     {
         using var ms = new MemoryStream();
         using (var w = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = true }))
@@ -105,11 +117,12 @@ public static class DiagnosticBundle
             w.WriteString("createdUtc", now.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture));
             w.WriteNumber("userMarks", marks);
             w.WriteStartArray("files");
-            foreach (var (p, s) in files)
+            foreach (var (p, s, partial) in files)
             {
                 w.WriteStartObject();
                 w.WriteString("path", p);
                 w.WriteNumber("size", s);
+                if (partial) w.WriteBoolean("partial", true);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -127,9 +140,19 @@ public static class DiagnosticBundle
         w.Write(text);
     }
 
-    private static void TryRemove(ZipArchive zip, string entry)
+    private static string Describe(string entry, Exception ex) =>
+        entry + ": " + ex.GetType().Name + " 0x" + ex.HResult.ToString("X8", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>Reading the source failed mid-copy (not the zip); carries how many bytes made it into the entry.</summary>
+    private sealed class SourceReadException(Exception inner, long copied) : Exception(null, inner)
     {
-        try { zip.GetEntry(entry)?.Delete(); } catch { }
+        public long Copied { get; } = copied;
+    }
+
+    private static int ReadSource(Stream src, byte[] buf, long copied)
+    {
+        try { return src.Read(buf, 0, buf.Length); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { throw new SourceReadException(ex, copied); }
     }
 
     private static string[] Sorted(string dir, string pattern)
@@ -161,7 +184,7 @@ public static class DiagnosticBundle
         var buf = new byte[CopyBuffer];
         long total = 0;
         int n;
-        while ((n = src.Read(buf, 0, buf.Length)) > 0) { dst.Write(buf, 0, n); total += n; }
+        while ((n = ReadSource(src, buf, total)) > 0) { dst.Write(buf, 0, n); total += n; }
         return total;
     }
 
@@ -174,7 +197,7 @@ public static class DiagnosticBundle
         var line = new List<byte>(256);
         long total = 0;
         int n;
-        while ((n = src.Read(buf, 0, buf.Length)) > 0)
+        while ((n = ReadSource(src, buf, total)) > 0)
         {
             dst.Write(buf, 0, n);
             total += n;

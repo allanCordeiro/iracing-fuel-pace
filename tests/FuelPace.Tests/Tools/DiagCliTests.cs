@@ -101,6 +101,24 @@ public class DiagCliTests
     }
 
     [Fact]
+    public void Diag_cli_shows_a_debug_event_near_a_mark_exactly_once()
+    {
+        var dir = Fixtures.TempPath(".d");
+        Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        File.WriteAllText(Path.Combine(dir, "logs", "fuelpace-20261109-1.jsonl"),
+            Line("2026-11-09T14:00:40.000Z", 1, "debug", "\"cat\":\"laps\",\"ev\":\"LapBoundary\",\"lap\":77") + "\n" +
+            Line("2026-11-09T14:00:50.000Z", 2, "info", "\"cat\":\"user\",\"ev\":\"UserMark\",\"markNumber\":1") + "\n" +
+            Line("2026-11-09T16:00:00.000Z", 3, "trace", "\"cat\":\"strategy\",\"ev\":\"StrategyTrace\",\"raceKind\":1") + "\n");
+        try
+        {
+            var text = Run(dir, out _);
+            Assert.Equal(1, text.Split("LapBoundary").Length - 1);
+            Assert.DoesNotContain("StrategyTrace", text);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
     public void Diag_cli_lists_recordings_with_duration_and_laps()
     {
         var dir = Fixtures.TempPath(".d");

@@ -142,6 +142,21 @@ public sealed class DiagnosticBundleTests : IDisposable
     }
 
     [Fact]
+    public void Manifest_and_log_contain_no_absolute_paths()
+    {
+        Populate();
+        AppDiagEvents.RegisterAll();
+        var log = new DiagLog(DiagLevel.Info);
+        var zip = DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, log, Clock);
+        var manifest = ReadEntry(zip, "manifest.json");
+        Assert.DoesNotContain(_root, manifest);
+        Assert.DoesNotContain(Path.GetTempPath(), manifest);
+        Assert.True(log.TryDequeueText(out var t));
+        Assert.DoesNotContain(Dest, t.Message);
+        Assert.Contains("FuelPace-diag-", t.Message);
+    }
+
+    [Fact]
     public void Emits_BundleCreated()
     {
         AppDiagEvents.RegisterAll();
