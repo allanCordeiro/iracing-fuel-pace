@@ -102,6 +102,29 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void Locked_file_gives_defaults_and_is_not_quarantined()
+    {
+        // FileShare.None makes the reader's open fail with IOException (a sharing violation on Windows, an flock
+        // conflict on Unix), like an antivirus holding the file at startup.
+        File.WriteAllText(SettingsPath, """{"overlay":{"scale":2}}""");
+        using (new FileStream(SettingsPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            Assert.Equal(new AppSettings().Normalize(), new SettingsStore(_dir).Load());
+        Assert.False(File.Exists(SettingsPath + ".corrupt"));
+        Assert.Equal(2.0, new SettingsStore(_dir).Load().Overlay.Scale);
+    }
+
+    [Fact]
+    public void Unreadable_path_gives_defaults_and_is_not_quarantined()
+    {
+        // Opening a directory as a file throws UnauthorizedAccessException on every OS.
+        Directory.CreateDirectory(SettingsPath);
+        Assert.Equal(new AppSettings().Normalize(), new SettingsStore(_dir).Load());
+        Assert.True(Directory.Exists(SettingsPath));
+        Assert.False(File.Exists(SettingsPath + ".corrupt"));
+        Assert.False(Directory.Exists(SettingsPath + ".corrupt"));
+    }
+
+    [Fact]
     public void Out_of_range_strategy_value_is_clamped_not_fatal()
     {
         File.WriteAllText(SettingsPath, """{"strategy":{"meanWindow":99,"reserveL":-3}}""");

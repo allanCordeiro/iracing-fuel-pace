@@ -8,13 +8,15 @@ public sealed class SettingsStore(string rootDir)
 {
     readonly string _path = Path.Combine(rootDir, "settings.json");
 
-    /// <summary>Absent file gives the defaults; a corrupt file is renamed to <c>.corrupt</c> and the defaults are returned.</summary>
+    /// <summary>
+    /// An absent or unreadable file (missing, locked by another process, access denied) gives the defaults and is left
+    /// alone; a corrupt file is renamed to <c>.corrupt</c> and the defaults are returned.
+    /// </summary>
     public AppSettings Load()
     {
         string text;
         try { text = AtomicFile.ReadAllText(_path); }
-        catch (FileNotFoundException) { return new AppSettings().Normalize(); }
-        catch (DirectoryNotFoundException) { return new AppSettings().Normalize(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return new AppSettings().Normalize(); }
 
         try
         {
