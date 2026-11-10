@@ -30,6 +30,8 @@ public sealed class CaptureSession : ILapSink
     /// Counts refer to the current capture, or the last one until the next <see cref="Start"/>.</summary>
     public int ValidCount => _validCount;
     public int TotalCount => _record?.Laps.Count ?? 0;
+    /// <summary>The lap recorded last (current capture, or the last one until the next <see cref="Start"/>).</summary>
+    public CapturedLap? LastLap => _record is { Laps.Count: > 0 } r ? r.Laps[^1] : null;
     public string ProfileKey { get; private set; } = "";
 
     public void Start(double sessionTime, string profileKey, string sessionType, CaptureConditions conditions)

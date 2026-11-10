@@ -20,6 +20,10 @@ public static class OverlayLayout
         new Builder(o, m, dest).Run(in s, carShort, trackShort);
     }
 
+    /// <summary>Where the panel's top-left corner sits inside the list (px): edit mode adds fixed-size chrome above and to
+    /// the left of it, so the window must start that far before the panel.</summary>
+    public static SizeF PanelOffset(bool editMode) => editMode ? new SizeF(EditMargin, BannerH + BannerGap) : default;
+
     // 1x metrics (px)
     const float PanelW = 300, PadV = 9, PadH = 11, Gap = 6, RowGap = 6;
     const float EditMargin = 7, BannerH = 21, BannerGap = 10, ChromeFont = 11;

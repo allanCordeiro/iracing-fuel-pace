@@ -107,10 +107,26 @@ public sealed class SettingsStoreTests : IDisposable
         // FileShare.None makes the reader's open fail with IOException (a sharing violation on Windows, an flock
         // conflict on Unix), like an antivirus holding the file at startup.
         File.WriteAllText(SettingsPath, """{"overlay":{"scale":2}}""");
+        var store = new SettingsStore(_dir);
         using (new FileStream(SettingsPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
-            Assert.Equal(new AppSettings().Normalize(), new SettingsStore(_dir).Load());
+        {
+            Assert.Equal(new AppSettings().Normalize(), store.Load());
+            Assert.True(store.LastLoadWasFallback);
+        }
         Assert.False(File.Exists(SettingsPath + ".corrupt"));
-        Assert.Equal(2.0, new SettingsStore(_dir).Load().Overlay.Scale);
+        Assert.Equal(2.0, store.Load().Overlay.Scale);
+        Assert.False(store.LastLoadWasFallback);
+    }
+
+    [Fact]
+    public void Only_an_unreadable_file_counts_as_a_fallback_load()
+    {
+        var store = new SettingsStore(_dir);
+        store.Load(); // missing
+        Assert.False(store.LastLoadWasFallback);
+        File.WriteAllText(SettingsPath, "{ not json");
+        store.Load(); // corrupt: quarantined, nothing of the user's is left to protect
+        Assert.False(store.LastLoadWasFallback);
     }
 
     [Fact]
@@ -118,7 +134,9 @@ public sealed class SettingsStoreTests : IDisposable
     {
         // Opening a directory as a file throws UnauthorizedAccessException on every OS.
         Directory.CreateDirectory(SettingsPath);
-        Assert.Equal(new AppSettings().Normalize(), new SettingsStore(_dir).Load());
+        var store = new SettingsStore(_dir);
+        Assert.Equal(new AppSettings().Normalize(), store.Load());
+        Assert.True(store.LastLoadWasFallback);
         Assert.True(Directory.Exists(SettingsPath));
         Assert.False(File.Exists(SettingsPath + ".corrupt"));
         Assert.False(Directory.Exists(SettingsPath + ".corrupt"));

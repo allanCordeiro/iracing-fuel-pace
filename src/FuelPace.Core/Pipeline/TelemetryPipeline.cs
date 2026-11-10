@@ -79,6 +79,12 @@ public sealed class TelemetryPipeline : ILapSink
     /// copy (the I/O thread works on the original); an exception they throw is logged and does not stop the save.</summary>
     public event Action<CaptureRecord, string>? CaptureCompleted;
 
+    /// <summary>Raised on the telemetry thread for each lap an active capture records, with the capture's valid and total
+    /// counts so far. The lap in progress at the stop is not reported here (it arrives with <see cref="CaptureCompleted"/>).
+    /// The lap belongs to the capture: copy what you need, do not keep or change it. An exception a subscriber throws is
+    /// logged.</summary>
+    public event Action<CapturedLap, int, int>? CaptureLapRecorded;
+
     /// <summary>Optional observer called on the telemetry thread for every lap the detector emits (including the lap in
     /// progress at <see cref="Flush"/>). Null by default; the call costs nothing when unset.</summary>
     public ILapSink? LapObserver { get; set; }
@@ -224,7 +230,13 @@ public sealed class TelemetryPipeline : ILapSink
 
     public void OnLapCompleted(in CompletedLap lap)
     {
+        int recorded = _capture.TotalCount;
         _capture.OnLapCompleted(in lap);
+        if (_capture.IsActive && _capture.TotalCount != recorded && CaptureLapRecorded is { } handlers)
+        {
+            try { handlers(_capture.LastLap!, _capture.ValidCount, _capture.TotalCount); }
+            catch (Exception e) { _log.Exception("capture", e); }
+        }
         LapObserver?.OnLapCompleted(in lap);
         if (!lap.Stats.EndObserved) return; // the lap in progress emitted by Flush is not a "last lap"
         _stint.OnLapCompleted(in lap);

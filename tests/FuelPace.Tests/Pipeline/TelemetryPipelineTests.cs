@@ -204,6 +204,28 @@ public class TelemetryPipelineTests
     }
 
     [Fact]
+    public void Capture_lap_recorded_reports_each_recorded_lap_with_running_counts()
+    {
+        using var rig = new Rig(new LapSim(lapTimeS: 20).SessionLaps(30).Run(5, endPct: 0.5), LapsRaceYaml(30));
+        var seen = new List<(int Lap, bool Valid, int ValidCount, int Total)>();
+        rig.Pipeline.CaptureLapRecorded += (l, v, t) => seen.Add((l.Lap, l.Valid, v, t));
+
+        rig.StepUntil(f => f.Lap == 2 && f.LapDistPct >= 0.5); // nothing is reported outside a capture
+        Assert.Empty(seen);
+
+        rig.Pipeline.RequestCaptureStart();
+        rig.StepUntil(f => f.Lap == 5 && f.LapDistPct >= 0.4); // laps 2 (started before the capture), 3 and 4 resolved
+        Assert.Equal([2, 3, 4], seen.Select(s => s.Lap));
+        Assert.Equal([false, true, true], seen.Select(s => s.Valid));
+        Assert.Equal([0, 1, 2], seen.Select(s => s.ValidCount));
+        Assert.Equal([1, 2, 3], seen.Select(s => s.Total));
+
+        rig.Pipeline.RequestCaptureStop();
+        rig.Step();
+        Assert.Equal(3, seen.Count); // the lap in progress at the stop travels with CaptureCompleted, not here
+    }
+
+    [Fact]
     public void Capture_is_kept_as_a_pending_file_when_the_profile_cannot_be_read()   // I-2a
     {
         using var dir = new TempDir();
