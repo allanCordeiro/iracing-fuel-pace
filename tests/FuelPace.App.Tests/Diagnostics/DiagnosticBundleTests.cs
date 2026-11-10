@@ -192,24 +192,25 @@ public sealed class DiagnosticBundleTests : IDisposable
     }
 
     [Fact] // A16: a big recording is not finished first; the copy stops within a chunk
-    public async Task A_bundle_cancelled_in_the_middle_of_a_recording_stops_promptly()
+    public void A_bundle_cancelled_in_the_middle_of_a_recording_stops_promptly()
     {
         Populate();
-        PutRandom("recordings/20261109-140000_big.ibt", 96);
+        PutRandom("recordings/20261109-140000_big.ibt", 96); // seconds of deflate: the cancel lands inside it
         using var cts = new CancellationTokenSource();
-        var task = Task.Run(() => DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, DiagLog.Null, Clock, null, cts.Token),
-            TestContext.Current.CancellationToken);
-        var end = DateTime.UtcNow + TimeSpan.FromSeconds(20);
-        while (!Directory.Exists(Dest) || Directory.GetFiles(Dest, "*.tmp").Length == 0)
+        var sinceCancel = new System.Diagnostics.Stopwatch();
+        cts.Token.Register(sinceCancel.Start); // runs on the cancelling thread, at the cancel itself
+        Exception? thrown = null;
+        // A thread of its own (a pool task can be starved on a busy runner); the flush runs just before the zip starts.
+        var t = new Thread(() =>
         {
-            Assert.True(DateTime.UtcNow < end, "the bundle never started");
-            await Task.Delay(1, TestContext.Current.CancellationToken);
-        }
-        await Task.Delay(100, TestContext.Current.CancellationToken); // inside the recording by now
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        cts.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => task);
-        Assert.True(sw.Elapsed < TimeSpan.FromMilliseconds(500), $"stopped {sw.Elapsed.TotalMilliseconds:F0} ms after the cancel");
+            try { DiagnosticBundle.Create(Data, Dest, new BundleOptions(), Info, DiagLog.Null, Clock, () => cts.CancelAfter(300), cts.Token); }
+            catch (Exception e) { thrown = e; }
+            sinceCancel.Stop();
+        });
+        t.Start();
+        Assert.True(t.Join(TimeSpan.FromSeconds(60)), "the bundle did not end");
+        Assert.IsAssignableFrom<OperationCanceledException>(thrown);
+        Assert.True(sinceCancel.Elapsed < TimeSpan.FromMilliseconds(500), $"stopped {sinceCancel.Elapsed.TotalMilliseconds:F0} ms after the cancel");
         Assert.Empty(Directory.GetFiles(Dest));
     }
 }
