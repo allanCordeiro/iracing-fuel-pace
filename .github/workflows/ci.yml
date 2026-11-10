@@ -50,6 +50,13 @@ jobs:
       - name: Package
         shell: pwsh
         run: pwsh build/package.ps1 -Version $env:FP_VERSION -OutDir out
+      # Runs the shipped zips from an unpacked copy (not the test bin folder): Agent, Settings, Agent + FakeSim, Replay diag,
+      # and the PERF-05 working-set measurement of the normal zip (results in the job summary and artifacts/package-smoke/).
+      - name: Package smoke
+        shell: pwsh
+        timeout-minutes: 20
+        run: |
+          ./build/smoke-package.ps1 -OutDir out -Variants 'baseline','DOTNET_TieredPGO=0','DOTNET_gcConcurrent=0','DOTNET_GCConserveMemory=5','DOTNET_GCgen0size=0x400000','DOTNET_TieredCompilation=0','DOTNET_TieredPGO=0;DOTNET_gcConcurrent=0'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
