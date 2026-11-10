@@ -11,8 +11,10 @@ namespace FuelPace.FakeSim;
 /// <see cref="IrsdkLiveImageWriter"/> lays out (3 rotating buffers, rising <c>tickCount</c> published after the row) and the
 /// named data-valid event.
 /// <list type="bullet">
-/// <item>The mapping is created or opened, as the sim's <c>CreateFileMapping</c> does: a reader still holding the previous
-/// run's mapping (it has not noticed the sim left yet) sees the same memory come back.</item>
+/// <item>The mapping and the event are always created new: when either name already exists (iRacing, or another sim, is
+/// open; or a reader still holds the previous run's mapping because it has not noticed that run left yet)
+/// <see cref="Create"/> throws <see cref="NamesInUseException"/> and nothing is written. Opening iRacing's live mapping would
+/// overwrite what every telemetry tool reads, and a FakeSim mapping left open would be handed to iRacing when it starts.</item>
 /// <item>The event is manual-reset and pulsed once per frame (<c>PulseEvent</c>): every client waiting at that moment wakes
 /// (the Agent next to SimHub, say) and none is left signaled. An auto-reset event would wake only one of several readers.
 /// The Agent's reader does not depend on the mode: it waits at most 200 ms and then reads the newest buffer, so a pulse it
@@ -44,8 +46,8 @@ internal sealed unsafe partial class SharedMemorySim : IDisposable
         _yaml = yaml;
     }
 
-    /// <summary>Creates (or opens) the mapping and the event and writes the headers and <paramref name="yaml"/>: the image is
-    /// in a session (status bit on), with no frame yet.</summary>
+    /// <summary>Creates the mapping and the event and writes the headers and <paramref name="yaml"/>: the image is in a session
+    /// (status bit on), with no frame yet. <see cref="NamesInUseException"/> when either name exists already.</summary>
     public static SharedMemorySim Create(string mapName, string eventName, IReadOnlyList<VarSpec> vars, string yaml)
     {
         var writer = new IrsdkLiveImageWriter(vars, numBuf: 3);
@@ -55,12 +57,11 @@ internal sealed unsafe partial class SharedMemorySim : IDisposable
         bool acquired = false;
         try
         {
-            map = MemoryMappedFile.CreateOrOpen(mapName, writer.TotalSize, MemoryMappedFileAccess.ReadWrite);
+            try { map = MemoryMappedFile.CreateNew(mapName, writer.TotalSize, MemoryMappedFileAccess.ReadWrite); }
+            catch (IOException e) when (e.HResult == ErrorAlreadyExists) { throw new NamesInUseException(mapName); }
+            ev = new EventWaitHandle(false, EventResetMode.ManualReset, eventName, out bool createdNew);
+            if (!createdNew) throw new NamesInUseException(eventName);
             view = map.CreateViewAccessor(0, 0, MemoryMappedFileAccess.ReadWrite);
-            if (view.Capacity < writer.TotalSize)
-                throw new IOException($"a mapping named {mapName} already exists with {view.Capacity} bytes; this layout needs "
-                    + $"{writer.TotalSize} (is another sim running?)");
-            ev = new EventWaitHandle(false, EventResetMode.ManualReset, eventName);
             byte* p = null;
             view.SafeMemoryMappedViewHandle.AcquirePointer(ref p);
             acquired = true;
@@ -81,7 +82,10 @@ internal sealed unsafe partial class SharedMemorySim : IDisposable
         }
     }
 
-    /// <summary>Bytes of the image (the mapping may be larger: page-rounded, or left by a bigger layout).</summary>
+    /// <summary>HRESULT of ERROR_ALREADY_EXISTS (183), what <c>CreateNew</c> reports for a name that is taken.</summary>
+    private const int ErrorAlreadyExists = unchecked((int)0x800700B7);
+
+    /// <summary>Bytes of the image (the mapping is page-rounded).</summary>
     public int Size => _writer.TotalSize;
 
     private Span<byte> Image => new(_ptr, _writer.TotalSize);
@@ -117,6 +121,15 @@ internal sealed unsafe partial class SharedMemorySim : IDisposable
         _view.Dispose();
         _map.Dispose();
         _event.Dispose();
+    }
+
+    /// <summary>The mapping or the event name exists already: iRacing (or another sim) is open, or a reader still holds a
+    /// previous FakeSim's memory.</summary>
+    public sealed class NamesInUseException(string name) : IOException(
+        $"{name} already exists: iRacing (or another sim) is open, or the Agent has not yet noticed that a previous FakeSim " +
+        "left (wait a few seconds). FakeSim never writes into a mapping it did not create: close iRacing first.")
+    {
+        public string Name { get; } = name;
     }
 
     [LibraryImport("kernel32.dll", SetLastError = true)]

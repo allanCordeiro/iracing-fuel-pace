@@ -17,7 +17,8 @@ namespace FuelPace.FakeSim;
 /// them, and a new session info (a new <c>sessionInfoUpdate</c>) at every lap the player completes. At the end of the
 /// source (unless <c>--loop</c> starts it again, like a replay rewound), after <c>--disconnect-after</c> seconds or on
 /// Ctrl+C / Ctrl+Break / closing the console, the status bit is cleared and the handles are closed: the Agent sees the sim
-/// leave. Exit codes: 0 done, 1 failure, 2 bad command line.
+/// leave. It never opens a mapping or an event that already exists (iRacing open, see <see cref="SharedMemorySim"/>).
+/// Exit codes: 0 done, 1 failure, 2 bad command line or the names already in use (nothing was written).
 /// </para>
 /// </summary>
 internal static partial class Program
@@ -47,6 +48,11 @@ internal static partial class Program
         using var sigHup = PosixSignalRegistration.Create(PosixSignal.SIGHUP, OnSignal);
         using var sigTerm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, OnSignal);
         try { return Run(options, stop.Token); }
+        catch (SharedMemorySim.NamesInUseException e)
+        {
+            Console.Error.WriteLine("FakeSim refused: " + e.Message);
+            return 2;
+        }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or FormatException
                                       or InvalidDataException or WaitHandleCannotBeOpenedException)
         {
