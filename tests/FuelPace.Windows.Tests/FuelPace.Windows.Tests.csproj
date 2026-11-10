@@ -13,6 +13,8 @@
     <ProjectReference Include="..\..\src\FuelPace.App\FuelPace.App.csproj" />
     <ProjectReference Include="..\..\src\FuelPace.Agent\FuelPace.Agent.csproj" />
     <ProjectReference Include="..\..\src\FuelPace.Settings\FuelPace.Settings.csproj" />
+    <!-- EndToEndTests start FuelPace.FakeSim.exe from the test folder -->
+    <ProjectReference Include="..\..\tools\FuelPace.FakeSim\FuelPace.FakeSim.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />

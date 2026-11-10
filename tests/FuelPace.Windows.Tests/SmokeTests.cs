@@ -2,6 +2,7 @@ using System.Diagnostics;
 
 namespace FuelPace.Windows.Tests;
 
+[Collection(AgentProcessCollection.Name)] // the Agent's mutex and pipe are machine-wide
 public class SmokeTests
 {
     [Fact]

@@ -4,8 +4,11 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <IsPackable>false</IsPackable>
     <RootNamespace>FuelPace.FakeSim</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\FuelPace.Core\FuelPace.Core.csproj" />
+    <!-- IrsdkLiveImageWriter and SyntheticRace -->
+    <ProjectReference Include="..\..\src\FuelPace.App\FuelPace.App.csproj" />
   </ItemGroup>
 </Project>
