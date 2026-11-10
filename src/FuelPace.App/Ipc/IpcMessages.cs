@@ -66,8 +66,12 @@ public sealed record CapturedLapDto(int Lap, double? TimeS, double FuelL, double
 /// <param name="Confidence">"Baixa" | "Media" | "Alta"; null when the profile has no baseline.</param>
 public sealed record ProfileSummary(string Key, string CarName, string TrackName, int Captures, int ValidLaps, string? Confidence);
 
+/// <param name="TankCapacityL">Of the current car (null without a session).</param>
+/// <param name="CaptureId">Id of the capture that last finished in this session, the one the lap table can edit; null while a capture runs.</param>
+/// <param name="MonitorDeviceNames">GDI device name of each entry of <paramref name="MonitorLabels"/>, same order (what <c>OverlaySettings.MonitorDeviceName</c> holds).</param>
 public sealed record AgentSnapshot(
     string Version, bool SimConnected, string? ProfileKey, string? CarName, string? TrackName, string? SessionType,
     bool CaptureActive, IReadOnlyList<CapturedLapDto> CaptureLaps, int Valid, int Total, AppSettings Settings,
     bool DebugMode, string OverlayBackend, bool FullscreenExclusive,
-    IReadOnlyList<string> HotkeyFailures, IReadOnlyList<string> MonitorLabels);
+    IReadOnlyList<string> HotkeyFailures, IReadOnlyList<string> MonitorLabels,
+    double? TankCapacityL = null, string? CaptureId = null, IReadOnlyList<string>? MonitorDeviceNames = null);

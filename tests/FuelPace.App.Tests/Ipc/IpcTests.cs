@@ -17,7 +17,8 @@ public sealed class IpcTests
     static AgentSnapshot Snap(string version = "0.1.0") => new(
         version, true, "car__track", "Ligier JS P320", "Zolder Alt", "Race", true,
         [new CapturedLapDto(3, 92.123, 2.5, 71.5, ["pit"], false), new CapturedLapDto(4, null, double.NaN, 50, [], true)],
-        1, 2, new AppSettings(), true, "layered", false, ["Ctrl+Shift+F"], ["\\\\.\\DISPLAY1"]);
+        1, 2, new AppSettings(), true, "layered", false, ["Ctrl+Shift+F"], ["\\\\.\\DISPLAY1"],
+        100, "2026-10-29T20:03:40Z", ["\\\\.\\DISPLAY1"]);
 
     static async Task<T> WaitFor<T>(Func<T?> probe) where T : class
     {

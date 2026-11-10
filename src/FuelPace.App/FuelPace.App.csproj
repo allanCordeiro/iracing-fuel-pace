@@ -7,6 +7,9 @@
     <ProjectReference Include="..\FuelPace.Core\FuelPace.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+  <ItemGroup>
     <InternalsVisibleTo Include="FuelPace.App.Tests" />
     <InternalsVisibleTo Include="FuelPace.Windows.Tests" />
     <!-- Program reads AgentHost.Log for the live reader (TornRead) -->

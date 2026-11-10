@@ -114,6 +114,35 @@ public sealed class AgentHostTests
         Assert.True(snap.CaptureActive);
     }
 
+    [Fact] // Task 14: what the Settings lap table needs to edit and summarize a capture
+    public async Task Snapshot_carries_tank_capture_id_and_monitor_device_names()
+    {
+        using var rig = new HostRig();
+        var src = rig.Race(6, gated: true);
+        rig.Sources.Then(() => src);
+        rig.Start();
+        var probe = await rig.ConnectAsync();
+
+        await probe.SendAndSync(new SetCapture(true));
+        src.Allow(1200 * 2 + 400);
+        rig.Settle(src, 1200 * 2 + 400);
+        var running = await probe.SendAndSync(new GetSnapshot());
+        Assert.True(running.CaptureActive);
+        Assert.Null(running.CaptureId); // no id until the capture is saved
+        Assert.Equal(RaceInfo.TankCapacityL, running.TankCapacityL);
+        Assert.Equal(running.MonitorLabels.Count, running.MonitorDeviceNames!.Count);
+        Assert.Equal(rig.Monitors.GetMonitors().Select(m => m.DeviceName), running.MonitorDeviceNames);
+
+        await probe.SendAndSync(new SetCapture(false));
+        src.Allow(12);
+        var finished = await probe.WaitFor<CaptureFinished>();
+        var after = await probe.SendAndSync(new GetSnapshot());
+        Assert.Equal(finished.CaptureId, after.CaptureId);
+
+        await probe.SendAndSync(new SetCapture(true));
+        Assert.Null((await probe.SendAndSync(new GetSnapshot())).CaptureId);
+    }
+
     [Fact] // criterion 12
     public async Task Capture_survives_settings_client_disconnect()
     {

@@ -114,6 +114,7 @@ public sealed partial class AgentHost
         }
         if (!_pipeline.CaptureActive)
         {
+            Volatile.Write(ref _lastCaptureId, null);
             using (_captureGate.EnterScope())
             {
                 _captureLaps = [];
@@ -135,11 +136,17 @@ public sealed partial class AgentHost
         }
         var monitors = _monitors;
         var labels = new string[monitors.Count];
-        for (int i = 0; i < labels.Length; i++) labels[i] = OverlayPlacement.DescribeForUi(monitors[i], i);
+        var devices = new string[monitors.Count];
+        for (int i = 0; i < labels.Length; i++)
+        {
+            labels[i] = OverlayPlacement.DescribeForUi(monitors[i], i);
+            devices[i] = monitors[i].DeviceName;
+        }
         return new AgentSnapshot(AppInfo.Version, _simConnected, info?.ProfileKey, info?.CarScreenName,
             info is null ? null : TrackLabel(info.TrackDisplayName, info.TrackConfigName),
             info?.FindSession(Volatile.Read(ref _sessionNum))?.Type, _pipeline.CaptureActive, laps, valid, laps.Count,
-            _settings, _debugMode, _surface.BackendName, _fullscreen, _hotkeyFailures, labels);
+            _settings, _debugMode, _surface.BackendName, _fullscreen, _hotkeyFailures, labels,
+            info?.TankCapacityL, _pipeline.CaptureActive ? null : Volatile.Read(ref _lastCaptureId), devices);
     }
 
     private static string TrackLabel(string display, string config) =>

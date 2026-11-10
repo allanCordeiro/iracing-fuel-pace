@@ -97,6 +97,7 @@ public sealed partial class AgentHost : IDisposable
     private int _sessionNum, _savePending, _connections;
     private Task? _recorderDisposal;
     private List<CapturedLapDto> _captureLaps = [];
+    private string? _lastCaptureId;
     private int _captureValid;
 
     // Telemetry thread only.
@@ -394,6 +395,7 @@ public sealed partial class AgentHost : IDisposable
             _captureLaps = laps;
             _captureValid = laps.Count(l => l.Valid);
         }
+        Volatile.Write(ref _lastCaptureId, rec.Id);
         Broadcast(new CaptureFinished(profileKey, rec.Id));
     }
 
