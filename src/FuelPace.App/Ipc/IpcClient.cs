@@ -26,6 +26,17 @@ public sealed class IpcClient : IAsyncDisposable
 
     public async Task<bool> ConnectAsync(TimeSpan timeout)
     {
+        if (_pipe != null)
+        {
+            // Reconnect: tear down the previous connection quietly (no Disconnected event for it).
+            Volatile.Write(ref _disposing, 1);
+            var old = _pipe; _pipe = null;
+            old.Dispose();
+            if (_readLoop != null) { try { await _readLoop.ConfigureAwait(false); } catch { } }
+            _readLoop = null;
+            Volatile.Write(ref _disconnected, 0);
+            Volatile.Write(ref _disposing, 0);
+        }
         var pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         try
         {

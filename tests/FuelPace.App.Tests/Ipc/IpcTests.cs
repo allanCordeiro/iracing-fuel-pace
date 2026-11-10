@@ -204,7 +204,16 @@ public sealed class IpcTests
         for (int i = 1; i < 4; i++) await clients[i].DisposeAsync();
     }
 
-    static readonly IpcServerOptions Fast = new(TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(300));
+    // Deadlines are generous (>= 1 s) so nothing that must stay alive can expire on a slow runner; drop tests observe the close from the client side.
+    static readonly IpcServerOptions Fast = new(TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(1));
+
+    static async Task AssertServerClosesAsync(NamedPipeClientStream raw)
+    {
+        var buf = new byte[16];
+        using var cts = new CancellationTokenSource(Timeout);
+        int n = await raw.ReadAsync(buf, cts.Token);
+        Assert.Equal(0, n);
+    }
 
     [Fact]
     public async Task Client_that_never_sends_is_dropped_and_slot_reused()
@@ -218,7 +227,7 @@ public sealed class IpcTests
             await raw.ConnectAsync((int)Timeout.TotalMilliseconds, TestContext.Current.CancellationToken);
             idle.Add(raw);
         }
-        await WaitUntil(() => server.ClientCount == 4);
+        foreach (var r in idle) await AssertServerClosesAsync(r);
         await WaitUntil(() => server.ClientCount == 0);
         await using var ok = await Connect(name);
         await ok.SendAsync(new Hello("0.1.0"));
@@ -231,12 +240,12 @@ public sealed class IpcTests
     {
         var name = NewName();
         // long handshake, short partial deadline: only the partial rule can fire
-        using var server = Server(name, (_, _) => ValueTask.CompletedTask, options: new(TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(300)));
+        using var server = Server(name, (_, _) => ValueTask.CompletedTask, options: new(TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(1)));
         await using var raw = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         await raw.ConnectAsync((int)Timeout.TotalMilliseconds, TestContext.Current.CancellationToken);
         await raw.WriteAsync("{\"type\":\"hel"u8.ToArray(), TestContext.Current.CancellationToken);
         await raw.FlushAsync(TestContext.Current.CancellationToken);
-        await WaitUntil(() => server.ClientCount == 1);
+        await AssertServerClosesAsync(raw);
         await WaitUntil(() => server.ClientCount == 0);
     }
 
@@ -249,7 +258,7 @@ public sealed class IpcTests
         IpcMessage? got = null;
         client.Received += m => got = m;
         await client.SendAsync(new Hello("0.1.0"));
-        await Task.Delay(1200, TestContext.Current.CancellationToken);
+        await Task.Delay(3500, TestContext.Current.CancellationToken); // well past both deadlines
         Assert.Equal(1, server.ClientCount);
         await server.BroadcastAsync(new Notice("info", "still here"));
         Assert.Equal(new Notice("info", "still here"), await WaitFor(() => got));
