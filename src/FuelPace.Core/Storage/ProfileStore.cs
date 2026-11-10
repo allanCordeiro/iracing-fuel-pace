@@ -136,6 +136,7 @@ public sealed class ProfileStore
                 ?? throw new JsonException("document is null");
             Validate(loaded);
             doc = loaded;
+            _log.Text(DiagLevel.Debug, "storage", "loaded " + path);
             return LoadResult.Loaded;
         }
         catch (JsonException e)

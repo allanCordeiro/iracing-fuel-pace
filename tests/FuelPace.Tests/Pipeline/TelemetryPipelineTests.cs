@@ -393,6 +393,39 @@ public class TelemetryPipelineTests
     }
 
     [Fact]
+    public void Unreadable_profile_keeps_the_profile_in_use_for_the_same_key()   // I-2b
+    {
+        using var rig = new Rig(new LapSim(lapTimeS: 20).SessionLaps(10).Run(1, endPct: 0.5), LapsRaceYaml(10));
+        rig.Step();
+        rig.Pipeline.OnSessionContext(rig.Info, DocWithFixtureBaseline(rig.Info));
+        for (int i = 0; i < 6; i++) rig.Step();
+        Assert.NotEqual(SignalState.NoBaseline, rig.Pipeline.Overlay.Read().State);
+
+        rig.Pipeline.OnSessionContextProfileUnavailable(rig.Info with { EstLapTimeS = 70 });
+        for (int i = 0; i < 6; i++) rig.Step();
+        Assert.NotEqual(SignalState.NoBaseline, rig.Pipeline.Overlay.Read().State);
+        Assert.False(rig.Pipeline.TryReuseProfile(rig.Info)); // the failed read is retried by the next session info
+
+        rig.Pipeline.OnSessionContextProfileUnavailable(rig.Info with { CarPath = "othercar" });
+        for (int i = 0; i < 6; i++) rig.Step();
+        Assert.Equal(SignalState.NoBaseline, rig.Pipeline.Overlay.Read().State);
+    }
+
+    [Fact]
+    public void TryReuseProfile_keeps_the_document_for_the_same_key_only()   // I-4
+    {
+        using var rig = new Rig(new LapSim(lapTimeS: 20).SessionLaps(10).Run(1, endPct: 0.5), LapsRaceYaml(10));
+        Assert.False(rig.Pipeline.TryReuseProfile(rig.Info)); // no context yet
+        rig.Step();
+        rig.Pipeline.OnSessionContext(rig.Info, DocWithFixtureBaseline(rig.Info));
+        Assert.True(rig.Pipeline.TryReuseProfile(rig.Info with { CarScreenNameShort = "JS P320" }));
+        Assert.Equal("JS P320", rig.Pipeline.CarShort);
+        for (int i = 0; i < 6; i++) rig.Step();
+        Assert.NotEqual(SignalState.NoBaseline, rig.Pipeline.Overlay.Read().State);
+        Assert.False(rig.Pipeline.TryReuseProfile(rig.Info with { TrackName = "spa" }));
+    }
+
+    [Fact]
     public void Car_and_track_short_names_follow_decision_3()
     {
         using var rig = new Rig(new LapSim(lapTimeS: 20).Run(0, endPct: 0.1), LapsRaceYaml(10));

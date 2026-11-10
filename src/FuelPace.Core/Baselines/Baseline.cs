@@ -8,10 +8,13 @@ public sealed record FuelVsTime(double A, double B);
 /// <summary>Car balance-of-performance values a capture was recorded under.</summary>
 public sealed record BopSignature(double PowerAdjustPct, double WeightPenaltyKg, double TankCapacityL)
 {
-    public bool Matches(BopSignature other) =>
-        Math.Abs(PowerAdjustPct - other.PowerAdjustPct) <= 0.01
-        && Math.Abs(WeightPenaltyKg - other.WeightPenaltyKg) <= 0.1
-        && Math.Abs(TankCapacityL - other.TankCapacityL) <= 0.1;
+    public bool Matches(BopSignature other) => Matches(other.PowerAdjustPct, other.WeightPenaltyKg, other.TankCapacityL);
+
+    /// <summary>Same test against raw values; allocation-free, for the telemetry thread.</summary>
+    public bool Matches(double powerAdjustPct, double weightPenaltyKg, double tankCapacityL) =>
+        Math.Abs(PowerAdjustPct - powerAdjustPct) <= 0.01
+        && Math.Abs(WeightPenaltyKg - weightPenaltyKg) <= 0.1
+        && Math.Abs(TankCapacityL - tankCapacityL) <= 0.1;
 }
 
 public sealed record Baseline(

@@ -95,12 +95,47 @@ public sealed class TelemetryPipeline : ILapSink
 
     public void OnLayout(VarLayout layout) => Volatile.Write(ref _layout, layout);
 
-    public void OnSessionContext(SessionInfo info, ProfileDocument? profile)
+    /// <summary>Installs the session info with the profile just loaded for it (null: none on disk).</summary>
+    public void OnSessionContext(SessionInfo info, ProfileDocument? profile) => Install(new SessionContext(info, profile, profileLoaded: true));
+
+    /// <summary>
+    /// I-4: installs <paramref name="info"/> keeping the profile already in use when it was loaded (or saved) for the same
+    /// <see cref="SessionInfo.ProfileKey"/>; the context is left alone when nothing it uses changed. False when the caller
+    /// must load the profile and call <see cref="OnSessionContext"/>: no context yet, another key, or the last load failed.
+    /// </summary>
+    public bool TryReuseProfile(SessionInfo info)
     {
-        var ctx = new SessionContext(info, profile);
+        while (true)
+        {
+            var cur = Volatile.Read(ref _ctx);
+            if (cur is null || !cur.ProfileLoaded || cur.ProfileKey != info.ProfileKey) return false;
+            if (SameInfo(cur.Info, info)) return true;
+            var next = new SessionContext(info, cur.Profile, profileLoaded: true);
+            if (ReferenceEquals(Interlocked.CompareExchange(ref _ctx, next, cur), cur))
+            {
+                Overlay.SetLabels(next.CarShort, next.TrackShort);
+                return true;
+            }
+        }
+    }
+
+    /// <summary>I-2b: the profile could not be read (I/O error). Keeps the profile in use for the same key (never replaced by
+    /// "no baseline"); otherwise installs the session with none. The next session-info change retries the load.</summary>
+    public void OnSessionContextProfileUnavailable(SessionInfo info)
+    {
+        var cur = Volatile.Read(ref _ctx);
+        var keep = cur is not null && cur.ProfileKey == info.ProfileKey ? cur.Profile : null;
+        Install(new SessionContext(info, keep, profileLoaded: false));
+    }
+
+    private void Install(SessionContext ctx)
+    {
         Volatile.Write(ref _ctx, ctx);
         Overlay.SetLabels(ctx.CarShort, ctx.TrackShort);
     }
+
+    private static bool SameInfo(SessionInfo a, SessionInfo b) =>
+        a.Sessions.SequenceEqual(b.Sessions) && a == b with { Sessions = a.Sessions };
 
     /// <summary>Takes effect on the next tick; a different <see cref="StrategyConfig.MeanWindow"/> only resizes the means (stint and history kept).</summary>
     public void SetConfig(StrategyConfig cfg) => Volatile.Write(ref _requestedCfg, cfg);
@@ -237,10 +272,9 @@ public sealed class TelemetryPipeline : ILapSink
             _bopCtx = ctx;
             _bopPower = f.PlayerCarPowerAdjust;
             _bopWeight = f.PlayerCarWeightPenalty;
-            var current = new BopSignature(f.PlayerCarPowerAdjust, f.PlayerCarWeightPenalty, ctx.Info.TankCapacityL);
             bool matched = false;
             foreach (var c in ctx.Conditions)
-                if (current.Matches(c)) { matched = true; break; }
+                if (c.Matches(f.PlayerCarPowerAdjust, f.PlayerCarWeightPenalty, ctx.Info.TankCapacityL)) { matched = true; break; }
             _bopMismatch = !matched;
         }
         return _bopMismatch;
@@ -352,7 +386,7 @@ public sealed class TelemetryPipeline : ILapSink
         {
             var cur = Volatile.Read(ref _ctx);
             if (cur is null || cur.ProfileKey != ctx.ProfileKey) return;
-            if (ReferenceEquals(Interlocked.CompareExchange(ref _ctx, new SessionContext(cur.Info, doc), cur), cur)) return;
+            if (ReferenceEquals(Interlocked.CompareExchange(ref _ctx, new SessionContext(cur.Info, doc, profileLoaded: true), cur), cur)) return;
         }
     }
 
@@ -363,9 +397,11 @@ public sealed class TelemetryPipeline : ILapSink
     /// <summary>Immutable snapshot of what the tick needs from the session info and the profile.</summary>
     private sealed class SessionContext
     {
-        public SessionContext(SessionInfo info, ProfileDocument? profile)
+        public SessionContext(SessionInfo info, ProfileDocument? profile, bool profileLoaded)
         {
             Info = info;
+            Profile = profile;
+            ProfileLoaded = profileLoaded;
             Baseline = profile?.Baseline;
             BaselineProfile = Baseline?.FuelProfile ?? [];
             Conditions = Baseline?.Conditions is { } c ? [.. c] : [];
@@ -379,6 +415,10 @@ public sealed class TelemetryPipeline : ILapSink
         }
 
         public SessionInfo Info { get; }
+        /// <summary>The document the baseline came from; reused while the profile key does not change (I-4).</summary>
+        public ProfileDocument? Profile { get; }
+        /// <summary>False when the profile could not be read: the next session-info change retries the load.</summary>
+        public bool ProfileLoaded { get; }
         public Baseline? Baseline { get; }
         public float[] BaselineProfile { get; }
         public BopSignature[] Conditions { get; }

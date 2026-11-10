@@ -18,7 +18,8 @@ public interface IFrameTap
 
 /// <summary>
 /// Pulls frames from an <see cref="ITelemetrySource"/> into a <see cref="TelemetryPipeline"/>. When the session-info version
-/// changes it parses the YAML and loads the profile, inline or on a background thread, and hands both to the pipeline.
+/// changes it parses the YAML (unless the text is unchanged) and, when the profile key changed, loads the profile, inline
+/// or on a background thread, and hands both to the pipeline. Inline mode (replay) does this on the telemetry thread.
 /// Times each processed frame in a fixed histogram and emits <see cref="DiagEvent.PerfMinute"/> every 60 s of wall clock
 /// (the pipeline's <see cref="TimeProvider"/>).
 /// Dispose the loop BEFORE disposing the source: it stops the session-info worker, which calls
@@ -27,6 +28,9 @@ public interface IFrameTap
 public sealed class TelemetryLoop : IDisposable
 {
     public const int BucketUs = 10, Buckets = 1000; // 10 µs buckets up to 10 ms, plus one overflow bucket
+    /// <summary>Reads of a locked profile before giving up until the next session-info change.</summary>
+    public const int ProfileLoadAttempts = 3;
+    private static readonly TimeSpan ProfileRetryDelay = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan PerfPeriod = TimeSpan.FromSeconds(60);
 
     private readonly ITelemetrySource _source;
@@ -49,6 +53,10 @@ public sealed class TelemetryLoop : IDisposable
     private int _pendingVersion;
     private double _pendingTime;
     private bool _stop;
+
+    // Session-info thread only: the last YAML text and what it parsed to (null if it did not parse).
+    private string? _lastYaml;
+    private SessionInfo? _lastInfo;
 
     private readonly int[] _histogram = new int[Buckets + 1];
     private int _samples;
@@ -200,37 +208,71 @@ public sealed class TelemetryLoop : IDisposable
         }
     }
 
+    /// <summary>
+    /// Session-info thread (the worker, or the telemetry thread when inline). I-4: identical YAML is not parsed again,
+    /// and the profile is read only when the profile key changes or its last read failed; otherwise the document in use
+    /// (kept current by the capture saves) is reused. I-2b: a read error is retried <see cref="ProfileLoadAttempts"/>
+    /// times, then the session is installed keeping any profile already in use for the key, and the next session-info
+    /// change tries again.
+    /// </summary>
     private void LoadSessionInfo(int version, double sessionTime)
     {
-        string yaml;
-        SessionInfo info;
         if (Volatile.Read(ref _stop)) return;
+        string yaml;
+        SessionInfo? info;
+        bool parsed = false;
         try
         {
             yaml = _source.ReadSessionInfoYaml();
-            info = SessionInfoParser.Parse(yaml);
+            if (string.Equals(yaml, _lastYaml, StringComparison.Ordinal))
+                info = _lastInfo; // null: this exact text already failed to parse (logged then)
+            else
+            {
+                _lastYaml = yaml;
+                _lastInfo = null;
+                _lastInfo = info = SessionInfoParser.Parse(yaml);
+                parsed = true;
+            }
         }
         catch (FormatException e)
         {
             _log.Text(DiagLevel.Warn, "telemetry", $"session info v{version} not parsed: {e.Message}");
             return;
         }
-
-        ProfileDocument? profile = null;
-        if (_store is not null)
-        {
-            try { profile = _store.Load(info.CarPath, info.TrackName); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                _log.Text(DiagLevel.Error, "storage", $"profile not loaded for {info.ProfileKey}: {e.Message}");
-            }
-        }
+        if (info is null) return;
 
         if (Volatile.Read(ref _latestVersion) != version) return; // superseded by a newer version
-        _pipeline.OnSessionContext(info, profile);
+        if (!_pipeline.TryReuseProfile(info))
+        {
+            bool loaded = TryLoadProfile(info, out var profile);
+            if (Volatile.Read(ref _latestVersion) != version) return;
+            if (loaded) _pipeline.OnSessionContext(info, profile);
+            else _pipeline.OnSessionContextProfileUnavailable(info);
+        }
         _log.Emit(DiagLevel.Info, DiagEvent.SessionInfoChanged, sessionTime, version);
-        if (_log.IsEnabled(DiagLevel.Info)) _log.Text(DiagLevel.Info, "telemetry", Describe(version, info));
+        if (parsed && _log.IsEnabled(DiagLevel.Info)) _log.Text(DiagLevel.Info, "telemetry", Describe(version, info));
         _tap?.OnSessionInfo(yaml, version, info);
+    }
+
+    private bool TryLoadProfile(SessionInfo info, out ProfileDocument? profile)
+    {
+        profile = null;
+        if (_store is null) return true;
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                profile = _store.Load(info.CarPath, info.TrackName);
+                return true;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                _log.Text(DiagLevel.Error, "storage",
+                    $"profile not loaded for {info.ProfileKey} (attempt {attempt}/{ProfileLoadAttempts}): {e.Message}");
+                if (attempt >= ProfileLoadAttempts || Volatile.Read(ref _stop)) return false;
+                Thread.Sleep(ProfileRetryDelay);
+            }
+        }
     }
 
     private static string Describe(int version, SessionInfo info)

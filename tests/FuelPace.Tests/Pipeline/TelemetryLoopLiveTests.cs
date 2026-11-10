@@ -1,5 +1,6 @@
 using FuelPace.Core.Diagnostics;
 using FuelPace.Core.Pipeline;
+using FuelPace.Core.Storage;
 using FuelPace.Core.Strategy;
 using FuelPace.Core.Telemetry;
 using FuelPace.Tests.Support;
@@ -11,18 +12,6 @@ public class TelemetryLoopLiveTests
 {
     static readonly DateTimeOffset T0 = new(2026, 11, 9, 12, 0, 0, TimeSpan.Zero);
 
-    sealed class FakeSource : ITelemetrySource
-    {
-        public readonly Queue<ReadResult> Script = new();
-        public VarLayout Layout { get; set; } = VarLayout.Resolve([]);
-        public int SessionInfoVersion { get; set; } = 1;
-        public string Yaml = SampleYaml.Zolder;
-        public Func<string>? YamlHook;
-        public ReadResult TryRead(ref TelemetryFrame frame) => Script.Count > 0 ? Script.Dequeue() : ReadResult.NoData;
-        public string ReadSessionInfoYaml() => YamlHook?.Invoke() ?? Yaml;
-        public void Dispose() { }
-    }
-
     sealed class Tap : IFrameTap
     {
         public int Frames, Ended;
@@ -32,7 +21,7 @@ public class TelemetryLoopLiveTests
         public void OnSourceEnded() => Ended++;
     }
 
-    static TelemetryLoop Make(FakeSource src, Tap tap, DiagLog log, bool inline = true) =>
+    static TelemetryLoop Make(ScriptedTelemetrySource src, Tap tap, DiagLog log, bool inline = true) =>
         new(src, new TelemetryPipeline(new StrategyConfig(), new FixedTimeProvider(T0), null, null, log), null, inline, log, tap);
 
     static DiagRecord[] Drain(DiagLog log)
@@ -45,7 +34,7 @@ public class TelemetryLoopLiveTests
     public void Disconnect_then_reconnect_reloads_layout_and_session_info_and_frames_continue()
     {
         var log = new DiagLog(DiagLevel.Info);
-        var src = new FakeSource();
+        var src = new ScriptedTelemetrySource();
         var tap = new Tap();
         var loop = Make(src, tap, log);
 
@@ -80,7 +69,7 @@ public class TelemetryLoopLiveTests
     public void Disconnected_then_end_of_stream_flushes_once()
     {
         var log = new DiagLog(DiagLevel.Info);
-        var src = new FakeSource();
+        var src = new ScriptedTelemetrySource();
         var tap = new Tap();
         var loop = Make(src, tap, log);
         src.Script.Enqueue(ReadResult.Frame);
@@ -102,7 +91,7 @@ public class TelemetryLoopLiveTests
     public void Each_connection_ends_once()
     {
         var log = new DiagLog(DiagLevel.Info);
-        var src = new FakeSource();
+        var src = new ScriptedTelemetrySource();
         var tap = new Tap();
         var loop = Make(src, tap, log);
         foreach (var r in new[] { ReadResult.Frame, ReadResult.Disconnected, ReadResult.Frame, ReadResult.EndOfStream })
@@ -115,7 +104,7 @@ public class TelemetryLoopLiveTests
     public void Background_session_info_uses_one_worker_and_newest_version_wins()
     {
         var log = new DiagLog(DiagLevel.Info);
-        var src = new FakeSource();
+        var src = new ScriptedTelemetrySource();
         var tap = new Tap();
         var loop = Make(src, tap, log, inline: false);
 
@@ -158,7 +147,7 @@ public class TelemetryLoopLiveTests
     [Fact]
     public void Dispose_stops_the_worker_and_no_load_runs_after_it()
     {
-        var src = new FakeSource();
+        var src = new ScriptedTelemetrySource();
         var tap = new Tap();
         var loop = Make(src, tap, new DiagLog(DiagLevel.Info), inline: false);
         var entered = new ManualResetEventSlim();
@@ -188,7 +177,7 @@ public class TelemetryLoopLiveTests
     [Fact]
     public void Disconnect_drops_the_pending_load()
     {
-        var src = new FakeSource();
+        var src = new ScriptedTelemetrySource();
         var tap = new Tap();
         var loop = Make(src, tap, new DiagLog(DiagLevel.Info), inline: false);
         var entered = new ManualResetEventSlim();
@@ -212,5 +201,48 @@ public class TelemetryLoopLiveTests
         Assert.Equal(1, Volatile.Read(ref calls));
         Assert.Empty(tap.Sessions);
         loop.Dispose();
+    }
+
+    [Fact]
+    public void Profile_read_error_is_retried_on_the_next_session_info_and_never_drops_a_baseline()   // I-2b
+    {
+        var root = Path.Combine(Path.GetTempPath(), "fuelpace-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var log = new DiagLog(DiagLevel.Info, 1 << 14);
+            var store = new ProfileStore(root, log);
+            var info = SessionInfoParser.Parse(SampleYaml.Zolder);
+            store.Save(SyntheticRace.Profile(info));
+            var path = store.PathFor(info.CarPath, info.TrackName);
+            var src = new ScriptedTelemetrySource { WhenEmpty = ReadResult.Frame, Frame = new LapSim(lapTimeS: 20).TimeRace(3600).Run(0, endPct: 0.5).Last() };
+            var tap = new Tap();
+            var pipeline = new TelemetryPipeline(new StrategyConfig(), new FixedTimeProvider(T0), store, null, log);
+            using var loop = new TelemetryLoop(src, pipeline, store, inlineSessionInfo: false, log, tap);
+
+            void BumpAndWait(int version)
+            {
+                src.SessionInfoVersion = version;
+                loop.Step();
+                var deadline = DateTime.UtcNow.AddSeconds(10);
+                while (true) { lock (tap.Sessions) if (tap.Sessions.Count >= version) break; Assert.True(DateTime.UtcNow < deadline); Thread.Sleep(5); }
+                for (int i = 0; i < TelemetryPipeline.StrategyEvery; i++) loop.Step();
+            }
+
+            using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+                BumpAndWait(1);                              // every attempt fails: session installed without a profile
+            Assert.Equal(SignalState.NoBaseline, pipeline.Overlay.Read().State);
+            int errors = 0;
+            while (log.TryDequeueText(out var t)) if (t.Category == "storage" && t.Level == DiagLevel.Error) errors++;
+            Assert.Equal(TelemetryLoop.ProfileLoadAttempts, errors);
+
+            BumpAndWait(2);                                  // same YAML: the failed read is retried
+            Assert.NotEqual(SignalState.NoBaseline, pipeline.Overlay.Read().State);
+
+            src.Yaml = SampleYaml.Zolder.Replace("DriverCarEstLapTime: 78.9567", "DriverCarEstLapTime: 77.0000");
+            using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+                BumpAndWait(3);                              // same key: no read at all, the baseline stays
+            Assert.NotEqual(SignalState.NoBaseline, pipeline.Overlay.Read().State);
+        }
+        finally { try { Directory.Delete(root, true); } catch (DirectoryNotFoundException) { } }
     }
 }
