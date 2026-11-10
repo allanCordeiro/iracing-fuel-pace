@@ -68,12 +68,9 @@ public sealed class DWriteFonts : IDisposable
 
     public IDWriteFactory5 Factory => _factory;
 
-    private unsafe EmbeddedFace Load(string file, bool mono, int weight)
+    private EmbeddedFace Load(string file, bool mono, int weight)
     {
-        byte[] data = ReadResource(file);
-        IDWriteFontFile fontFile;
-        fixed (byte* p = data) // a null owner makes DirectWrite copy the data
-            fontFile = _loader.CreateInMemoryFontFileReference(_factory, (nint)p, (uint)data.Length, null);
+        var fontFile = CreateFontFile(file);
         _owned.Add(fontFile);
         using var builder = _factory.CreateFontSetBuilder();
         builder.AddFontFile(fontFile);
@@ -94,13 +91,23 @@ public sealed class DWriteFonts : IDisposable
         return new EmbeddedFace(file, name, weight, mono, baseline, collection);
     }
 
-    private static byte[] ReadResource(string file)
+    /// <summary>
+    /// PERF-05: the TTF is read in place from the Agent's mapped image (the resource stays mapped for the life of the
+    /// process), never copied: a non-null owner (the factory, which outlives the font files) tells DirectWrite to keep a
+    /// pointer instead of copying, and only the pages of the glyphs drawn are touched. (A copy cost the 2.7 MB of fonts
+    /// twice: a managed array and DirectWrite's own.)
+    /// Falls back to a copy when the resource is not in mapped memory.
+    /// </summary>
+    private unsafe IDWriteFontFile CreateFontFile(string file)
     {
         using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("FuelPace.Fonts." + file)
             ?? throw new InvalidOperationException("embedded font missing: " + file);
+        if (s is UnmanagedMemoryStream mapped)
+            return _loader.CreateInMemoryFontFileReference(_factory, (nint)mapped.PositionPointer, (uint)mapped.Length, _factory);
         var data = new byte[s.Length];
         s.ReadExactly(data);
-        return data;
+        fixed (byte* p = data) // a null owner makes DirectWrite copy the data
+            return _loader.CreateInMemoryFontFileReference(_factory, (nint)p, (uint)data.Length, null);
     }
 
     /// <summary>JetBrains Mono for <see cref="FontRole.Value"/> and <see cref="FontRole.ValueBold"/>, Inter otherwise; the file
