@@ -1,9 +1,9 @@
 namespace FuelPace.App.Overlay;
 
-/// <summary>Deterministic metrics for tests and the SVG preview: Mono 0.6 em per char, Inter about 0.54 em (per-class estimates; capitals 0.68, digits 0.58, space 0.28), ascent 0.8 em.</summary>
+/// <summary>Deterministic metrics for tests and the SVG preview: Mono 0.6 em per char, Inter about 0.54 em (per-class estimates; capitals 0.68, digits 0.58, space 0.28), ascent 0.8 em. The weight is ignored.</summary>
 public sealed class FixedMetricsMeasurer : ITextMeasurer
 {
-    public float Width(ReadOnlySpan<char> text, FontRole role, float sizePx, float letterSpacingEm)
+    public float Width(ReadOnlySpan<char> text, FontRole role, int weight, float sizePx, float letterSpacingEm)
     {
         float em = 0;
         bool mono = role is FontRole.Value or FontRole.ValueBold;

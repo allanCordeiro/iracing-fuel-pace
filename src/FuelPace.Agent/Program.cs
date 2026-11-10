@@ -2,12 +2,13 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime;
 using FuelPace.Agent.Live;
+using FuelPace.Agent.Overlay;
 using FuelPace.Agent.Win32;
 using FuelPace.App;
 using FuelPace.App.Diagnostics;
 using FuelPace.App.Host;
 using FuelPace.App.Ipc;
-using FuelPace.App.Overlay;
+using FuelPace.App.Settings;
 using FuelPace.Core.Diagnostics;
 using Windows.Win32;
 
@@ -68,10 +69,15 @@ internal static class Program
 
         using var window = new MessageWindow();
         var monitors = new MonitorProvider(window);
-        AgentHost? hostRef = null; // the factory reads the host's log, which exists once Start ran
-        var sources = new LiveSourceFactory(options.ReplayPath, options.ReplaySpeed, () => hostRef?.Log ?? DiagLog.Null);
-        var host = hostRef = new AgentHost(options, sources, new NullOverlaySurface(), window, new NullHotkeys(), new NullTrayIcon(), monitors,
-            new SystemServices(), new FixedMetricsMeasurer(), TimeProvider.System);
+        AgentHost? hostRef = null; // the factory and the overlay read the host's log, which exists once Start ran
+        DiagLog HostLog() => hostRef?.Log ?? DiagLog.Null;
+        var sources = new LiveSourceFactory(options.ReplayPath, options.ReplaySpeed, HostLog);
+        using var fonts = new DWriteFonts();
+        // Only the backend is needed before the host starts (it reads, and owns, settings.json); a locked file means "auto".
+        var backend = new SettingsStore(options.AppDataRoot).Load(retryLocked: false).Overlay.RenderBackend;
+        using var overlay = new OverlayWindow(backend, fonts, HostLog);
+        var host = hostRef = new AgentHost(options, sources, overlay, window, new NullHotkeys(), new NullTrayIcon(), monitors,
+            new SystemServices(), new DWriteTextMeasurer(fonts), TimeProvider.System);
         window.SessionEnding += () =>
         {
             // Off the UI thread so the wait is bounded; Dispose waits for nothing the UI thread would have to run.

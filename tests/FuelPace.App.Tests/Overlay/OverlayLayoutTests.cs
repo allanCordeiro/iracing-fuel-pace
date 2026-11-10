@@ -311,9 +311,9 @@ public sealed class OverlayLayoutTests
     {
         var nf = Blue(); nf.State = SignalState.NotFeasible; nf.TargetL = 2.01; nf.FeasibleMinL = 2.23;
         var d = Build(nf);
-        float leftEnd = Text(d, "alvo 2.01 · mín possível 2.23").X + M.Width("alvo 2.01 · mín possível 2.23", FontRole.Value, 8.5f, 0);
+        float leftEnd = Text(d, "alvo 2.01 · mín possível 2.23").X + M.Width("alvo 2.01 · mín possível 2.23", FontRole.Value, 400, 8.5f, 0);
         var c = Text(d, "faltam 14.8 v".Replace("14.8", "16.6"));
-        float centreEnd = c.X + M.Width("faltam 16.6 v", FontRole.Value, 11, 0);
+        float centreEnd = c.X + M.Width("faltam 16.6 v", FontRole.Value, 400, 11, 0);
         float badgeX = Text(d, "PIT").X - 6;
         Assert.True(c.X - leftEnd >= 3.5f, $"left gap {c.X - leftEnd}");
         Assert.True(badgeX - centreEnd >= 3.5f, $"right gap {badgeX - centreEnd}");
@@ -328,7 +328,7 @@ public sealed class OverlayLayoutTests
         OverlayLayout.Build(in s, "Ferrari 296 GT3 Evo Customer", "Circuit de Spa-Francorchamps Grand Prix", Opts(), M, d);
         var t = Texts(d).Last(x => x.Text.StartsWith("Sem baseline"));
         Assert.EndsWith("…", t.Text);
-        Assert.True(t.Cmd.X + M.Width(t.Text, FontRole.Body, 11, 0) <= 289.01f);
+        Assert.True(t.Cmd.X + M.Width(t.Text, FontRole.Body, 400, 11, 0) <= 289.01f);
     }
 
     [Fact]

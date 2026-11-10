@@ -292,6 +292,25 @@ public sealed class AgentHostTests
         Assert.Single(rig.Events("SettingsSaved"));
     }
 
+    [Fact] // the window was moved by the user: the host's last bounds no longer describe it, so they are sent again
+    public void A_user_move_is_always_followed_by_the_hosts_bounds()
+    {
+        using var rig = new HostRig();
+        var settings = new AppSettings();
+        settings.Overlay.AutoHide = false;
+        rig.WriteSettings(settings);
+        rig.Start();
+        rig.Hotkeys.Press(AgentHost.HotkeyToggleEdit);
+        rig.WaitUntil(() => rig.Surface.LastBounds is { X: 40 - 7 }, "edit-mode placement", pump: Tick);
+        var placed = rig.Surface.LastBounds!.Value;
+        int before = rig.Surface.AllBounds.Count;
+
+        // A drop that resolves to the same placement (here: the same rect) must still reposition the window.
+        rig.Surface.RaiseMoved(placed);
+        rig.WaitUntil(() => rig.Surface.AllBounds.Count > before, "bounds re-applied after the drag", pump: Tick);
+        Assert.Equal(placed, rig.Surface.LastBounds);
+    }
+
     static AppSettings UserSettings()
     {
         var mine = new AppSettings();

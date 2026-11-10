@@ -7,3 +7,4 @@ BenchmarkDotNet.Artifacts/
 .superpowers/
 feedback/
 out/
+artifacts/

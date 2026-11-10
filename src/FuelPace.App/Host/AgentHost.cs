@@ -561,6 +561,7 @@ public sealed partial class AgentHost : IDisposable
         int chromeW = _bounds is { } b && _hasPanel ? b.Width - _panel.Width : 0;
         var panel = new PixelRect(window.X + Px(off.W), window.Y + Px(off.H),
             Math.Max(1, window.Width - chromeW), _hasPanel ? _panel.Height : window.Height);
+        _bounds = null; // the user moved the window: the next render sends the bounds even if the placement resolves the same
         ApplyUserChange(s =>
         {
             var o = s.Overlay;

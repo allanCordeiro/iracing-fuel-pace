@@ -46,18 +46,18 @@ public static class OverlayLayout
             _o = o; _m = m; _d = d; _c = (float)o.DpiScale; _k = (float)o.Scale * _c; _op = o.ContentOpacity;
         }
 
-        float W(ReadOnlySpan<char> t, FontRole r, float size, float ls) => _m.Width(t, r, size * _k, ls);
+        float W(ReadOnlySpan<char> t, FontRole r, int weight, float size, float ls) => _m.Width(t, r, weight, size * _k, ls);
 
         float T(ReadOnlySpan<char> t, FontRole r, int weight, float size, float ls, bool italic, Rgba c, float x, float baseline, bool cont = false)
         {
             _d.Text(t, r, weight, size * _k, ls, italic, c.WithOpacity(_op), x, baseline, cont);
-            return W(t, r, size, ls);
+            return W(t, r, weight, size, ls);
         }
 
         float InsightWidth(ReadOnlySpan<char> t, int len, int boldLen)
         {
             int b = Math.Min(boldLen, len);
-            return W(t[..b], FontRole.BodyBold, 11, 0) + W(t[b..len], FontRole.Body, 11, 0);
+            return W(t[..b], FontRole.BodyBold, 700, 11, 0) + W(t[b..len], FontRole.Body, 400, 11, 0);
         }
 
         float Asc(FontRole r, float size) => _m.Ascent(r, size * _k);
@@ -111,7 +111,7 @@ public static class OverlayLayout
             p = Cat(buf, p, " v · ");
             p += OverlayText.Minutes(s.AutonomyMin, buf[p..]);
             p = Cat(buf, p, " min");
-            float wr = W(buf[..p], FontRole.Value, 12, 0);
+            float wr = W(buf[..p], FontRole.Value, 400, 12, 0);
             T(buf[..p], FontRole.Value, 400, 12, 0, false, OverlayTheme.Secondary, right - wr, bl);
             top += 21 * k;
 
@@ -185,17 +185,18 @@ public static class OverlayLayout
                     p += OverlayText.Laps(s.LapsRemaining, buf[p..]);
                     p = Cat(buf, p, " v");
                 }
-                float wc = W(buf[..p], FontRole.Value, 11, 0);
+                float wc = W(buf[..p], FontRole.Value, 400, 11, 0);
 
                 // badge
                 float wb = 0;
                 if (pal.BadgeText is { } badge)
                 {
-                    float wt = W(badge, FontRole.Badge, 8, 0.08f);
+                    int badgeWeight = s.State == SignalState.NotFeasible ? 800 : 700;
+                    float wt = W(badge, FontRole.Badge, badgeWeight, 8, 0.08f);
                     wb = wt + 12 * k;
                     float bx = ir - wb, by = ct + (ch - 14 * k) / 2;
                     _d.FillRoundedRect(new RectF(bx, by, wb, 14 * k), 3 * k, pal.BadgeBg.WithOpacity(_op));
-                    T(badge, FontRole.Badge, (s.State == SignalState.NotFeasible ? 800 : 700), 8, 0.08f, false, pal.BadgeFg, bx + 6 * k, by + 3 * k + Asc(FontRole.Badge, 8));
+                    T(badge, FontRole.Badge, badgeWeight, 8, 0.08f, false, pal.BadgeFg, bx + 6 * k, by + 3 * k + Asc(FontRole.Badge, 8));
                 }
                 // space-between: equal gaps (the mock's NÃO FACTÍVEL row leaves only about 4 px each side at 1x)
                 float cx = wb > 0 ? il + wl + Math.Max(0, (ir - il - wl - wc - wb) / 2) : Math.Max(il + wl, ir - wc);
@@ -227,7 +228,7 @@ public static class OverlayLayout
                     if (InsightWidth(insight, insightLen, boldLen) > avail)
                     {
                         int len = insightLen;
-                        while (len > 1 && InsightWidth(insight, len, boldLen) + W("…", FontRole.Body, 11, 0) > avail) len--;
+                        while (len > 1 && InsightWidth(insight, len, boldLen) + W("…", FontRole.Body, 400, 11, 0) > avail) len--;
                         insight[len] = '…';
                         insightLen = len + 1;
                         boldLen = Math.Min(boldLen, len);
@@ -253,7 +254,7 @@ public static class OverlayLayout
                     buf[p++] = '/';
                     p += Int(s.RecTotal, buf[p..]);
                     p = Cat(buf, p, " válidas");
-                    float wRec = W("REC", FontRole.Badge, 8, 0.1f), wCnt = W(buf[..p], FontRole.Value, 9, 0);
+                    float wRec = W("REC", FontRole.Badge, 700, 8, 0.1f), wCnt = W(buf[..p], FontRole.Value, 400, 9, 0);
                     float pwid = 14 * k + 6 * k + 5 * k + wRec + 5 * k + wCnt;
                     float px = edge - pwid;
                     _d.FillRoundedRect(new RectF(px, py, pwid, pillH), 4 * k, bg);
@@ -265,7 +266,7 @@ public static class OverlayLayout
                 }
                 if (_o.DebugTag)
                 {
-                    float wd = W("DBG", FontRole.Badge, 8, 0), pwid = 14 * k + wd;
+                    float wd = W("DBG", FontRole.Badge, 700, 8, 0), pwid = 14 * k + wd;
                     float px = edge - pwid;
                     _d.FillRoundedRect(new RectF(px, py, pwid, pillH), 4 * k, bg);
                     T("DBG", FontRole.Badge, 700, 8, 0, false, OverlayTheme.Label, px + 7 * k, tb);
@@ -298,8 +299,8 @@ public static class OverlayLayout
             // banner above (does not follow the user's scale)
             float f = ChromeFont * c;
             float asc = _m.Ascent(FontRole.Label, f);
-            float w1 = _m.Width("MODO EDIÇÃO", FontRole.Label, f, 0.08f);
-            float w2 = _m.Width("arraste para mover · puxe um canto para redimensionar", FontRole.Body, f, 0);
+            float w1 = _m.Width("MODO EDIÇÃO", FontRole.Label, 600, f, 0.08f);
+            float w2 = _m.Width("arraste para mover · puxe um canto para redimensionar", FontRole.Body, 400, f, 0);
             float bw = 18 * c + w1 + 7 * c + w2;
             _d.FillRoundedRect(new RectF(ox, 0, bw, BannerH * c), 4 * c, OverlayTheme.Accent);
             _d.Text("MODO EDIÇÃO", FontRole.Label, 600, f, 0.08f, false, white, ox + 9 * c, 5 * c + asc);
@@ -317,8 +318,8 @@ public static class OverlayLayout
             n = Cat(info, n, "%");
 
             const string rest = " trava e volta ao modo click-through";
-            float wk = _m.Width(_o.ToggleEditHotkey, FontRole.Value, f, 0), wrest = _m.Width(rest, FontRole.Body, f, 0);
-            float wl = 12 * c + wk + wrest, wr = _m.Width(info[..n], FontRole.Value, f, 0) + 12 * c;
+            float wk = _m.Width(_o.ToggleEditHotkey, FontRole.Value, 600, f, 0), wrest = _m.Width(rest, FontRole.Body, 400, f, 0);
+            float wl = 12 * c + wk + wrest, wr = _m.Width(info[..n], FontRole.Value, 400, f, 0) + 12 * c;
             float fy = Math.Max(bottom, oy + ph + EditMargin * c) + 6 * c, fh = f + 6 * c;
             var bg = Rgba.From(OverlayTheme.PanelR, OverlayTheme.PanelG, OverlayTheme.PanelB, 0.75);
             float fa = _m.Ascent(FontRole.Body, f);
