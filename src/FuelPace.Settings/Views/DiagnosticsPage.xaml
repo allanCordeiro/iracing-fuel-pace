@@ -67,7 +67,7 @@
                         <DockPanel>
                             <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}" VerticalAlignment="Center" Margin="16,0,0,0"
                                     Content="Abrir pasta" Command="{Binding AbrirPastaDoPacoteCommand}" AutomationProperties.Name="Abrir a pasta do pacote" />
-                            <TextBlock VerticalAlignment="Center" FontFamily="{StaticResource Mono}" FontSize="13" Text="{Binding BundlePath}"
+                            <TextBlock VerticalAlignment="Center" Style="{StaticResource MonoText}" FontSize="13" Text="{Binding BundlePath}"
                                        TextTrimming="CharacterEllipsis" />
                         </DockPanel>
                     </Border>

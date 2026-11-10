@@ -9,12 +9,12 @@
                 <ResourceDictionary Source="../Theme.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- The mock's table columns (HTML auto layout of its content at 1120 px) -->
-            <GridLength x:Key="ColLap">85*</GridLength>
-            <GridLength x:Key="ColTime">112*</GridLength>
-            <GridLength x:Key="ColFuel">110*</GridLength>
-            <GridLength x:Key="ColThrottle">126*</GridLength>
-            <GridLength x:Key="ColStatus">312*</GridLength>
+            <!-- The mock's table columns (measured on the mock rendered at 1120 px) -->
+            <GridLength x:Key="ColLap">87*</GridLength>
+            <GridLength x:Key="ColTime">116*</GridLength>
+            <GridLength x:Key="ColFuel">117*</GridLength>
+            <GridLength x:Key="ColThrottle">132*</GridLength>
+            <GridLength x:Key="ColStatus">291*</GridLength>
             <GridLength x:Key="ColAction">83*</GridLength>
 
             <Style x:Key="Cell" TargetType="TextBlock">
@@ -24,6 +24,7 @@
             </Style>
             <Style x:Key="MonoCell" TargetType="TextBlock" BasedOn="{StaticResource Cell}">
                 <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+                <Setter Property="FontWeight" Value="Medium" />
             </Style>
             <Style x:Key="Head" TargetType="local:SpacedText" BasedOn="{StaticResource CardTitle}">
                 <Setter Property="Margin" Value="16,10" />
@@ -112,7 +113,7 @@
                             </Ellipse.Style>
                         </Ellipse>
                         <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
-                        <TextBlock Text="{Binding CounterText}" FontFamily="{StaticResource Mono}" Foreground="{StaticResource TextValue}"
+                        <TextBlock Text="{Binding CounterText}" Style="{StaticResource MonoText}" Foreground="{StaticResource TextValue}"
                                    VerticalAlignment="Center" />
                     </StackPanel>
                 </Border>
@@ -142,7 +143,7 @@
                 <StackPanel>
                     <local:SpacedText Style="{StaticResource CardTitle}" Text="{Binding ConsumptionTitle}" />
                     <TextBlock Margin="0,6,0,0" FontFamily="{StaticResource Mono}" FontSize="24" FontWeight="SemiBold">
-                        <Run Text="{Binding ConsumptionValue, Mode=OneWay}" /><Run Text=" " /><Run FontSize="14" FontWeight="Normal"
+                        <Run Text="{Binding ConsumptionValue, Mode=OneWay}" /><Run Text=" " /><Run FontSize="14"
                             Foreground="{StaticResource TextMuted}" Text="{Binding ConsumptionUnit, Mode=OneWay}" />
                     </TextBlock>
                     <TextBlock Style="{StaticResource Detail}" Margin="0,6,0,0" Text="{Binding ConsumptionDetail}" />
@@ -159,7 +160,7 @@
                 <StackPanel>
                     <local:SpacedText Style="{StaticResource CardTitle}" Text="{Binding AutonomyTitle}" />
                     <TextBlock Margin="0,6,0,0" FontFamily="{StaticResource Mono}" FontSize="24" FontWeight="SemiBold">
-                        <Run Text="{Binding AutonomyValue, Mode=OneWay}" /><Run Text=" " /><Run FontSize="14" FontWeight="Normal"
+                        <Run Text="{Binding AutonomyValue, Mode=OneWay}" /><Run Text=" " /><Run FontSize="14"
                             Foreground="{StaticResource TextMuted}" Text="{Binding AutonomyUnit, Mode=OneWay}" />
                     </TextBlock>
                     <TextBlock Style="{StaticResource Detail}" Margin="0,6,0,0" Text="{Binding AutonomyDetail}" />

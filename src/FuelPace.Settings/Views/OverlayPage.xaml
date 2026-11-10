@@ -18,15 +18,16 @@
                 <Setter Property="TextAlignment" Value="Right" />
                 <Setter Property="VerticalAlignment" Value="Center" />
                 <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+                <Setter Property="FontWeight" Value="Medium" />
             </Style>
             <!-- One shortcut: the bold mono key (editable), its action, and the error or the failed registration in red -->
             <DataTemplate x:Key="Hotkey">
-                <StackPanel Margin="0,0,28,0">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBox x:Name="Key" Style="{StaticResource KeyBox}" Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 AutomationProperties.Name="{Binding Label}" VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding Label}" Margin="4,0,0,0" Foreground="{StaticResource TextLabel}" VerticalAlignment="Center" />
-                    </StackPanel>
+                <StackPanel>
+                    <DockPanel>
+                        <TextBox x:Name="Key" DockPanel.Dock="Left" Style="{StaticResource KeyBox}" VerticalAlignment="Top"
+                                 Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="{Binding Label}" />
+                        <TextBlock Text="{Binding Label}" Margin="4,0,0,0" Foreground="{StaticResource TextLabel}" TextWrapping="Wrap" />
+                    </DockPanel>
                     <TextBlock Style="{StaticResource ErrorText}" Margin="0,4,0,0" Text="{Binding Error}"
                                Visibility="{Binding Error, Converter={StaticResource NotEmptyVisible}}" />
                     <TextBlock Style="{StaticResource ErrorText}" Margin="0,4,0,0" Text="{Binding Warning}"
@@ -159,12 +160,22 @@
                 <Border Margin="0,22,0,0" Style="{StaticResource Section}">
                     <StackPanel>
                         <local:SpacedText Style="{StaticResource H2}" Text="ATALHOS" AutomationProperties.HeadingLevel="Level2" />
-                        <WrapPanel Margin="0,10,0,0">
+                        <!-- Two columns 28 px apart, as the mock's flex row -->
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="28" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
                             <ContentControl Content="{Binding ToggleEdit}" ContentTemplate="{StaticResource Hotkey}" Focusable="False" />
-                            <ContentControl Content="{Binding ToggleVisible}" ContentTemplate="{StaticResource Hotkey}" Focusable="False" />
-                            <ContentControl Content="{Binding DebugMark}" ContentTemplate="{StaticResource Hotkey}" Focusable="False"
-                                            Visibility="{Binding ShowDebugMark, Converter={StaticResource BoolVisible}}" />
-                        </WrapPanel>
+                            <ContentControl Grid.Column="2" Content="{Binding ToggleVisible}" ContentTemplate="{StaticResource Hotkey}" Focusable="False" />
+                            <ContentControl Grid.Row="1" Margin="0,10,0,0" Content="{Binding DebugMark}" ContentTemplate="{StaticResource Hotkey}"
+                                            Focusable="False" Visibility="{Binding ShowDebugMark, Converter={StaticResource BoolVisible}}" />
+                        </Grid>
                     </StackPanel>
                 </Border>
             </StackPanel>

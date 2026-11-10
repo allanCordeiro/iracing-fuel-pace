@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Automation.Peers;
 using System.Windows.Media;
+using FuelPace.App.Overlay;
 
 namespace FuelPace.Settings;
 
@@ -33,16 +34,15 @@ public sealed class SpacedText : FrameworkElement
     public double Spacing { get => (double)GetValue(SpacingProperty); set => SetValue(SpacingProperty, value); }
     public Brush Foreground { get => (Brush)GetValue(ForegroundProperty); set => SetValue(ForegroundProperty, value); }
 
-    GlyphTypeface Face => EmbeddedFonts.Shared.Face(mono: false, Weight);
+    static EmbeddedFonts Fonts => EmbeddedFonts.Shared;
 
     protected override Size MeasureOverride(Size availableSize) =>
-        new(EmbeddedFonts.Advance(Face, Text ?? "", Size, Spacing), Face.Height * Size);
+        new(Fonts.Width(Text ?? "", FontRole.Label, Weight, (float)Size, (float)Spacing), Fonts.Face(FontRole.Label, Weight).Height * Size);
 
     protected override void OnRender(DrawingContext dc)
     {
-        var face = Face;
-        var run = EmbeddedFonts.Run(face, Text ?? "", Size, Spacing, new Point(0, face.Baseline * Size),
-            VisualTreeHelper.GetDpi(this).PixelsPerDip, out _);
+        var run = Fonts.Run(FontRole.Label, Weight, false, Text ?? "", Size, Spacing,
+            new Point(0, Fonts.Face(FontRole.Label, Weight).Baseline * Size), VisualTreeHelper.GetDpi(this).PixelsPerDip, out _);
         if (run is not null) dc.DrawGlyphRun(Foreground, run);
     }
 

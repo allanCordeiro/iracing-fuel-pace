@@ -8,12 +8,12 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="../Theme.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <GridLength x:Key="ColDate">150*</GridLength>
+            <GridLength x:Key="ColDate">170*</GridLength>
             <GridLength x:Key="ColSession">110*</GridLength>
-            <GridLength x:Key="ColConditions">250*</GridLength>
-            <GridLength x:Key="ColLaps">130*</GridLength>
-            <GridLength x:Key="ColActive">90*</GridLength>
-            <GridLength x:Key="ColAction">90*</GridLength>
+            <GridLength x:Key="ColConditions">240*</GridLength>
+            <GridLength x:Key="ColLaps">145*</GridLength>
+            <GridLength x:Key="ColActive">75*</GridLength>
+            <GridLength x:Key="ColAction">87*</GridLength>
             <Style x:Key="Cell" TargetType="TextBlock">
                 <Setter Property="Margin" Value="16,9" />
                 <Setter Property="VerticalAlignment" Value="Center" />
@@ -21,6 +21,7 @@
             </Style>
             <Style x:Key="MonoCell" TargetType="TextBlock" BasedOn="{StaticResource Cell}">
                 <Setter Property="FontFamily" Value="{StaticResource Mono}" />
+                <Setter Property="FontWeight" Value="Medium" />
             </Style>
             <Style x:Key="Head" TargetType="local:SpacedText" BasedOn="{StaticResource CardTitle}">
                 <Setter Property="Margin" Value="16,10" />
@@ -73,7 +74,7 @@
                             AutomationProperties.Name="Confirmar: apagar a captura" />
                 </StackPanel>
                 <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,16,0">
-                    <Run Text="Apagar a captura de " /><Run FontFamily="{StaticResource Mono}" Text="{Binding PendingDelete.Date, Mode=OneWay}" /><Run
+                    <Run Text="Apagar a captura de " /><Run FontFamily="{StaticResource Mono}" FontWeight="Medium" Text="{Binding PendingDelete.Date, Mode=OneWay}" /><Run
                         Text="? Ela sai da baseline e não pode ser recuperada." />
                 </TextBlock>
             </DockPanel>

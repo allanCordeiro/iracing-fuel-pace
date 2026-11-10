@@ -60,8 +60,7 @@ public sealed class WpfDrawListRenderer : FrameworkElement
                 case CommandKind.Text:
                 {
                     double x = c.Continuation && prevText ? prevX + prevAdvance : c.X;
-                    var face = fonts.Face(c.Role, c.Weight, c.Italic);
-                    var run = EmbeddedFonts.Run(face, list.TextOf(in c), c.SizePx, c.LetterSpacingEm,
+                    var run = fonts.Run(c.Role, c.Weight, c.Italic, list.TextOf(in c), c.SizePx, c.LetterSpacingEm,
                         new Point(x, Math.Round(c.BaselineY, MidpointRounding.ToEven)), pixelsPerDip, out double advance);
                     if (run is not null) dc.DrawGlyphRun(Brush(c.Color), run);
                     prevX = x;

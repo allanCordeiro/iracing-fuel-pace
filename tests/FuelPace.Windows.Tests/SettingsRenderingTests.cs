@@ -50,6 +50,8 @@ public sealed class SettingsRenderingTests
             }
             Assert.Equal(800, f.Face(FontRole.Badge, 900).Weight.ToOpenTypeWeight()); // nearest available, as the Agent
             Assert.Equal(StyleSimulations.ItalicSimulation, f.Face(FontRole.Body, 400, italic: true).StyleSimulations);
+            foreach (int w in new[] { 400, 600, 700, 800 }) Assert.True(f.Kerns(FontRole.Label, w), $"Inter {w} has no kerning");
+            Assert.False(f.Kerns(FontRole.Value, 400)); // monospaced
         });
     }
 
@@ -72,9 +74,9 @@ public sealed class SettingsRenderingTests
             {
                 float a = agent.Width(r.Text, r.Role, r.Weight, r.Size, r.Spacing);
                 float m = mine.Width(r.Text, r.Role, r.Weight, r.Size, r.Spacing);
-                // DirectWrite also applies kerning, which the glyph runs here do not: about a pixel at most on these runs
-                // ("NO ALVO": the L-V pair). Monospaced runs have no kerning and match exactly.
-                float tolerance = r.Role is FontRole.Value or FontRole.ValueBold ? 0.05f : 1.25f;
+                // Inter's pair kerning is measured by WPF's text formatting, as DirectWrite applies it ("NO ALVO": L-V; "NÃO
+                // FACTÍVEL": F-A, A-C, T-Í); what is left is rounding. Monospaced runs have no kerning.
+                float tolerance = r.Role is FontRole.Value or FontRole.ValueBold ? 0.05f : 0.3f;
                 Assert.True(Math.Abs(a - m) <= tolerance, $"'{r.Text}' {r.Role} {r.Weight}: Agent {a}, Settings {m}");
             }
             foreach (var role in new[] { FontRole.Label, FontRole.Value })
