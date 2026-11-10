@@ -11,7 +11,8 @@ namespace FuelPace.App.Recording;
 /// 32-byte disk sub-header, one var header per <see cref="TelemetryVars.All"/> entry, a reserved YAML region (latin-1,
 /// NUL-terminated, rewritten in place) and the fixed-size records. Every write goes straight to the file (no user-space
 /// buffer), so a process crash loses nothing the OS already has; <see cref="Checkpoint"/> keeps the header's record count and
-/// end time current, and a file whose count is still 0 is read by size (<see cref="IbtReader"/> fallback).
+/// end time current. The header's <c>RecordCount</c> stays 0 while the file is open, so after a crash the reader derives the
+/// count from the file size and sees every record written; <see cref="Dispose"/> writes the exact count.
 /// </summary>
 public sealed class IbtStreamWriter : IDisposable
 {
@@ -29,7 +30,7 @@ public sealed class IbtStreamWriter : IDisposable
     private bool _disposed;
 
     public IbtStreamWriter(string path, int tickRate, int reservedYamlBytes = 1 << 20, DiagLog? log = null,
-        bool includeCarIdx = true)
+        bool includeCarIdx = true, long? sessionStartDate = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(reservedYamlBytes, 2);
         _path = path;
@@ -67,7 +68,7 @@ public sealed class IbtStreamWriter : IDisposable
             BinaryPrimitives.WriteInt32LittleEndian(s[32..], 1);                // numBuf
             BinaryPrimitives.WriteInt32LittleEndian(s[36..], _bufLen);
             BinaryPrimitives.WriteInt32LittleEndian(s[52..], _bufOffset);       // buf0.bufOffset
-            BinaryPrimitives.WriteInt64LittleEndian(s[DiskHeaderOffset..], DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            BinaryPrimitives.WriteInt64LittleEndian(s[DiskHeaderOffset..], sessionStartDate ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds());
             for (int k = 0; k < ids.Count; k++)
             {
                 int i = ids[k];
@@ -100,6 +101,7 @@ public sealed class IbtStreamWriter : IDisposable
         {
             _log.Text(DiagLevel.Warn, "record", $"session info ({bytes.Length} bytes) does not fit the reserved {_reserved}; saved beside the recording as {_path}.yaml");
             File.WriteAllText(_path + ".yaml", yaml, Encoding.Latin1);
+            RandomAccess.Write(_handle, new byte[1], _yamlOffset); // no stale YAML in the file while the side file has the new one
             return;
         }
         RandomAccess.Write(_handle, bytes, _yamlOffset);
@@ -117,15 +119,17 @@ public sealed class IbtStreamWriter : IDisposable
         _lastTime = f.SessionTime;
     }
 
-    /// <summary>Updates the header's <c>RecordCount</c> and session times.</summary>
-    public void Checkpoint()
+    /// <summary>Updates the header's session times (not <c>RecordCount</c>: see the class remarks).</summary>
+    public void Checkpoint() => WriteTimes(writeCount: false);
+
+    private void WriteTimes(bool writeCount)
     {
         if (_disposed) return;
         Span<byte> d = stackalloc byte[24];
         BinaryPrimitives.WriteDoubleLittleEndian(d, double.IsNaN(_firstTime) ? 0 : _firstTime);
         BinaryPrimitives.WriteDoubleLittleEndian(d[8..], _lastTime);
         BinaryPrimitives.WriteInt32LittleEndian(d[16..], 0);
-        BinaryPrimitives.WriteInt32LittleEndian(d[20..], _count);
+        BinaryPrimitives.WriteInt32LittleEndian(d[20..], writeCount ? _count : 0);
         RandomAccess.Write(_handle, d, DiskHeaderOffset + 8);
         Span<byte> tick = stackalloc byte[4];
         BinaryPrimitives.WriteInt32LittleEndian(tick, _count > 0 ? _count - 1 : 0);
@@ -135,7 +139,7 @@ public sealed class IbtStreamWriter : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
-        try { Checkpoint(); }
+        try { WriteTimes(writeCount: true); }
         finally
         {
             _disposed = true;

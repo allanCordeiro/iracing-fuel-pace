@@ -28,7 +28,7 @@ public static class IbtTrimmer
                 if (writer is null)
                 {
                     writer = new IbtStreamWriter(output, reader.Header.TickRate, Math.Max(reader.Header.SessionInfoLen, 2),
-                        includeCarIdx: layout.HasCarIdx);
+                        includeCarIdx: layout.HasCarIdx, sessionStartDate: reader.DiskHeader.SessionStartDate);
                     writer.WriteSessionInfo(reader.SessionInfoYaml);
                 }
                 TelemetryFrameReader.Read(row, layout, ref frame);

@@ -45,7 +45,8 @@ public sealed class TelemetryRecorder : IFrameTap, IDisposable
     private string? _curPath;
     private long _fileFrames, _droppedReported; // drops are reported by the file that closes next (some happen before it opens)
     private double _lastTime;
-    private long _lastCheckpoint;
+    private long _lastCheckpoint, _retryAt;
+    private int _failures;
 
     /// <summary>Test hook: called on the writer thread before each frame is written.</summary>
     internal volatile Action? WriterHook;
@@ -84,6 +85,7 @@ public sealed class TelemetryRecorder : IFrameTap, IDisposable
         _wake.Set();
     }
 
+    /// <summary>Must be called on the same thread as <see cref="OnFrame"/> (it reads the producer position without a barrier).</summary>
     public void OnSourceEnded()
     {
         if (!_thread.IsAlive) return;
@@ -118,7 +120,9 @@ public sealed class TelemetryRecorder : IFrameTap, IDisposable
             {
                 bool stopping = _stop;
                 _wake.Reset(); // before pumping: a Set that races with the pump leaves the event set, so the wait below returns at once
-                bool progressed = Pump();
+                bool progressed = false;
+                try { progressed = Pump(); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Fail(ex); }
                 if (stopping && !progressed) break;
                 if (!progressed)
                 {
@@ -141,6 +145,18 @@ public sealed class TelemetryRecorder : IFrameTap, IDisposable
     /// <summary>Writes what is in the ring (and handles a pending end). Returns whether it did anything.</summary>
     private bool Pump()
     {
+        if (Stopwatch.GetTimestamp() < _retryAt)
+        {
+            // backing off after a disk error: frames pile up (and drop) in the ring, but an end must still be acknowledged
+            long e = Volatile.Read(ref _endAt);
+            if (e >= 0)
+            {
+                Volatile.Write(ref _head, e);
+                Volatile.Write(ref _endAt, -1);
+                _endAck.Set();
+            }
+            return false;
+        }
         bool did = false;
         var ctx = _ctx;
         while (ctx is not null && _head < Volatile.Read(ref _tail))
@@ -176,6 +192,22 @@ public sealed class TelemetryRecorder : IFrameTap, IDisposable
         return did;
     }
 
+    /// <summary>A disk error must not end recording for the session: close, log, and reopen a new file after a growing backoff.</summary>
+    private void Fail(Exception ex)
+    {
+        _log.Exception("record", ex);
+        CloseFile();
+        _failures++;
+        _retryAt = Stopwatch.GetTimestamp() + Stopwatch.Frequency * Math.Min(30, 1 << Math.Min(_failures, 5));
+        long e = Volatile.Read(ref _endAt);
+        if (e >= 0)
+        {
+            Volatile.Write(ref _head, e);
+            Volatile.Write(ref _endAt, -1);
+            _endAck.Set();
+        }
+    }
+
     private void Rotate(SessionContext ctx, in TelemetryFrame f)
     {
         CloseFile();
@@ -190,6 +222,7 @@ public sealed class TelemetryRecorder : IFrameTap, IDisposable
         _curPath = path;
         _fileFrames = 0;
                 _lastCheckpoint = Stopwatch.GetTimestamp();
+        _failures = 0;
         _log.Emit(DiagLevel.Info, AppDiagEvents.RecordingStarted, f.SessionTime);
         _log.Text(DiagLevel.Info, "record", "recording to " + path);
         EnforceCap();

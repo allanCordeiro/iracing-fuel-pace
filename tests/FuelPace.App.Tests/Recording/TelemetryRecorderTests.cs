@@ -143,6 +143,24 @@ public sealed class TelemetryRecorderTests : IDisposable
     }
 
     [Fact]
+    public void Disk_error_does_not_kill_the_recorder()
+    {
+        string yaml = Yaml();
+        var log = new DiagLog(DiagLevel.Trace);
+        using var rec = new TelemetryRecorder(_dir, log, 1, ringCapacity: 1024);
+        int calls = 0;
+        rec.WriterHook = () => { if (Interlocked.Increment(ref calls) == 1) throw new IOException("disk full"); };
+        rec.OnSessionInfo(yaml, 1, Info(yaml));
+        var f = SyntheticRace.Frames(1, withCarIdx: false).First();
+        for (int i = 0; i < 20; i++) rec.OnFrame(in f);
+        rec.Drain(); // the first attempt failed; after the backoff the frames go to a new file
+        rec.OnSourceEnded();
+        Assert.Equal(20, ReadAll(Assert.Single(Files)).Count);
+        Assert.True(log.TryDequeueText(out var t));
+        Assert.Equal(DiagLevel.Error, t.Level);
+    }
+
+    [Fact]
     public void Enforces_total_size_cap()
     {
         const int mib = 1024 * 1024;
