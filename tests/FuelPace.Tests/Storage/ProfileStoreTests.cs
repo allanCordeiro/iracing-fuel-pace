@@ -66,6 +66,33 @@ public class ProfileStoreTests : IDisposable
     }
 
     [Fact]
+    public void Save_retries_a_locked_read_of_the_existing_file()
+    {
+        var plain = new ProfileStore(_root);
+        var doc = SampleDoc();
+        plain.Save(doc);
+        int calls = 0;
+        var store = new ProfileStore(_root, null, p =>
+        {
+            if (++calls <= 2) throw new IOException("locked");
+            return AtomicFile.ReadOnce(p);
+        });
+        store.Save(doc);
+        Assert.Equal(3, calls);
+        Assert.NotNull(store.Load(doc.Car.Path, doc.Track.Name));
+    }
+
+    [Fact]
+    public void Save_still_throws_when_the_existing_file_stays_locked()
+    {
+        var plain = new ProfileStore(_root);
+        var doc = SampleDoc();
+        plain.Save(doc);
+        var store = new ProfileStore(_root, null, _ => throw new IOException("locked"));
+        Assert.Throws<IOException>(() => store.Save(doc));
+    }
+
+    [Fact]
     public void Save_then_load_round_trips()
     {
         var store = new ProfileStore(_root);

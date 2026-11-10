@@ -17,9 +17,14 @@ public sealed class ProfileStore
 
     private readonly string _dir;
     private readonly DiagLog _log;
+    private readonly Func<string, string> _readOnce;
 
-    public ProfileStore(string rootDir, DiagLog? log = null)
+    public ProfileStore(string rootDir, DiagLog? log = null) : this(rootDir, log, null) { }
+
+    /// <summary>Test seam: <paramref name="readOnce"/> replaces a single read attempt (retries still wrap it).</summary>
+    internal ProfileStore(string rootDir, DiagLog? log, Func<string, string>? readOnce)
     {
+        _readOnce = readOnce ?? AtomicFile.ReadOnce;
         _dir = Path.Combine(rootDir, "profiles");
         _log = log ?? DiagLog.Null;
     }
@@ -116,13 +121,15 @@ public sealed class ProfileStore
         }
     }
 
+    private string ReadText(string path) => AtomicFile.Retry(() => _readOnce(path));
+
     private enum LoadResult { Missing, Loaded, Corrupt, NewerSchema }
 
     private LoadResult TryLoad(string path, out ProfileDocument? doc)
     {
         doc = null;
         if (!File.Exists(path)) return LoadResult.Missing;
-        var text = File.ReadAllText(path);
+        var text = ReadText(path);
         try
         {
             int schema = PeekSchemaVersion(text);
@@ -178,7 +185,7 @@ public sealed class ProfileStore
         if (File.Exists(path))
         {
             int schema;
-            try { schema = PeekSchemaVersion(File.ReadAllText(path)); }
+            try { schema = PeekSchemaVersion(ReadText(path)); }
             catch (JsonException e)
             {
                 if (!Quarantine(path, e)) throw new IOException($"corrupt profile {path} could not be quarantined; not overwritten", e);

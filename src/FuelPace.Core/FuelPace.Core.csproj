@@ -2,4 +2,7 @@
   <ItemGroup>
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="FuelPace.Tests" />
+  </ItemGroup>
 </Project>
