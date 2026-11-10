@@ -16,6 +16,7 @@ public static class ReplayCli
         "usage: FuelPace.Replay <file.ibt> [--speed max|1|10] [--capture] [--profiles <dir>]\n" +
         "       FuelPace.Replay trim <in.ibt> --from <sessionTime> --to <sessionTime> --out <file.ibt>\n" +
         "       FuelPace.Replay diag <bundle.zip|folder>   triage summary of a diagnostic bundle\n" +
+        "       FuelPace.Replay presentmon <csv-with> <csv-without>   PERF-01 verdict from two PresentMon captures\n" +
         "  --profiles <dir>  profile root (JSON files in <dir>/profiles); default: the app's own (%APPDATA%\\FuelPace), read only\n" +
         "  --capture         records the replay into a profile; without --profiles it goes to a new temporary root\n" +
         "                    (printed), never to the app's real profiles";
@@ -26,6 +27,7 @@ public static class ReplayCli
     public static int Run(string[] args, TextWriter output)
     {
         if (args.Length > 0 && args[0] == "trim") return Trim(args[1..], output);
+        if (args.Length > 0 && args[0] == "presentmon") return PresentMonSummary.Run(args[1..], output);
         if (args.Length > 0 && args[0] == "diag") return DiagSummary.Run(args[1..], output);
         if (!TryParse(args, out var path, out var speed, out var capture, out var profilesDir, out var error))
         {

@@ -34,6 +34,8 @@ Publish-Project 'tools/FuelPace.FakeSim/FuelPace.FakeSim.csproj' $fake
 if (Test-Path 'assets/fonts/OFL.txt') { Copy-Item 'assets/fonts/OFL.txt' $stage }
 if (Test-Path 'docs/windows-testing.md') { Copy-Item 'docs/windows-testing.md' (Join-Path $stage 'LEIA-ME.md') }
 
+if (Test-Path 'tools/perf/presentmon.ps1') { Copy-Item 'tools/perf/presentmon.ps1' $stage }
+
 $zip = Join-Path $out "FuelPace-$fileVersion-win-x64.zip"
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
 
