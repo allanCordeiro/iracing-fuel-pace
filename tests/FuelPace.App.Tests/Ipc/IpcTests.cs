@@ -184,17 +184,18 @@ public sealed class IpcTests
         var name = NewName();
         using var server = Server(name, (_, _) => ValueTask.CompletedTask);
         var clients = new List<IpcClient>();
-        for (int i = 0; i < 4; i++) clients.Add(await Connect(name));
+        for (int i = 0; i < 4; i++) { var c = await Connect(name); await c.SendAsync(new Hello("0.1.0")); clients.Add(c); }
         await WaitUntil(() => server.ClientCount == 4);
         var fifth = new IpcClient(name);
         IpcMessage? got = null;
         fifth.Received += m => got = m;
-        _ = await fifth.ConnectAsync(TimeSpan.FromMilliseconds(300));
+        // Unix: the connect is queued in the backlog and served once a slot frees; Windows: PIPE_BUSY, so it must be retried.
+        bool queued = await fifth.ConnectAsync(TimeSpan.FromMilliseconds(300));
         await Task.Delay(300, TestContext.Current.CancellationToken);
         Assert.Equal(4, server.ClientCount);
         await clients[0].DisposeAsync();
-        // On Windows a timed-out connect must be retried; on Unix the queued connection is accepted.
-        if (!await fifth.ConnectAsync(Timeout)) { fifth = new IpcClient(name); fifth.Received += m => got = m; Assert.True(await fifth.ConnectAsync(Timeout)); }
+        if (!queued) Assert.True(await fifth.ConnectAsync(Timeout));
+        await fifth.SendAsync(new Hello("0.1.0"));
         await WaitUntil(() => server.ClientCount == 4);
         await server.BroadcastAsync(new Notice("info", "hi"));
         Assert.Equal(new Notice("info", "hi"), await WaitFor(() => got));
@@ -219,6 +220,7 @@ public sealed class IpcTests
         await WaitUntil(() => server.ClientCount == 4);
         await WaitUntil(() => server.ClientCount == 0);
         await using var ok = await Connect(name);
+        await ok.SendAsync(new Hello("0.1.0"));
         await WaitUntil(() => server.ClientCount == 1);
         foreach (var r in idle) await r.DisposeAsync();
     }
