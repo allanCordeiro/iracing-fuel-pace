@@ -20,6 +20,10 @@ namespace FuelPace.Agent.Win32;
 /// <item><see cref="DisplayMessage"/>: <c>WM_DISPLAYCHANGE</c>, <c>WM_DPICHANGED</c> and <c>WM_SETTINGCHANGE</c>
 /// (<see cref="MonitorProvider"/> turns them into <see cref="IMonitorProvider.Changed"/>).</item>
 /// <item><see cref="AddHook"/>: other messages for the hotkeys and the tray icon (Task 12).</item>
+/// <item>Ending: <c>WM_CLOSE</c> (<c>taskkill</c> without <c>/F</c>, updaters, Restart Manager) ends <see cref="Run"/> without
+/// destroying the window, so the caller shuts down normally; a <c>WM_DESTROY</c> not caused by <see cref="Dispose"/> also
+/// ends it. <c>WM_ENDSESSION</c> raises <see cref="SessionEnding"/> first: Windows may end the process as soon as that
+/// message returns, so the handler must finish the shutdown there.</item>
 /// </list>
 /// Create, <see cref="Run"/> and <see cref="Dispose"/> on the same thread. An exception thrown by a posted action or a hook
 /// ends the loop and is rethrown by <see cref="Run"/> (so the crash handler logs it) instead of crossing the native callback.
@@ -82,6 +86,10 @@ public sealed unsafe class MessageWindow : IUiDispatcher, IDisposable
     /// <summary>A display, resolution, DPI or work-area change may have happened (UI thread).</summary>
     public event Action? DisplayMessage;
 
+    /// <summary>The user session ends (log off, shutdown): runs inside <c>WM_ENDSESSION</c> on the UI thread, before Windows may
+    /// terminate the process; then <see cref="Run"/> ends.</summary>
+    public event Action? SessionEnding;
+
     /// <summary>UI thread. Hooks are asked in the order added until one handles the message.</summary>
     public void AddHook(MessageHook hook) => _hooks.Add(hook);
 
@@ -118,11 +126,24 @@ public sealed unsafe class MessageWindow : IUiDispatcher, IDisposable
             switch (msg)
             {
                 case WM_DISPATCH:
-                    Volatile.Write(ref _signaled, 0); // posts from now on post a new message
+                    // A full fence: the reset must be visible before the queue is read, or a Post racing with the last
+                    // TryDequeue could see 1, post nothing and strand its action.
+                    Interlocked.Exchange(ref _signaled, 0);
                     while (_failure is null && _queue.TryDequeue(out var a)) a();
                     return (LRESULT)0;
                 case WM_QUIT_REQUEST:
+                case PInvoke.WM_CLOSE: // not DefWindowProc: that destroys the window and nothing would end the loop
                     PInvoke.PostQuitMessage(0);
+                    return (LRESULT)0;
+                case PInvoke.WM_DESTROY:
+                    if (Volatile.Read(ref _disposed) == 0) PInvoke.PostQuitMessage(0); // destroyed from outside
+                    return (LRESULT)0;
+                case PInvoke.WM_ENDSESSION:
+                    if (wParam.Value != 0)
+                    {
+                        SessionEnding?.Invoke();
+                        PInvoke.PostQuitMessage(0);
+                    }
                     return (LRESULT)0;
                 case PInvoke.WM_DISPLAYCHANGE:
                 case PInvoke.WM_DPICHANGED:

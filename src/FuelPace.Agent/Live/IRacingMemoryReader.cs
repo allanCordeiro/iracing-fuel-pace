@@ -25,6 +25,8 @@ public sealed unsafe class IRacingMemoryReader : ITelemetrySource
     public const string DefaultEventName = @"Local\IRSDKDataValidEvent";
     private const int WaitMs = 200;
 
+    private static int s_accessDeniedLogged;
+
     private readonly MemoryMappedFile _map;
     private readonly MemoryMappedViewAccessor _view;
     private readonly EventWaitHandle _event;
@@ -45,8 +47,9 @@ public sealed unsafe class IRacingMemoryReader : ITelemetrySource
     }
 
     /// <summary>
-    /// Opens the shared memory and the event. Null when either does not exist (the sim is not running) or the sim is not in a
-    /// session yet: the host tries again every second.
+    /// Opens the shared memory and the event. Null when either does not exist (the sim is not running), when access is denied
+    /// (an elevated sim; one Warn until a later open succeeds) or when the sim is not in a session yet: the host tries again
+    /// every second.
     /// </summary>
     public static IRacingMemoryReader? TryOpen(string mapName = DefaultMapName, string eventName = DefaultEventName,
         DiagLog? log = null, TimeProvider? clock = null)
@@ -57,9 +60,20 @@ public sealed unsafe class IRacingMemoryReader : ITelemetrySource
         bool acquired = false;
         try
         {
-            try { map = MemoryMappedFile.OpenExisting(mapName, MemoryMappedFileRights.Read); }
+            try
+            {
+                map = MemoryMappedFile.OpenExisting(mapName, MemoryMappedFileRights.Read);
+                if (!EventWaitHandle.TryOpenExisting(eventName, out ev)) return null;
+            }
             catch (FileNotFoundException) { return null; }
-            if (!EventWaitHandle.TryOpenExisting(eventName, out ev)) return null;
+            catch (UnauthorizedAccessException)
+            {
+                // Typically the sim runs elevated and the Agent does not. Logged once until a connection succeeds.
+                if (Interlocked.Exchange(ref s_accessDeniedLogged, 1) == 0)
+                    log?.Text(DiagLevel.Warn, "telemetry", "the iRacing shared memory exists but access is denied (is the sim "
+                        + "running as administrator?); run the Agent with the same rights. Retrying every second.");
+                return null;
+            }
             view = map.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
             byte* p = null;
             view.SafeMemoryMappedViewHandle.AcquirePointer(ref p);
@@ -71,6 +85,7 @@ public sealed unsafe class IRacingMemoryReader : ITelemetrySource
             if (!conn.TryConnect(new ReadOnlySpan<byte>(p, size))) return null;
             var reader = new IRacingMemoryReader(map, view, ev, p, size, conn);
             map = null; // owned by the reader now
+            Volatile.Write(ref s_accessDeniedLogged, 0);
             return reader;
         }
         finally

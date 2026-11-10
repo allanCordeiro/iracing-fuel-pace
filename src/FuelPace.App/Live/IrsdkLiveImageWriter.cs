@@ -17,6 +17,12 @@ namespace FuelPace.App.Live;
 /// the copy), writes the row, then publishes the next, always rising, tick. Unwritten buffers have tick -1, so a reader sees
 /// no frame before the first <see cref="WriteFrame"/>. Allocation free after construction; one writer at a time.
 /// </para>
+/// <para>
+/// This is more cooperative than iRacing, which (as far as the SDK shows) only publishes the new tick after the row: a reader
+/// facing the real sim relies on the tick re-check alone, and a buffer rewritten while it is still the newest cannot happen
+/// there either (the sim writes the one after it). Tests that pass against this writer therefore do not prove tolerance of
+/// every interleaving the real sim allows; <c>LiveSnapshotReaderTests</c> cover the re-check itself.
+/// </para>
 /// </summary>
 public sealed class IrsdkLiveImageWriter
 {

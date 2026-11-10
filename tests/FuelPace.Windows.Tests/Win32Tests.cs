@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using FuelPace.Agent.Win32;
 using FuelPace.App.Diagnostics;
 using Microsoft.Win32;
@@ -110,6 +111,44 @@ public class MessageWindowTests
         failing.Window.Post(() => throw new InvalidOperationException("boom"));
         Assert.True(failing.Join());
         Assert.Equal("boom", Assert.IsType<InvalidOperationException>(failing.RunError).Message);
+    }
+
+    private const uint WM_CLOSE = 0x0010, WM_ENDSESSION = 0x0016;
+
+    [DllImport("user32.dll", EntryPoint = "PostMessageW")]
+    private static extern bool PostMessage(nint hwnd, uint msg, nuint wParam, nint lParam);
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    private static extern nint SendMessage(nint hwnd, uint msg, nuint wParam, nint lParam);
+
+    [Fact]
+    public void Wm_close_ends_the_loop()
+    {
+        // taskkill without /F, updaters and the Restart Manager send WM_CLOSE: the Agent must shut down, not hang.
+        var ui = new UiThread();
+        Assert.True(PostMessage(ui.Window.Handle, WM_CLOSE, 0, 0));
+        Assert.True(ui.Join(), "Run did not return after WM_CLOSE");
+        Assert.Null(ui.RunError);
+    }
+
+    [Fact]
+    public void Session_end_runs_the_handler_inside_the_message_then_ends_the_loop()
+    {
+        var ui = new UiThread();
+        int calls = 0, onThread = 0;
+        ui.Window.SessionEnding += () =>
+        {
+            Interlocked.Increment(ref calls);
+            onThread = Environment.CurrentManagedThreadId;
+        };
+        SendMessage(ui.Window.Handle, WM_ENDSESSION, 0, 0); // the session does not end: nothing happens
+        Assert.Equal(0, Volatile.Read(ref calls));
+
+        SendMessage(ui.Window.Handle, WM_ENDSESSION, 1, 0); // returns once the handler ran
+        Assert.Equal(1, Volatile.Read(ref calls));
+        Assert.Equal(ui.ThreadId, onThread);
+        Assert.True(ui.Join(), "Run did not return after WM_ENDSESSION");
+        Assert.Null(ui.RunError);
     }
 
     [Fact]

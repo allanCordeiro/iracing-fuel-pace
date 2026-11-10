@@ -192,36 +192,8 @@ public sealed class LiveReaderTests
         r.Dispose(); // twice is harmless
     }
 
-    [Fact]
-    public void Factory_names_come_from_the_environment()
-    {
-        string? oldMap = Environment.GetEnvironmentVariable(LiveSourceFactory.MapEnv);
-        string? oldEvent = Environment.GetEnvironmentVariable(LiveSourceFactory.EventEnv);
-        try
-        {
-            Environment.SetEnvironmentVariable(LiveSourceFactory.MapEnv, null);
-            Environment.SetEnvironmentVariable(LiveSourceFactory.EventEnv, null);
-            var defaults = new LiveSourceFactory(null, ReplaySpeed.X1);
-            Assert.Equal(@"Local\IRSDKMemMapFileName", defaults.MapName);
-            Assert.Equal(@"Local\IRSDKDataValidEvent", defaults.EventName);
-
-            Environment.SetEnvironmentVariable(LiveSourceFactory.MapEnv, _map);
-            Environment.SetEnvironmentVariable(LiveSourceFactory.EventEnv, _event);
-            var factory = new LiveSourceFactory(null, ReplaySpeed.X1);
-            Assert.Null(factory.TryOpen());
-            using var sim = new FakeSim(_map, _event, Yaml1);
-            using var src = factory.TryOpen();
-            Assert.IsType<IRacingMemoryReader>(src);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(LiveSourceFactory.MapEnv, oldMap);
-            Environment.SetEnvironmentVariable(LiveSourceFactory.EventEnv, oldEvent);
-        }
-    }
-
     /// <summary>The sim's side: a writable named mapping, the data-valid event and the image writer.</summary>
-    private sealed unsafe class FakeSim : IDisposable
+    internal sealed unsafe class FakeSim : IDisposable
     {
         private readonly IrsdkLiveImageWriter _w = new(TelemetryVars.All, 3, yamlCapacity: 64 * 1024);
         private readonly MemoryMappedFile _mmf;
@@ -296,6 +268,49 @@ public sealed class LiveReaderTests
                 _stop = true;
                 _thread.Join(TimeSpan.FromSeconds(5));
             }
+        }
+    }
+}
+
+/// <summary>Sets process-wide environment variables: runs alone (no other test may see them).</summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class EnvironmentCollection
+{
+    public const string Name = "process environment";
+}
+
+[Collection(EnvironmentCollection.Name)]
+public sealed class LiveSourceFactoryTests
+{
+    private const string Yaml1 = "---\nWeekendInfo:\n TrackName: zolder\n...\n";
+
+    [Fact]
+    public void Factory_names_come_from_the_environment()
+    {
+        string map = @"Local\FuelPace.Tests.Map." + Guid.NewGuid().ToString("N");
+        string ev = @"Local\FuelPace.Tests.Event." + Guid.NewGuid().ToString("N");
+        string? oldMap = Environment.GetEnvironmentVariable(LiveSourceFactory.MapEnv);
+        string? oldEvent = Environment.GetEnvironmentVariable(LiveSourceFactory.EventEnv);
+        try
+        {
+            Environment.SetEnvironmentVariable(LiveSourceFactory.MapEnv, null);
+            Environment.SetEnvironmentVariable(LiveSourceFactory.EventEnv, null);
+            var defaults = new LiveSourceFactory(null, ReplaySpeed.X1);
+            Assert.Equal(@"Local\IRSDKMemMapFileName", defaults.MapName);
+            Assert.Equal(@"Local\IRSDKDataValidEvent", defaults.EventName);
+
+            Environment.SetEnvironmentVariable(LiveSourceFactory.MapEnv, map);
+            Environment.SetEnvironmentVariable(LiveSourceFactory.EventEnv, ev);
+            var factory = new LiveSourceFactory(null, ReplaySpeed.X1);
+            Assert.Null(factory.TryOpen());
+            using var sim = new LiveReaderTests.FakeSim(map, ev, Yaml1);
+            using var src = factory.TryOpen();
+            Assert.IsType<IRacingMemoryReader>(src);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(LiveSourceFactory.MapEnv, oldMap);
+            Environment.SetEnvironmentVariable(LiveSourceFactory.EventEnv, oldEvent);
         }
     }
 }

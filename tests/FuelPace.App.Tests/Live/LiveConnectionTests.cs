@@ -4,6 +4,7 @@ using FuelPace.App.Simulation;
 using FuelPace.App.Tests.Fakes;
 using FuelPace.Core.Diagnostics;
 using FuelPace.Core.Telemetry;
+using FuelPace.Tests.Support;
 using static FuelPace.App.Tests.Recording.RecordingTestSupport;
 
 namespace FuelPace.App.Tests.Live;
@@ -212,5 +213,37 @@ public class LiveConnectionTests
     {
         var c = Connected();
         Assert.Equal("", c.ReadSessionInfoYaml(new byte[10]));
+    }
+}
+
+[Collection(PerfCollection.Name)]
+public sealed class LiveConnectionHotPathTests
+{
+    [Fact]
+    public void Reading_frames_allocates_nothing()
+    {
+        var w = new IrsdkLiveImageWriter(TelemetryVars.All, 3, yamlCapacity: 4096);
+        var image = new byte[w.TotalSize];
+        w.Initialize(image, "---\n...\n");
+        var c = new LiveConnection(new ManualClock(SyntheticRace.T0), new DiagLog(DiagLevel.Trace));
+        Assert.True(c.TryConnect(image));
+        var frames = SyntheticRace.Frames(1, withCarIdx: true).Take(300).ToArray();
+        var f = new TelemetryFrame();
+        foreach (var e in frames.AsSpan(0, 100))
+        {
+            w.WriteFrame(image, e);
+            c.TryRead(image, ref f);
+        }
+
+        int read = 0;
+        var m = AllocationMeasure.Start();
+        foreach (ref readonly var e in frames.AsSpan(100))
+        {
+            w.WriteFrame(image, e);
+            if (c.TryRead(image, ref f) == ReadResult.Frame) read++;
+            c.TryRead(image, ref f); // no new data
+        }
+        m.AssertNone();
+        Assert.Equal(200, read);
     }
 }
