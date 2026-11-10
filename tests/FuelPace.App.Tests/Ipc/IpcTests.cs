@@ -196,9 +196,10 @@ public sealed class IpcTests
         await clients[0].DisposeAsync();
         if (!queued) Assert.True(await fifth.ConnectAsync(Timeout));
         await fifth.SendAsync(new Hello("0.1.0"));
+        // The count passes through 4 before the first client's removal is processed, so keep broadcasting until the fifth is served.
+        await WaitUntil(() => { server.BroadcastAsync(new Notice("info", "hi")).AsTask().Wait(); return got != null; });
+        Assert.Equal(new Notice("info", "hi"), got);
         await WaitUntil(() => server.ClientCount == 4);
-        await server.BroadcastAsync(new Notice("info", "hi"));
-        Assert.Equal(new Notice("info", "hi"), await WaitFor(() => got));
         await fifth.DisposeAsync();
         for (int i = 1; i < 4; i++) await clients[i].DisposeAsync();
     }
