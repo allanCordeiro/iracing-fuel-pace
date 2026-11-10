@@ -39,10 +39,16 @@ public static class OverlayLayout
 
         float W(ReadOnlySpan<char> t, FontRole r, float size, float ls) => _m.Width(t, r, size * _k, ls);
 
-        float T(ReadOnlySpan<char> t, FontRole r, float size, float ls, bool italic, Rgba c, float x, float baseline)
+        float T(ReadOnlySpan<char> t, FontRole r, int weight, float size, float ls, bool italic, Rgba c, float x, float baseline, bool cont = false)
         {
-            _d.Text(t, r, size * _k, ls, italic, c.WithOpacity(_op), x, baseline);
+            _d.Text(t, r, weight, size * _k, ls, italic, c.WithOpacity(_op), x, baseline, cont);
             return W(t, r, size, ls);
+        }
+
+        float InsightWidth(ReadOnlySpan<char> t, int len, int boldLen)
+        {
+            int b = Math.Min(boldLen, len);
+            return W(t[..b], FontRole.BodyBold, 11, 0) + W(t[b..len], FontRole.Body, 11, 0);
         }
 
         float Asc(FontRole r, float size) => _m.Ascent(r, size * _k);
@@ -63,10 +69,10 @@ public static class OverlayLayout
             if (!full) _op *= 0.5;
             var pal = OverlayTheme.For(s.State);
 
-            Span<char> insight = stackalloc char[128];
+            Span<char> insight = stackalloc char[160];
             int insightLen = 0, boldLen = 0;
             if (full && _o.ShowInsightLine)
-                insightLen = OverlayText.Insight(in s.Insight, carShort, trackShort, insight, out boldLen);
+                insightLen = OverlayText.Insight(in s.Insight, carShort, trackShort, insight[..128], out boldLen);
             bool paceLine = full && _o.ShowPaceLine;
 
             // Panel height (1x): rows have line height 1.0.
@@ -87,17 +93,17 @@ public static class OverlayLayout
             // Row 1: fuel
             float top = oy + PadV * k;
             float bl = top + Asc(FontRole.Value, 21);
-            T("COMB", FontRole.Label, 9, 0.1f, false, OverlayTheme.Label, x0, bl);
+            T("COMB", FontRole.Label, 600, 9, 0.1f, false, OverlayTheme.Label, x0, bl);
             int n = OverlayText.Liters(s.FuelL, buf);
             float vx = x0 + 54 * k;
-            float wv = T(buf[..n], FontRole.Value, 21, 0, false, OverlayTheme.Text, vx, bl);
-            T("L", FontRole.Body, 10, 0, false, OverlayTheme.Label, vx + wv + 8 * k, bl);
+            float wv = T(buf[..n], FontRole.Value, 600, 21, 0, false, OverlayTheme.Text, vx, bl);
+            T("L", FontRole.Body, 400, 10, 0, false, OverlayTheme.Label, vx + wv + 8 * k, bl);
             int p = OverlayText.Laps(s.AutonomyLaps, buf);
             p = Cat(buf, p, " v · ");
             p += OverlayText.Minutes(s.AutonomyMin, buf[p..]);
             p = Cat(buf, p, " min");
             float wr = W(buf[..p], FontRole.Value, 12, 0);
-            T(buf[..p], FontRole.Value, 12, 0, false, OverlayTheme.Secondary, right - wr, bl);
+            T(buf[..p], FontRole.Value, 400, 12, 0, false, OverlayTheme.Secondary, right - wr, bl);
             top += 21 * k;
 
             if (full)
@@ -106,20 +112,20 @@ public static class OverlayLayout
                 top += RowGap * k;
                 bl = top + Asc(FontRole.Value, 16);
                 float x = x0;
-                T("VOLTA", FontRole.Label, 9, 0.1f, false, OverlayTheme.Label, x, bl);
+                T("VOLTA", FontRole.Label, 600, 9, 0.1f, false, OverlayTheme.Label, x, bl);
                 n = OverlayText.PerLap(s.LapProjectionL, buf);
                 x += 54 * k;
-                x += T(buf[..n], FontRole.ValueBold, 16, 0, false, pal.Volta, x, bl) + 20 * k;
+                x += T(buf[..n], FontRole.ValueBold, 700, 16, 0, false, pal.Volta, x, bl) + 20 * k;
 
-                x += T("ÚLT", FontRole.Label, 9, 0.1f, false, OverlayTheme.Label, x, bl) + 6 * k;
+                x += T("ÚLT", FontRole.Label, 600, 9, 0.1f, false, OverlayTheme.Label, x, bl) + 6 * k;
                 n = OverlayText.PerLap(s.LastLapL, buf);
                 if (s.LastLapInvalid && n < buf.Length) buf[n++] = '*';
-                x += T(buf[..n], FontRole.Value, 16, 0, false, pal.Last, x, bl) + 20 * k;
+                x += T(buf[..n], FontRole.Value, 500, 16, 0, false, pal.Last, x, bl) + 20 * k;
 
-                x += T("MÉD", FontRole.Label, 9, 0.1f, false, OverlayTheme.Label, x, bl) + 6 * k;
+                x += T("MÉD", FontRole.Label, 600, 9, 0.1f, false, OverlayTheme.Label, x, bl) + 6 * k;
                 n = OverlayText.PerLap(s.MeanL, buf);
-                x += T(buf[..n], FontRole.Value, 16, 0, s.MeanFromBaseline, OverlayTheme.Text, x, bl) + 6 * k;
-                T("L/v", FontRole.Body, 9, 0, false, OverlayTheme.Label, x, bl);
+                x += T(buf[..n], FontRole.Value, 500, 16, 0, s.MeanFromBaseline, OverlayTheme.Text, x, bl) + 6 * k;
+                T("L/v", FontRole.Body, 400, 9, 0, false, OverlayTheme.Label, x, bl);
                 top += 16 * k;
 
                 // Row 3: ALVO
@@ -133,25 +139,25 @@ public static class OverlayLayout
                 if (notFeasible)
                 {
                     float tb = ct + Asc(FontRole.Badge, 12);
-                    float w1 = T("NÃO FACTÍVEL", FontRole.Badge, 12, 0.06f, false, pal.Ink, il, tb);
+                    float w1 = T("NÃO FACTÍVEL", FontRole.Badge, 800, 12, 0.06f, false, pal.Ink, il, tb);
                     p = Cat(buf, 0, "alvo ");
                     p += OverlayText.PerLap(s.TargetL, buf[p..]);
                     p = Cat(buf, p, " · mín possível ");
                     p += OverlayText.PerLap(s.FeasibleMinL, buf[p..]);
-                    float w2 = T(buf[..p], FontRole.Value, 8.5f, 0, false, OverlayTheme.Subtitle, il, ct + 13 * k + Asc(FontRole.Value, 8.5f));
+                    float w2 = T(buf[..p], FontRole.Value, 400, 8.5f, 0, false, OverlayTheme.Subtitle, il, ct + 13 * k + Asc(FontRole.Value, 8.5f));
                     wl = Math.Max(w1, w2);
                 }
                 else
                 {
                     float tb = ct + Asc(FontRole.Value, 18);
-                    T("ALVO", FontRole.Label, 9, 0.1f, false, pal.Ink, il, tb);
+                    T("ALVO", FontRole.Label, 600, 9, 0.1f, false, pal.Ink, il, tb);
                     p = 0;
                     if (s.TargetIsEstimate && !double.IsNaN(s.TargetL)) buf[p++] = '~';
                     p += OverlayText.PerLap(s.TargetL, buf[p..]);
                     var vc = double.IsNaN(s.TargetL) ? OverlayTheme.Label : OverlayTheme.Text;
                     float tx = il + 51 * k;
-                    float w1 = T(buf[..p], FontRole.ValueBold, 18, 0, false, vc, tx, tb);
-                    float w2 = T("L/v", FontRole.Body, 9, 0, false, pal.Ink, tx + w1 + 8 * k, tb);
+                    float w1 = T(buf[..p], FontRole.ValueBold, 700, 18, 0, false, vc, tx, tb);
+                    float w2 = T("L/v", FontRole.Body, 400, 9, 0, false, pal.Ink, tx + w1 + 8 * k, tb);
                     wl = 51 * k + w1 + 8 * k + w2;
                 }
 
@@ -159,7 +165,8 @@ public static class OverlayLayout
                 if (s.IsStintMode && s.State is SignalState.Blue or SignalState.Red or SignalState.NotFeasible)
                 {
                     p = Cat(buf, 0, "STINT ");
-                    p += OverlayText.Minutes(s.LapsRemaining, buf[p..]);
+                    p += OverlayText.Laps(s.LapsRemaining, buf[p..]);
+                    p = Cat(buf, p, " v");
                 }
                 else if (s.State is SignalState.NoBaseline or SignalState.NoTarget)
                     p = Cat(buf, 0, s.IsPractice ? "treino · sem limite" : "sem limite");
@@ -179,10 +186,11 @@ public static class OverlayLayout
                     wb = wt + 12 * k;
                     float bx = ir - wb, by = ct + (ch - 14 * k) / 2;
                     _d.FillRoundedRect(new RectF(bx, by, wb, 14 * k), 3 * k, pal.BadgeBg.WithOpacity(_op));
-                    T(badge, FontRole.Badge, 8, 0.08f, false, pal.BadgeFg, bx + 6 * k, by + 3 * k + Asc(FontRole.Badge, 8));
+                    T(badge, FontRole.Badge, (s.State == SignalState.NotFeasible ? 800 : 700), 8, 0.08f, false, pal.BadgeFg, bx + 6 * k, by + 3 * k + Asc(FontRole.Badge, 8));
                 }
-                float cx = wb > 0 ? il + wl + (ir - il - wl - wc - wb) / 2 : ir - wc;
-                T(buf[..p], FontRole.Value, 11, 0, false, pal.Center, cx, ct + (ch - 11 * k) / 2 + Asc(FontRole.Value, 11));
+                // space-between: equal gaps (the mock's NÃO FACTÍVEL row leaves only about 4 px each side at 1x)
+                float cx = wb > 0 ? il + wl + Math.Max(0, (ir - il - wl - wc - wb) / 2) : Math.Max(il + wl, ir - wc);
+                T(buf[..p], FontRole.Value, 400, 11, 0, false, pal.Center, cx, ct + (ch - 11 * k) / 2 + Asc(FontRole.Value, 11));
                 top += rowH;
 
                 if (paceLine)
@@ -197,7 +205,7 @@ public static class OverlayLayout
                         p = Cat(buf, p, " · base ");
                         p += OverlayText.Seconds(s.BaselineLapTimeS, buf[p..]);
                     }
-                    T(buf[..p], FontRole.Value, 10, 0, false, OverlayTheme.Secondary, x0, top + Asc(FontRole.Value, 10));
+                    T(buf[..p], FontRole.Value, 400, 10, 0, false, OverlayTheme.Secondary, x0, top + Asc(FontRole.Value, 10));
                     top += 10 * k;
                 }
 
@@ -205,11 +213,21 @@ public static class OverlayLayout
                 {
                     top += RowGap * k;
                     bl = top + Asc(FontRole.Body, 11);
+                    // keep the line inside the panel: cut and end with an ellipsis (car/track names can be long)
+                    float avail = right - x0;
+                    if (InsightWidth(insight, insightLen, boldLen) > avail)
+                    {
+                        int len = insightLen;
+                        while (len > 1 && InsightWidth(insight, len, boldLen) + W("…", FontRole.Body, 11, 0) > avail) len--;
+                        insight[len] = '…';
+                        insightLen = len + 1;
+                        boldLen = Math.Min(boldLen, len);
+                    }
                     float wbold = 0;
                     if (boldLen > 0)
-                        wbold = T(insight[..boldLen], FontRole.BodyBold, 11, 0, false, OverlayTheme.Insight, x0, bl);
+                        wbold = T(insight[..boldLen], FontRole.BodyBold, 700, 11, 0, false, OverlayTheme.Insight, x0, bl);
                     if (insightLen > boldLen)
-                        T(insight[boldLen..insightLen], FontRole.Body, 11, 0, false, OverlayTheme.Insight, x0 + wbold, bl);
+                        T(insight[boldLen..insightLen], FontRole.Body, 400, 11, 0, false, OverlayTheme.Insight, x0 + wbold, bl, boldLen > 0);
                 }
             }
 
@@ -232,8 +250,8 @@ public static class OverlayLayout
                     _d.FillRoundedRect(new RectF(px, py, pwid, pillH), 4 * k, bg);
                     _d.FillRoundedRect(new RectF(px + 7 * k, py + (pillH - 6 * k) / 2, 6 * k, 6 * k), 3 * k, OverlayTheme.RecDot.WithOpacity(_op));
                     float tx = px + 7 * k + 11 * k;
-                    T("REC", FontRole.Badge, 8, 0.1f, false, OverlayTheme.Text, tx, tb);
-                    T(buf[..p], FontRole.Value, 9, 0, false, OverlayTheme.Secondary, tx + wRec + 5 * k, tb);
+                    T("REC", FontRole.Badge, 700, 8, 0.1f, false, OverlayTheme.Text, tx, tb);
+                    T(buf[..p], FontRole.Value, 400, 9, 0, false, OverlayTheme.Secondary, tx + wRec + 5 * k, tb);
                     edge = px - 4 * k;
                 }
                 if (_o.DebugTag)
@@ -241,7 +259,7 @@ public static class OverlayLayout
                     float wd = W("DBG", FontRole.Badge, 8, 0), pwid = 14 * k + wd;
                     float px = edge - pwid;
                     _d.FillRoundedRect(new RectF(px, py, pwid, pillH), 4 * k, bg);
-                    T("DBG", FontRole.Badge, 8, 0, false, OverlayTheme.Label, px + 7 * k, tb);
+                    T("DBG", FontRole.Badge, 700, 8, 0, false, OverlayTheme.Label, px + 7 * k, tb);
                 }
                 bottom = py + pillH;
             }
@@ -273,8 +291,8 @@ public static class OverlayLayout
             float w2 = _m.Width("arraste para mover · puxe um canto para redimensionar", FontRole.Body, f, 0);
             float bw = 18 + w1 + 7 + w2;
             _d.FillRoundedRect(new RectF(ox, 0, bw, BannerH), 4, OverlayTheme.Accent);
-            _d.Text("MODO EDIÇÃO", FontRole.Label, f, 0.08f, false, white, ox + 9, 5 + asc);
-            _d.Text("arraste para mover · puxe um canto para redimensionar", FontRole.Body, f, 0, false, white, ox + 9 + w1 + 7, 5 + asc);
+            _d.Text("MODO EDIÇÃO", FontRole.Label, 600, f, 0.08f, false, white, ox + 9, 5 + asc);
+            _d.Text("arraste para mover · puxe um canto para redimensionar", FontRole.Body, 400, f, 0, false, white, ox + 9 + w1 + 7, 5 + asc);
             width = Math.Max(width, ox + bw);
 
             // footer pills
@@ -295,13 +313,13 @@ public static class OverlayLayout
             float fa = _m.Ascent(FontRole.Body, f);
 
             _d.FillRoundedRect(new RectF(ox, fy, wl, fh), 6, bg);
-            _d.Text(_o.ToggleEditHotkey, FontRole.Value, f, 0, false, OverlayTheme.Insight, ox + 6, fy + 3 + fa);
-            _d.Text(rest, FontRole.Body, f, 0, false, OverlayTheme.Insight, ox + 6 + wk, fy + 3 + fa);
+            _d.Text(_o.ToggleEditHotkey, FontRole.Value, 600, f, 0, false, OverlayTheme.Insight, ox + 6, fy + 3 + fa);
+            _d.Text(rest, FontRole.Body, 400, f, 0, false, OverlayTheme.Insight, ox + 6 + wk, fy + 3 + fa);
             float ry = fy;
             if (wl + 6 + wr > pw) ry = fy + fh + 6; // does not fit beside it: stack
             float rx = Math.Max(ox, ox + pw - wr);
             _d.FillRoundedRect(new RectF(rx, ry, wr, fh), 6, bg);
-            _d.Text(info[..n], FontRole.Value, f, 0, false, OverlayTheme.Insight, rx + 6, ry + 3 + fa);
+            _d.Text(info[..n], FontRole.Value, 400, f, 0, false, OverlayTheme.Insight, rx + 6, ry + 3 + fa);
             width = Math.Max(width, Math.Max(ox + wl, rx + wr));
             return ry + fh;
         }

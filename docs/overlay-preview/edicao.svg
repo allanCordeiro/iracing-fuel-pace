@@ -6,26 +6,25 @@
 <rect y="299.3" width="694" height="65.7" fill="#0E1013"/>
 <g transform="translate(40 40)">
 <rect x="7" y="31" width="600" height="224" rx="12" fill="#0A0C10" fill-opacity="0.6"/>
-<text x="29" y="82.6" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" letter-spacing="1.8" fill="#A9B2BD" xml:space="preserve">COMB</text>
-<text x="137" y="82.6" font-family="'JetBrains Mono', monospace" font-size="42" font-weight="600" fill="#F2F4F7" xml:space="preserve">41.8</text>
-<text x="253.8" y="82.6" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="400" fill="#A9B2BD" xml:space="preserve">L</text>
-<text x="369" y="82.6" font-family="'JetBrains Mono', monospace" font-size="24" font-weight="600" fill="#D5DAE0" xml:space="preserve">17.3 v · 23 min</text>
-<text x="29" y="128.6" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" letter-spacing="1.8" fill="#A9B2BD" xml:space="preserve">VOLTA</text>
-<text x="137" y="128.6" font-family="'JetBrains Mono', monospace" font-size="32" font-weight="700" fill="#6AAEFF" xml:space="preserve">2.36</text>
-<text x="253.8" y="128.6" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" letter-spacing="1.8" fill="#A9B2BD" xml:space="preserve">ÚLT</text>
-<text x="307.92" y="128.6" font-family="'JetBrains Mono', monospace" font-size="32" font-weight="600" fill="#9CC8FF" xml:space="preserve">2.39</text>
-<text x="424.72" y="128.6" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" letter-spacing="1.8" fill="#A9B2BD" xml:space="preserve">MÉD</text>
-<text x="478.84" y="128.6" font-family="'JetBrains Mono', monospace" font-size="32" font-weight="600" fill="#F2F4F7" xml:space="preserve">2.38</text>
-<text x="567.64" y="128.6" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="400" fill="#A9B2BD" xml:space="preserve">L/v</text>
+<text x="29" y="82.6" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" letter-spacing="1.8" fill="#A9B2BD">COMB</text>
+<text x="137" y="82.6" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="42" font-weight="600" fill="#F2F4F7">41.8</text>
+<text x="253.8" y="82.6" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="400" fill="#A9B2BD">L</text>
+<text x="369" y="82.6" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="24" font-weight="400" fill="#D5DAE0">17.3 v · 23 min</text>
+<text x="29" y="128.6" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" letter-spacing="1.8" fill="#A9B2BD">VOLTA</text>
+<text x="137" y="128.6" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="32" font-weight="700" fill="#6AAEFF">2.36</text>
+<text x="253.8" y="128.6" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" letter-spacing="1.8" fill="#A9B2BD">ÚLT</text>
+<text x="307.92" y="128.6" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="32" font-weight="500" fill="#9CC8FF">2.39</text>
+<text x="424.72" y="128.6" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" letter-spacing="1.8" fill="#A9B2BD">MÉD</text>
+<text x="478.84" y="128.6" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="32" font-weight="500" fill="#F2F4F7">2.38</text>
+<text x="567.64" y="128.6" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="400" fill="#A9B2BD">L/v</text>
 <rect x="21" y="147" width="572" height="56" rx="8" fill="#2F80ED" fill-opacity="0.259"/>
-<text x="35" y="185.8" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" letter-spacing="1.8" fill="#CFE2FF" xml:space="preserve">ALVO</text>
-<text x="137" y="185.8" font-family="'JetBrains Mono', monospace" font-size="36" font-weight="700" fill="#F2F4F7" xml:space="preserve">2.49</text>
-<text x="239.4" y="185.8" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="400" fill="#CFE2FF" xml:space="preserve">L/v</text>
-<rect x="471.8" y="161" width="107.2" height="28" rx="6" fill="#1E6BD6"/>
-<text x="483.8" y="179.8" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="800" letter-spacing="1.28" fill="#FFFFFF" xml:space="preserve">NO ALVO</text>
-<text x="286" y="181.6" font-family="'JetBrains Mono', monospace" font-size="22" font-weight="600" fill="#E6EEF9" xml:space="preserve">faltam 16.6 v</text>
-<text x="29" y="232.6" font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="700" fill="#E3E7EC" xml:space="preserve">Folga 1.8 L</text>
-<text x="169.8" y="232.6" font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="400" fill="#E3E7EC" xml:space="preserve"> · pode atacar</text>
+<text x="35" y="185.8" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" letter-spacing="1.8" fill="#CFE2FF">ALVO</text>
+<text x="137" y="185.8" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="36" font-weight="700" fill="#F2F4F7">2.49</text>
+<text x="239.4" y="185.8" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="400" fill="#CFE2FF">L/v</text>
+<rect x="476.28" y="161" width="102.72" height="28" rx="6" fill="#1E6BD6"/>
+<text x="488.28" y="179.8" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="700" letter-spacing="1.28" fill="#FFFFFF">NO ALVO</text>
+<text x="287.88" y="181.6" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="22" font-weight="400" fill="#E6EEF9">faltam 16.6 v</text>
+<text x="29" y="232.6" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="700" fill="#E3E7EC">Folga 1.8 L<tspan font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="400" fill="#E3E7EC"> · pode atacar</tspan></text>
 <rect x="4.5" y="28.5" width="605" height="229" fill="none" stroke-width="1" stroke-dasharray="4 3" stroke="#FFFFFF" stroke-opacity="0.749"/>
 <rect x="0" y="24" width="7" height="7" fill="#FFFFFF"/>
 <rect x="0.5" y="24.5" width="6" height="6" fill="none" stroke-width="1" stroke="#1E6BD6"/>
@@ -35,13 +34,13 @@
 <rect x="0.5" y="255.5" width="6" height="6" fill="none" stroke-width="1" stroke="#1E6BD6"/>
 <rect x="607" y="255" width="7" height="7" fill="#FFFFFF"/>
 <rect x="607.5" y="255.5" width="6" height="6" fill="none" stroke-width="1" stroke="#1E6BD6"/>
-<rect x="7" y="0" width="442.12" height="21" rx="4" fill="#1E6BD6"/>
-<text x="16" y="13.8" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" letter-spacing="0.88" fill="#FFFFFF" xml:space="preserve">MODO EDIÇÃO</text>
-<text x="113.64" y="13.8" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="400" fill="#FFFFFF" xml:space="preserve">arraste para mover · puxe um canto para redimensionar</text>
-<rect x="7" y="268" width="312.96" height="17" rx="6" fill="#0A0C10" fill-opacity="0.749"/>
-<text x="13" y="279.8" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="#E3E7EC" xml:space="preserve">Ctrl+Shift+F</text>
-<text x="92.2" y="279.8" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="400" fill="#E3E7EC" xml:space="preserve"> trava e volta ao modo click-through</text>
+<rect x="7" y="0" width="388.66" height="21" rx="4" fill="#1E6BD6"/>
+<text x="16" y="13.8" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" letter-spacing="0.88" fill="#FFFFFF">MODO EDIÇÃO</text>
+<text x="110.56" y="13.8" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="400" fill="#FFFFFF">arraste para mover · puxe um canto para redimensionar</text>
+<rect x="7" y="268" width="273.36" height="17" rx="6" fill="#0A0C10" fill-opacity="0.749"/>
+<text x="13" y="279.8" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="#E3E7EC">Ctrl+Shift+F</text>
+<text x="92.2" y="279.8" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="400" fill="#E3E7EC"> trava e volta ao modo click-through</text>
 <rect x="410.2" y="268" width="196.8" height="17" rx="6" fill="#0A0C10" fill-opacity="0.749"/>
-<text x="416.2" y="279.8" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="#E3E7EC" xml:space="preserve">X 1840 · Y 980 · escala 200%</text>
+<text x="416.2" y="279.8" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="400" fill="#E3E7EC">X 1840 · Y 980 · escala 200%</text>
 </g>
 </svg>

@@ -6,24 +6,23 @@
 <rect y="160.31" width="380" height="35.19" fill="#0E1013"/>
 <g transform="translate(40 40)">
 <rect x="0" y="0" width="300" height="115.5" rx="6" fill="#0A0C10" fill-opacity="0.6"/>
-<text x="11" y="25.8" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" letter-spacing="0.9" fill="#A9B2BD" xml:space="preserve">COMB</text>
-<text x="65" y="25.8" font-family="'JetBrains Mono', monospace" font-size="21" font-weight="600" fill="#F2F4F7" xml:space="preserve">30.2</text>
-<text x="123.4" y="25.8" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="400" fill="#A9B2BD" xml:space="preserve">L</text>
-<text x="181" y="25.8" font-family="'JetBrains Mono', monospace" font-size="12" font-weight="600" fill="#D5DAE0" xml:space="preserve">12.5 v · 17 min</text>
-<text x="11" y="48.8" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" letter-spacing="0.9" fill="#A9B2BD" xml:space="preserve">VOLTA</text>
-<text x="65" y="48.8" font-family="'JetBrains Mono', monospace" font-size="16" font-weight="700" fill="#F2F4F7" xml:space="preserve">2.39</text>
-<text x="123.4" y="48.8" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" letter-spacing="0.9" fill="#A9B2BD" xml:space="preserve">ÚLT</text>
-<text x="150.46" y="48.8" font-family="'JetBrains Mono', monospace" font-size="16" font-weight="600" fill="#F2F4F7" xml:space="preserve">2.38</text>
-<text x="208.86" y="48.8" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" letter-spacing="0.9" fill="#A9B2BD" xml:space="preserve">MÉD</text>
-<text x="235.92" y="48.8" font-family="'JetBrains Mono', monospace" font-size="16" font-weight="600" fill="#F2F4F7" xml:space="preserve">2.38</text>
-<text x="280.32" y="48.8" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#A9B2BD" xml:space="preserve">L/v</text>
+<text x="11" y="25.8" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" letter-spacing="0.9" fill="#A9B2BD">COMB</text>
+<text x="65" y="25.8" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="21" font-weight="600" fill="#F2F4F7">30.2</text>
+<text x="123.4" y="25.8" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="400" fill="#A9B2BD">L</text>
+<text x="181" y="25.8" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="12" font-weight="400" fill="#D5DAE0">12.5 v · 17 min</text>
+<text x="11" y="48.8" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" letter-spacing="0.9" fill="#A9B2BD">VOLTA</text>
+<text x="65" y="48.8" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="16" font-weight="700" fill="#F2F4F7">2.39</text>
+<text x="123.4" y="48.8" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" letter-spacing="0.9" fill="#A9B2BD">ÚLT</text>
+<text x="150.46" y="48.8" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="16" font-weight="500" fill="#F2F4F7">2.38</text>
+<text x="208.86" y="48.8" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="600" letter-spacing="0.9" fill="#A9B2BD">MÉD</text>
+<text x="235.92" y="48.8" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="16" font-weight="500" fill="#F2F4F7">2.38</text>
+<text x="280.32" y="48.8" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="400" fill="#A9B2BD">L/v</text>
 <rect x="7" y="58" width="286" height="31.5" rx="4" fill="#FFFFFF" fill-opacity="0.122"/>
-<text x="14" y="72.6" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="800" letter-spacing="0.72" fill="#FFFFFF" xml:space="preserve">NÃO FACTÍVEL</text>
-<text x="14" y="82.8" font-family="'JetBrains Mono', monospace" font-size="8.5" font-weight="600" fill="#C9CFD6" xml:space="preserve">alvo 2.01 · mín possível 2.23</text>
+<text x="14" y="72.6" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="800" letter-spacing="0.72" fill="#FFFFFF">NÃO FACTÍVEL</text>
+<text x="14" y="82.8" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="8.5" font-weight="400" fill="#C9CFD6">alvo 2.01 · mín possível 2.23</text>
 <rect x="255.76" y="66.75" width="30.24" height="14" rx="3" fill="#F2F4F7"/>
-<text x="261.76" y="76.15" font-family="Inter, system-ui, sans-serif" font-size="8" font-weight="800" letter-spacing="0.64" fill="#0E1013" xml:space="preserve">PIT</text>
-<text x="165.93" y="77.05" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="#E6E9ED" xml:space="preserve">faltam 14.8 v</text>
-<text x="11" y="104.3" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="700" fill="#E3E7EC" xml:space="preserve">Faltam 3.3 L</text>
-<text x="87.56" y="104.3" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="400" fill="#E3E7EC" xml:space="preserve"> · parada necessária</text>
+<text x="261.76" y="76.15" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="8" font-weight="800" letter-spacing="0.64" fill="#0E1013">PIT</text>
+<text x="165.93" y="77.05" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="400" fill="#E6E9ED">faltam 14.8 v</text>
+<text x="11" y="104.3" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="700" fill="#E3E7EC">Faltam 3.3 L<tspan font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="400" fill="#E3E7EC"> · parada necessária</tspan></text>
 </g>
 </svg>

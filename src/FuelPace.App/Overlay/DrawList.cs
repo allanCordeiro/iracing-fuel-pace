@@ -24,11 +24,12 @@ public enum CommandKind : byte { FillRoundedRect, StrokeDashedRect, FillRect, St
 
 /// <summary>
 /// One draw command. For <see cref="CommandKind.Text"/>, <c>Rect.X</c>/<c>Rect.Y</c> are x and the baseline y (W/H unused).
-/// <c>Radius</c> is the corner radius for rounded fills and the line width for strokes.
+/// <c>Weight</c> is the CSS font weight (400..800). <c>Continuation</c> marks a text run that follows the previous run on the
+/// same baseline (flow-capable renderers such as SVG may ignore its X and let the text flow). <c>Radius</c> is the corner radius for rounded fills and the line width for strokes.
 /// </summary>
 public readonly record struct DrawCommand(
     CommandKind Kind, RectF Rect, float Radius, Rgba Color,
-    int TextStart, int TextLength, FontRole Role, float SizePx, float LetterSpacingEm, bool Italic)
+    int TextStart, int TextLength, FontRole Role, float SizePx, float LetterSpacingEm, bool Italic, int Weight = 400, bool Continuation = false)
 {
     public float X => Rect.X;
     public float BaselineY => Rect.Y;
@@ -75,18 +76,18 @@ public sealed class DrawList
         return start;
     }
 
-    public void Text(int arenaStart, int length, FontRole role, float sizePx, float letterSpacingEm, bool italic, Rgba color, float x, float baselineY)
-        => Add(new(CommandKind.Text, new RectF(x, baselineY, 0, 0), 0, color, arenaStart, length, role, sizePx, letterSpacingEm, italic));
+    public void Text(int arenaStart, int length, FontRole role, int weight, float sizePx, float letterSpacingEm, bool italic, Rgba color, float x, float baselineY, bool continuation = false)
+        => Add(new(CommandKind.Text, new RectF(x, baselineY, 0, 0), 0, color, arenaStart, length, role, sizePx, letterSpacingEm, italic, weight, continuation));
 
-    public void Text(ReadOnlySpan<char> text, FontRole role, float sizePx, float letterSpacingEm, bool italic, Rgba color, float x, float baselineY)
-        => Text(Append(text), text.Length, role, sizePx, letterSpacingEm, italic, color, x, baselineY);
+    public void Text(ReadOnlySpan<char> text, FontRole role, int weight, float sizePx, float letterSpacingEm, bool italic, Rgba color, float x, float baselineY, bool continuation = false)
+        => Text(Append(text), text.Length, role, weight, sizePx, letterSpacingEm, italic, color, x, baselineY, continuation);
 
     void Add(in DrawCommand c)
     {
         if (_count == _cmds.Length) Array.Resize(ref _cmds, _cmds.Length * 2);
         _cmds[_count++] = c;
         ulong h = _hash;
-        h = Mix(h, (ulong)c.Kind | ((ulong)c.Role << 8) | (c.Italic ? 1UL << 16 : 0) | ((ulong)(uint)c.TextLength << 32));
+        h = Mix(h, (ulong)c.Kind | ((ulong)c.Role << 8) | (c.Italic ? 1UL << 16 : 0) | (c.Continuation ? 1UL << 17 : 0) | ((ulong)(uint)c.Weight << 18) | ((ulong)(uint)c.TextLength << 32));
         h = Mix(h, BitConverter.SingleToUInt32Bits(c.Rect.X) | ((ulong)BitConverter.SingleToUInt32Bits(c.Rect.Y) << 32));
         h = Mix(h, BitConverter.SingleToUInt32Bits(c.Rect.W) | ((ulong)BitConverter.SingleToUInt32Bits(c.Rect.H) << 32));
         h = Mix(h, BitConverter.SingleToUInt32Bits(c.Radius) | ((ulong)BitConverter.SingleToUInt32Bits(c.SizePx) << 32));

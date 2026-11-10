@@ -31,8 +31,10 @@ public static class SvgRenderer
             sb.Append(Inv, $"<rect y=\"{F(bar)}\" width=\"{F(w)}\" height=\"{F(h - bar)}\" fill=\"#0E1013\"/>\n");
         }
         sb.Append(Inv, $"<g transform=\"translate({padding} {padding})\">\n");
+        bool open = false;
         foreach (var c in list.Commands)
         {
+            if (open && !(c.Kind == CommandKind.Text && c.Continuation)) { sb.Append("</text>\n"); open = false; }
             switch (c.Kind)
             {
                 case CommandKind.FillRoundedRect:
@@ -53,21 +55,23 @@ public static class SvgRenderer
                     break;
                 case CommandKind.Text:
                     bool mono = c.Role is FontRole.Value or FontRole.ValueBold;
-                    int weight = c.Role switch
-                    {
-                        FontRole.Value => 600, FontRole.ValueBold => 700, FontRole.Label => 600,
-                        FontRole.BodyBold => 700, FontRole.Badge => 800, _ => 400,
-                    };
-                    sb.Append(Inv, $"<text x=\"{F(c.Rect.X)}\" y=\"{F(c.Rect.Y)}\" font-family=\"{(mono ? MonoFamily : InterFamily)}\" font-size=\"{F(c.SizePx)}\" font-weight=\"{weight}\"");
+                    // A continuation flows after the previous run inside the same <text>, so the browser's own font
+                    // metrics decide the spacing instead of the estimate used for layout.
+                    sb.Append(c.Continuation && open ? "<tspan" : "<text");
+                    if (!(c.Continuation && open))
+                        sb.Append(Inv, $" x=\"{F(c.Rect.X)}\" y=\"{F(c.Rect.Y)}\" xml:space=\"preserve\"");
+                    sb.Append(Inv, $" font-family=\"{(mono ? MonoFamily : InterFamily)}\" font-size=\"{F(c.SizePx)}\" font-weight=\"{c.Weight}\"");
                     if (c.Italic) sb.Append(" font-style=\"italic\"");
                     if (c.LetterSpacingEm != 0) sb.Append(Inv, $" letter-spacing=\"{F(c.LetterSpacingEm * c.SizePx)}\"");
                     Paint(sb, "fill", c.Color);
-                    sb.Append(" xml:space=\"preserve\">");
+                    sb.Append('>');
                     Escape(sb, list.TextOf(in c));
-                    sb.Append("</text>\n");
+                    if (c.Continuation && open) sb.Append("</tspan>");
+                    else open = true;
                     break;
             }
         }
+        if (open) sb.Append("</text>\n");
         sb.Append("</g>\n</svg>\n");
         return sb.ToString();
     }

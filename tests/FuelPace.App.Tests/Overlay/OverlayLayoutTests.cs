@@ -114,7 +114,7 @@ public sealed class OverlayLayoutTests
     {
         var s = Blue(); s.IsStintMode = true; s.LapsRemaining = 25;
         var d = Build(s);
-        Assert.True(Has(d, "STINT 25"));
+        Assert.True(Has(d, "STINT 25.0 v"));
         Assert.DoesNotContain(Texts(d), t => t.Text.StartsWith("faltam"));
     }
 
@@ -243,6 +243,75 @@ public sealed class OverlayLayoutTests
         var without = Build(Blue(), Opts(insight: false));
         Assert.True(without.Size.H < withLine.Size.H);
         Assert.False(Has(without, "Folga 1.8 L"));
+    }
+
+    [Fact]
+    public void Font_weights_follow_the_mocks()
+    {
+        var s = Blue(); s.Recording = true; s.RecValid = 4; s.RecTotal = 5;
+        var d = Build(s, Opts(pace: true, debug: true));
+        Assert.Equal(600, Text(d, "COMB").Weight);
+        Assert.Equal(600, Text(d, "41.8").Weight);
+        Assert.Equal(400, Text(d, "L").Weight);
+        Assert.Equal(400, Text(d, "17.3 v · 23 min").Weight);
+        Assert.Equal(600, Text(d, "VOLTA").Weight);
+        Assert.Equal(700, Text(d, "2.36").Weight);
+        Assert.Equal(500, Text(d, "2.39").Weight);
+        Assert.Equal(500, Text(d, "2.38").Weight);
+        Assert.Equal(700, Text(d, "2.49").Weight);
+        Assert.Equal(400, Text(d, "faltam 16.6 v").Weight);
+        Assert.Equal(700, Text(d, "NO ALVO").Weight);
+        Assert.Equal(700, Text(d, "Folga 1.8 L").Weight);
+        Assert.Equal(400, Text(d, " · pode atacar").Weight);
+        Assert.Equal(400, Text(d, "ÚLT 79.51 s · MÉD 80.14 · base 80.12").Weight);
+        Assert.Equal(700, Text(d, "REC").Weight);
+        Assert.Equal(400, Text(d, "4/5 válidas").Weight);
+        Assert.Equal(700, Text(d, "DBG").Weight);
+        var nf = Blue(); nf.State = SignalState.NotFeasible; nf.TargetL = 2.01; nf.FeasibleMinL = 2.23;
+        var f = Build(nf);
+        Assert.Equal(800, Text(f, "NÃO FACTÍVEL").Weight);
+        Assert.Equal(800, Text(f, "PIT").Weight);
+        Assert.Equal(400, Text(f, "alvo 2.01 · mín possível 2.23").Weight);
+        var e = Build(Blue(), Opts(edit: true));
+        Assert.Equal(600, Text(e, "MODO EDIÇÃO").Weight);
+        Assert.Equal(600, Text(e, "Ctrl+Shift+F").Weight);
+        Assert.Equal(400, Text(e, "X 1840 · Y 980 · escala 100%").Weight);
+    }
+
+    [Fact]
+    public void Insight_regular_run_continues_bold_run_and_svg_flows_it_in_one_text()
+    {
+        var d = Build(Blue());
+        Assert.False(Text(d, "Folga 1.8 L").Continuation);
+        Assert.True(Text(d, " · pode atacar").Continuation);
+        var svg = SvgRenderer.Render(d);
+        Assert.Contains("<tspan", svg);
+        Assert.Contains("Folga 1.8 L<tspan", svg);
+    }
+
+    [Fact]
+    public void Centre_text_sits_between_left_group_and_badge_with_equal_gaps()
+    {
+        var nf = Blue(); nf.State = SignalState.NotFeasible; nf.TargetL = 2.01; nf.FeasibleMinL = 2.23;
+        var d = Build(nf);
+        float leftEnd = Text(d, "alvo 2.01 · mín possível 2.23").X + M.Width("alvo 2.01 · mín possível 2.23", FontRole.Value, 8.5f, 0);
+        var c = Text(d, "faltam 14.8 v".Replace("14.8", "16.6"));
+        float centreEnd = c.X + M.Width("faltam 16.6 v", FontRole.Value, 11, 0);
+        float badgeX = Text(d, "PIT").X - 6;
+        Assert.True(c.X - leftEnd >= 3.5f, $"left gap {c.X - leftEnd}");
+        Assert.True(badgeX - centreEnd >= 3.5f, $"right gap {badgeX - centreEnd}");
+        Assert.Equal(c.X - leftEnd, badgeX - centreEnd, 0.1);
+    }
+
+    [Fact]
+    public void Long_insight_is_truncated_with_ellipsis_inside_the_panel()
+    {
+        var s = Blue(); s.State = SignalState.NoBaseline; s.Insight = new Insight(InsightKind.NoBaseline);
+        var d = new DrawList();
+        OverlayLayout.Build(in s, "Ferrari 296 GT3 Evo Customer", "Circuit de Spa-Francorchamps Grand Prix", Opts(), M, d);
+        var t = Texts(d).Last(x => x.Text.StartsWith("Sem baseline"));
+        Assert.EndsWith("…", t.Text);
+        Assert.True(t.Cmd.X + M.Width(t.Text, FontRole.Body, 11, 0) <= 289.01f);
     }
 
     [Fact]
