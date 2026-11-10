@@ -4,8 +4,34 @@ using FuelPace.Core.Strategy;
 
 namespace FuelPace.App.Settings;
 
-/// <summary>camelCase string enums ("auto", "layered") for settings.json.</summary>
-public sealed class CamelCaseEnumConverter<T>() : JsonStringEnumConverter<T>(JsonNamingPolicy.CamelCase) where T : struct, Enum;
+/// <summary>
+/// camelCase string enums ("auto", "layered") for settings.json, read leniently: any case is accepted, and a value that is
+/// not a name of <typeparamref name="T"/> (a typo, a number, another JSON type) reads as an undefined value that
+/// <c>Normalize</c> replaces with the property's default. One bad value never makes the whole file corrupt (quarantined).
+/// </summary>
+public sealed class CamelCaseEnumConverter<T> : JsonConverter<T> where T : struct, Enum
+{
+    /// <summary>Not a value of any enum here: <c>Normalize</c> turns it into the default.</summary>
+    private static readonly T Undefined = (T)Enum.ToObject(typeof(T), -1);
+
+    public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.String)
+        {
+            var text = reader.GetString();
+            // Names only: Enum.TryParse would also take "1" or "-5".
+            if (text is { Length: > 0 } && !char.IsAsciiDigit(text[0]) && text[0] != '-' && text[0] != '+'
+                && Enum.TryParse<T>(text, ignoreCase: true, out var v) && Enum.IsDefined(v))
+                return v;
+            return Undefined;
+        }
+        reader.Skip(); // a number, a bool, an object or an array: ignored, whole
+        return Undefined;
+    }
+
+    public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) =>
+        writer.WriteStringValue(JsonNamingPolicy.CamelCase.ConvertName(value.ToString()));
+}
 
 [JsonConverter(typeof(CamelCaseEnumConverter<RenderBackend>))]
 public enum RenderBackend { Auto, Composition, Layered }

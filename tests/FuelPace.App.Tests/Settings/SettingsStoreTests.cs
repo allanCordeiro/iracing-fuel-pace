@@ -142,6 +142,45 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.False(Directory.Exists(SettingsPath + ".corrupt"));
     }
 
+    [Theory] // a typo in one enum must not wipe the user's position and scale (the guide tells them to hand-edit renderBackend)
+    [InlineData("\"layerd\"")]
+    [InlineData("42")]
+    [InlineData("true")]
+    [InlineData("{}")]
+    public void A_bad_enum_value_falls_back_for_that_property_only(string backend)
+    {
+        File.WriteAllText(SettingsPath, """{"overlay":{"scale":1.7,"offsetX":321,"renderBackend":""" + backend + """},"strategy":{"mode":"nope","reserveL":1.5}}""");
+        var store = new SettingsStore(_dir);
+        var s = store.Load();
+        Assert.False(File.Exists(SettingsPath + ".corrupt"));
+        Assert.True(File.Exists(SettingsPath));
+        Assert.Equal(1.7, s.Overlay.Scale);
+        Assert.Equal(321, s.Overlay.OffsetX);
+        Assert.Equal(RenderBackend.Auto, s.Overlay.RenderBackend);
+        Assert.Equal(LapsMode.Auto, s.Strategy.Mode);
+        Assert.Equal(1.5, s.Strategy.ReserveL);
+    }
+
+    [Theory]
+    [InlineData("\"layered\"", RenderBackend.Layered)]
+    [InlineData("\"Layered\"", RenderBackend.Layered)]
+    [InlineData("\"COMPOSITION\"", RenderBackend.Composition)]
+    [InlineData("\"auto\"", RenderBackend.Auto)]
+    public void Enum_values_are_read_ignoring_case(string backend, RenderBackend expected)
+    {
+        File.WriteAllText(SettingsPath, """{"overlay":{"renderBackend":""" + backend + "}}");
+        Assert.Equal(expected, new SettingsStore(_dir).Load().Overlay.RenderBackend);
+    }
+
+    [Fact]
+    public void Enums_are_still_written_in_camel_case()
+    {
+        var store = new SettingsStore(_dir);
+        store.Save(new AppSettings { Overlay = new OverlaySettings { RenderBackend = RenderBackend.Layered } });
+        Assert.Contains("\"renderBackend\": \"layered\"", File.ReadAllText(SettingsPath));
+        Assert.Contains("\"mode\": \"auto\"", File.ReadAllText(SettingsPath));
+    }
+
     [Fact]
     public void Out_of_range_strategy_value_is_clamped_not_fatal()
     {
