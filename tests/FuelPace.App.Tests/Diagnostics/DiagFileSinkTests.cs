@@ -157,4 +157,84 @@ public sealed class DiagFileSinkTests : IDisposable
         Assert.Contains("boom", all);
         Assert.Contains("fatal", all);
     }
+
+    [Fact]
+    public void Unwritable_directory_beyond_pending_cap_drops_oldest_and_counts()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(_dir)!);
+        File.WriteAllText(_dir, "not a directory");
+        try
+        {
+            var log = new DiagLog(DiagLevel.Info);
+            using var sink = new DiagFileSink(log, _dir);
+            for (int round = 0; round < 3; round++)
+            {
+                for (int i = 0; i < 10000; i++) log.Emit(DiagLevel.Info, DiagEvent.UserMark, i, i0: i);
+                sink.FlushNow();
+            }
+            Assert.Equal(0, log.Dropped);
+            Assert.Equal(10000, sink.LostLines); // 30000 lines - 20000 retained
+        }
+        finally { File.Delete(_dir); }
+    }
+
+    [Fact]
+    public void Item_that_fails_to_format_is_counted_and_the_rest_of_the_batch_is_written()
+    {
+        var log = new DiagLog(DiagLevel.Info);
+        long lostReported = 0;
+        int normal = 0;
+        using (var sink = new DiagFileSink(log, _dir, 20 << 20, 200 << 20, (w, t) =>
+        {
+            if (t.Message == "bad") throw new InvalidOperationException("format failure");
+            DiagJsonFormatter.Write(w, in t);
+        }))
+        {
+            log.Emit(DiagLevel.Info, DiagEvent.UserMark, 1.0, i0: 1);
+            log.Text(DiagLevel.Info, "app", "bad");
+            log.Emit(DiagLevel.Info, DiagEvent.UserMark, 2.0, i0: 2);
+            sink.FlushNow();
+            Assert.Equal(1, sink.LostLines);
+        }
+        foreach (var l in Files().SelectMany(ReadLines))
+        {
+            var root = JsonDocument.Parse(l).RootElement;
+            if (root.GetProperty("ev").GetString() == "DiagDropped") lostReported += root.GetProperty("count").GetInt64();
+            else normal++;
+        }
+        Assert.Equal(2, normal);
+        Assert.Equal(1, lostReported);
+    }
+
+    [Fact]
+    public void Concurrent_emitters_and_flushes_account_for_every_event()
+    {
+        const int threads = 4, perThread = 6000;
+        var log = new DiagLog(DiagLevel.Info, capacity: 4096);
+        var sink = new DiagFileSink(log, _dir);
+        var emitters = Enumerable.Range(0, threads).Select(_ => new Thread(() =>
+        {
+            for (int i = 0; i < perThread; i++)
+            {
+                if (i % 10 == 0) log.Text(DiagLevel.Info, "app", "t" + i);
+                else log.Emit(DiagLevel.Info, DiagEvent.UserMark, i, i0: i);
+            }
+        })).ToList();
+        var flusher = new Thread(() => { for (int i = 0; i < 50; i++) { sink.FlushNow(); Thread.Sleep(1); } });
+        flusher.Start();
+        emitters.ForEach(t => t.Start());
+        emitters.ForEach(t => t.Join());
+        flusher.Join();
+        sink.Dispose();
+
+        long lines = 0, markerCount = 0;
+        foreach (var l in Files().SelectMany(ReadLines))
+        {
+            var root = JsonDocument.Parse(l).RootElement;
+            if (root.TryGetProperty("ev", out var ev) && ev.GetString() == "DiagDropped") markerCount += root.GetProperty("count").GetInt64();
+            else lines++;
+        }
+        Assert.Equal(threads * perThread, lines + log.Dropped + sink.LostLines);
+        Assert.Equal(log.Dropped + sink.LostLines, markerCount);
+    }
 }

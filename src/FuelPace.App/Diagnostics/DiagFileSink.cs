@@ -19,6 +19,7 @@ public sealed class DiagFileSink : IDisposable
     private readonly string _dir;
     private readonly long _maxFileBytes;
     private readonly long _maxTotalBytes;
+    private readonly Action<Utf8JsonWriter, DiagText>? _textFormatter;
     private readonly Lock _io = new();
     private readonly ManualResetEventSlim _stop = new(false);
     private readonly Thread _thread;
@@ -35,7 +36,14 @@ public sealed class DiagFileSink : IDisposable
     private bool _disposed;
 
     public DiagFileSink(DiagLog log, string logsDir, long maxFileBytes = 20 << 20, long maxTotalBytes = 200 << 20)
+        : this(log, logsDir, maxFileBytes, maxTotalBytes, null)
     {
+    }
+
+    /// <param name="textFormatter">Test seam: replaces the text-line formatter.</param>
+    internal DiagFileSink(DiagLog log, string logsDir, long maxFileBytes, long maxTotalBytes, Action<Utf8JsonWriter, DiagText>? textFormatter)
+    {
+        _textFormatter = textFormatter;
         _log = log;
         _dir = logsDir;
         _maxFileBytes = maxFileBytes;
@@ -50,26 +58,47 @@ public sealed class DiagFileSink : IDisposable
 
     public void FlushNow()
     {
-        using (_io.EnterScope())
+        try
         {
-            if (_disposed) return;
-            DrainLocked();
+            using (_io.EnterScope())
+            {
+                if (_disposed) return;
+                DrainLocked();
+            }
+        }
+        catch
+        {
+            // flushing (e.g. from the crash handler) must never throw
         }
     }
 
     public void Dispose()
     {
         _stop.Set();
-        if (_thread.IsAlive && Thread.CurrentThread != _thread) _thread.Join();
-        using (_io.EnterScope())
+        try
         {
-            if (_disposed) return;
-            DrainLocked();
-            _disposed = true;
-            CloseFile();
+            if (_thread.IsAlive && Thread.CurrentThread != _thread) _thread.Join(TimeSpan.FromSeconds(2));
+            if (!_io.TryEnter(TimeSpan.FromSeconds(2))) return;
+            try
+            {
+                if (_disposed) return;
+                try { DrainLocked(); }
+                finally
+                {
+                    _disposed = true;
+                    CloseFile();
+                }
+            }
+            finally { _io.Exit(); }
         }
-        _json.Dispose();
-        _stop.Dispose();
+        catch
+        {
+            // Dispose must never throw
+        }
+        finally
+        {
+            try { _json.Dispose(); } catch { }
+        }
     }
 
     private void Run()
@@ -115,20 +144,38 @@ public sealed class DiagFileSink : IDisposable
                 if (ti >= texts.Count || (ri < records.Count && records[ri].Seq <= texts[ti].Seq))
                 {
                     var r = records[ri++];
-                    Serialize(w => DiagJsonFormatter.Write(w, in r));
+                    TrySerialize(w => DiagJsonFormatter.Write(w, in r));
                 }
                 else
                 {
                     var t = texts[ti++];
-                    Serialize(w => DiagJsonFormatter.Write(w, in t));
+                    TrySerialize(w => { if (_textFormatter is not null) _textFormatter(w, t); else DiagJsonFormatter.Write(w, in t); });
                 }
             }
         }
         catch
         {
-            // serialization problem: nothing more to do than keep draining next tick
+            // draining itself failed; whatever was serialized is still written below
         }
         WritePending();
+        if (_lostSinceReport > 0 && _pending.Count == 0)
+        {
+            // report what was lost (serialization failures, or lines dropped while the directory was unwritable)
+            long lost = _lostSinceReport;
+            _lostSinceReport = 0;
+            AddDroppedLine("DiagDropped", lost, "lost");
+            WritePending();
+        }
+    }
+
+    private void TrySerialize(Action<Utf8JsonWriter> write)
+    {
+        try { Serialize(write); }
+        catch
+        {
+            _lostSinceReport++;
+            Interlocked.Increment(ref _lostLines);
+        }
     }
 
     private void AddDroppedLine(string ev, long count, string? cause)
@@ -172,13 +219,6 @@ public sealed class DiagFileSink : IDisposable
             }
             _file!.Flush();
             _pending.Clear();
-            if (_lostSinceReport > 0)
-            {
-                long lost = _lostSinceReport;
-                _lostSinceReport = 0;
-                AddDroppedLine("DiagDropped", lost, "io");
-                // the marker line goes out with the next drain
-            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
         {
