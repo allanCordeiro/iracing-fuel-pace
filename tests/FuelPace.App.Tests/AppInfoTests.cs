@@ -5,7 +5,7 @@ namespace FuelPace.App.Tests;
 public class AppInfoTests
 {
     [Fact]
-    public void Version_is_informational_version() => Assert.Matches(@"^0\.1\.0\+", AppInfo.Version);
+    public void Version_is_informational_version() => Assert.Matches(@"^\d+\.\d+\.\d+\+", AppInfo.Version);
 
     [Fact]
     public void Debug_marker_detection_uses_exe_directory()
