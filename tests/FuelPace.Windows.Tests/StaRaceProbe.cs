@@ -1,8 +1,9 @@
 namespace FuelPace.Windows.Tests;
 
-/// <summary>TEMPORARY (STA hang investigation): the start of the Windows test run, where SettingsInputTests and
-/// SettingsScreenshotTests begin together on two fresh STA threads, made tighter: four Settings bodies start at once in a fresh
-/// process. Runs only with FP_STA_RACE=1 (a CI loop starts it many times).</summary>
+/// <summary>The start of the Windows test run, where SettingsInputTests and SettingsScreenshotTests begin together on fresh STA
+/// threads, made tighter: four Settings bodies start at once in a fresh process. Without the gate in <see cref="Sta"/> it
+/// failed 8 of 80 fresh processes on CI (corrupted WPF state, one native heap corruption). Runs only with FP_STA_RACE=1: the CI
+/// step "Settings STA stress" starts it in many fresh processes.</summary>
 public sealed class StaRaceProbe
 {
     [Fact]

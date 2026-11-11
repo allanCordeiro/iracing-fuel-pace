@@ -133,29 +133,59 @@ internal static class SettingsMockData
     };
 }
 
+/// <summary>
+/// WPF bodies of the tests, one at a time. Each runs on its own new STA thread (its own dispatcher, shut down when it ends),
+/// and no two run at once in the process: WPF keeps process-wide state that two UI threads working at the same moment corrupt
+/// (seen on CI when SettingsInputTests and SettingsScreenshotTests started together: DependencyObjectPropertyDescriptor's
+/// tracker dictionary, the pack://application part's stream list, a native heap corruption, and bodies that never finished).
+/// The Settings app has a single UI thread, so the gate gives the tests the app's own model.
+/// </summary>
 internal static class Sta
 {
-    /// <summary>How long a body may run: 2 min, or <c>FP_STA_TIMEOUT_S</c> seconds.</summary>
+    /// <summary>How long a body may run, and how long one waits for the previous body: 2 min, or <c>FP_STA_TIMEOUT_S</c> seconds.</summary>
     static readonly TimeSpan Timeout =
         TimeSpan.FromSeconds(int.TryParse(Environment.GetEnvironmentVariable("FP_STA_TIMEOUT_S"), out int s) && s > 0 ? s : 120);
 
-    /// <summary>Runs <paramref name="body"/> on a new STA thread (WPF) and rethrows what it threw. A body that does not finish
-    /// in time leaves the managed stacks of the process in <c>artifacts/settings/hang-*.txt</c> (<see cref="HangDump"/>) and
-    /// fails the test; its thread is a background one, so it does not keep the test process alive.</summary>
+    static readonly SemaphoreSlim Gate = new(1, 1);
+    static string? _hung;
+
+    /// <summary>Runs <paramref name="body"/> on a new STA thread (WPF) once no other body runs, and rethrows what it threw. A body
+    /// that does not finish in time leaves the managed stacks of the process in <c>artifacts/settings/hang-*.txt</c>
+    /// (<see cref="HangDump"/>) and fails the test; it keeps the gate, so the bodies after it fail at once naming it (WPF may be
+    /// left in any state). Its thread is a background one, so it does not keep the test process alive.</summary>
     public static void Run(Action body, [CallerFilePath] string file = "", [CallerMemberName] string test = "")
     {
-        ExceptionDispatchInfo? error = null;
         var name = Path.GetFileNameWithoutExtension(file.Replace('\\', '/')) + "." + test;
-        var t = new Thread(() =>
+        if (Volatile.Read(ref _hung) is { } hung) throw new InvalidOperationException($"an earlier STA body ({hung}) never finished");
+        if (!Gate.Wait(Timeout, TestContext.Current.CancellationToken))
+            throw new TimeoutException($"{name}: the previous STA body did not finish in {Timeout.TotalSeconds:0} s");
+        ExceptionDispatchInfo? error = null;
+        Thread t;
+        try
         {
-            try { body(); }
-            catch (Exception e) { error = ExceptionDispatchInfo.Capture(e); }
-            finally { System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown(); }
-        }) { IsBackground = true, Name = "sta " + name };
-        t.SetApartmentState(ApartmentState.STA);
-        t.Start();
+            t = new Thread(() =>
+            {
+                try { body(); }
+                catch (Exception e) { error = ExceptionDispatchInfo.Capture(e); }
+                finally
+                {
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown();
+                    Gate.Release();
+                }
+            }) { IsBackground = true, Name = "sta " + name };
+            t.SetApartmentState(ApartmentState.STA);
+            t.Start();
+        }
+        catch
+        {
+            Gate.Release();
+            throw;
+        }
         if (!t.Join(Timeout))
+        {
+            Volatile.Write(ref _hung, name);
             throw new TimeoutException($"STA body did not finish in {Timeout.TotalSeconds:0} s; stacks: {HangDump.Write(name, t.ManagedThreadId)}");
+        }
         error?.Throw();
     }
 }
