@@ -1,0 +1,108 @@
+// MessageWindow
+RegisterClassEx
+UnregisterClass
+CreateWindowEx
+DestroyWindow
+DefWindowProc
+GetMessage
+TranslateMessage
+DispatchMessage
+PostMessage
+PostQuitMessage
+GetModuleHandle
+WM_APP
+WM_DISPLAYCHANGE
+WM_DPICHANGED
+WM_SETTINGCHANGE
+WM_CLOSE
+WM_DESTROY
+WM_ENDSESSION
+// No OS error dialog over the sim
+SetErrorMode
+// Second instance
+AllowSetForegroundWindow
+ASFW_ANY
+// Monitors
+EnumDisplayMonitors
+GetMonitorInfo
+MONITORINFOEXW
+MONITORINFOF_PRIMARY
+GetDpiForMonitor
+MonitorFromWindow
+// System info
+GetWindowLong
+GetWindowRect
+IsWindow
+// Fullscreen
+SHQueryUserNotificationState
+// Overlay window
+SetWindowPos
+ShowWindow
+SetLayeredWindowAttributes
+UpdateLayeredWindow
+SetWindowLong
+GetCursorPos
+SetCapture
+ReleaseCapture
+GetCapture
+SetTimer
+KillTimer
+SetWinEventHook
+UnhookWinEvent
+GetCurrentThreadId
+LoadCursor
+SetCursor
+IDC_SIZEALL
+IDC_ARROW
+HWND_TOPMOST
+EVENT_SYSTEM_FOREGROUND
+WINEVENT_OUTOFCONTEXT
+WINEVENT_SKIPOWNPROCESS
+WM_NCHITTEST
+WM_MOUSEACTIVATE
+MA_NOACTIVATE
+WM_TIMER
+WM_LBUTTONDOWN
+WM_NCLBUTTONDOWN
+WM_NCLBUTTONDBLCLK
+WM_MOUSEMOVE
+WM_LBUTTONUP
+WM_CAPTURECHANGED
+WM_SETCURSOR
+HTCLIENT
+HTTOPLEFT
+HTTOPRIGHT
+HTBOTTOMLEFT
+HTBOTTOMRIGHT
+HTTRANSPARENT
+// Layered fallback
+CreateCompatibleDC
+DeleteDC
+CreateDIBSection
+SelectObject
+DeleteObject
+AC_SRC_OVER
+AC_SRC_ALPHA
+// Hotkeys
+RegisterHotKey
+UnregisterHotKey
+WM_HOTKEY
+// Tray
+Shell_NotifyIcon
+NOTIFYICONDATAW
+CreatePopupMenu
+AppendMenu
+TrackPopupMenuEx
+DestroyMenu
+SetForegroundWindow
+RegisterWindowMessage
+CreateIconFromResourceEx
+DestroyIcon
+LoadIcon
+IDI_APPLICATION
+GetSystemMetrics
+WM_NULL
+WM_CONTEXTMENU
+WM_LBUTTONDBLCLK
+TRACK_POPUP_MENU_FLAGS
+NOTIFYICON_VERSION_4

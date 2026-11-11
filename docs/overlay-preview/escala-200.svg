@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="304" viewBox="0 0 680 304">
+<rect width="680" height="304" fill="#1C2026"/>
+<rect width="680" height="130.72" fill="#3A4552"/>
+<rect y="130.72" width="680" height="173.28" fill="#262B31"/>
+<polygon points="312.8,130.72 367.2,130.72 680,304 0,304" fill="#3B4048"/>
+<rect y="249.28" width="680" height="54.72" fill="#0E1013"/>
+<g transform="translate(40 40)">
+<rect x="0" y="0" width="600" height="224" rx="12" fill="#0A0C10" fill-opacity="0.6"/>
+<text x="22" y="51.6" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" letter-spacing="1.8" fill="#A9B2BD">COMB</text>
+<text x="130" y="51.6" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="42" font-weight="600" fill="#F2F4F7">41.8</text>
+<text x="246.8" y="51.6" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="400" fill="#A9B2BD">L</text>
+<text x="362" y="51.6" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="24" font-weight="400" fill="#D5DAE0">17.3 v · 23 min</text>
+<text x="22" y="97.6" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" letter-spacing="1.8" fill="#A9B2BD">VOLTA</text>
+<text x="130" y="97.6" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="32" font-weight="700" fill="#6AAEFF">2.36</text>
+<text x="246.8" y="97.6" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" letter-spacing="1.8" fill="#A9B2BD">ÚLT</text>
+<text x="300.92" y="97.6" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="32" font-weight="500" fill="#9CC8FF">2.39</text>
+<text x="417.72" y="97.6" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" letter-spacing="1.8" fill="#A9B2BD">MÉD</text>
+<text x="471.84" y="97.6" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="32" font-weight="500" fill="#F2F4F7">2.38</text>
+<text x="560.64" y="97.6" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="400" fill="#A9B2BD">L/v</text>
+<rect x="14" y="116" width="572" height="56" rx="8" fill="#2F80ED" fill-opacity="0.259"/>
+<text x="28" y="154.8" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" letter-spacing="1.8" fill="#CFE2FF">ALVO</text>
+<text x="130" y="154.8" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="36" font-weight="700" fill="#F2F4F7">2.49</text>
+<text x="232.4" y="154.8" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="400" fill="#CFE2FF">L/v</text>
+<rect x="469.28" y="130" width="102.72" height="28" rx="6" fill="#1E6BD6"/>
+<text x="481.28" y="148.8" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="700" letter-spacing="1.28" fill="#FFFFFF">NO ALVO</text>
+<text x="280.88" y="150.6" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="22" font-weight="400" fill="#E6EEF9">faltam 16.6 v</text>
+<text x="22" y="201.6" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="700" fill="#E3E7EC">Folga 1.8 L<tspan font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="400" fill="#E3E7EC"> · pode atacar</tspan></text>
+</g>
+</svg>

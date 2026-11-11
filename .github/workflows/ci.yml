@@ -1,0 +1,143 @@
+name: ci
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test FuelPace.Linux.slnf -c Release
+      # The benchmark project must keep compiling; it is never run in CI.
+      - run: dotnet build bench/FuelPace.Bench -c Release
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Compute version
+        shell: pwsh
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          RUN_NUMBER: ${{ github.run_number }}
+          SHA: ${{ github.sha }}
+        run: |
+          $base = '0.1.0'
+          if ($env:REF_TYPE -eq 'tag' -and $env:REF_NAME -match '^v(\d+\.\d+\.\d+)$') { $base = $Matches[1] }
+          $v = "$base+$($env:RUN_NUMBER).$($env:SHA.Substring(0,7))"
+          "FP_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Test (full solution)
+        run: dotnet test FuelPace.sln -c Release "-p:InformationalVersion=$env:FP_VERSION"
+      # The WPF tests in many fresh processes, where the first Settings bodies start together (Sta.Run runs them one at a time;
+      # without that, 8 of 80 such processes failed and some test runs hung). Any failed process fails the job.
+      - name: Settings STA stress
+        shell: pwsh
+        timeout-minutes: 20
+        env:
+          FP_STA_RACE: '1'
+          FP_STA_TIMEOUT_S: '60'
+        run: |
+          $failed = 0; $n = 20
+          for ($i = 1; $i -le $n; $i++) {
+            $out = dotnet test --project tests/FuelPace.Windows.Tests -c Release --no-build -- --filter-class "*.SettingsInputTests" --filter-class "*.SettingsScreenshotTests" --filter-class "*.StaRaceProbe" 2>&1
+            $code = $LASTEXITCODE
+            $plain = $out | ForEach-Object { "$_" -replace "`e\[[0-9;]*m", '' }
+            $summary = ($plain | Where-Object { $_ -match '^\s*(total|failed|succeeded|skipped):' } | ForEach-Object { $_.Trim() }) -join ', '
+            if ($code -ne 0) { $failed++; "process ${i}: FAILED ($summary)"; $plain | Select-Object -Last 60 } else { "process ${i}: ok ($summary)" }
+          }
+          "Settings STA stress: $failed of $n processes failed"
+          if ($failed -gt 0) { exit 1 }
+      - name: Package
+        shell: pwsh
+        run: pwsh build/package.ps1 -Version $env:FP_VERSION -OutDir out
+      # Runs the shipped zips from an unpacked copy (not the test bin folder): Agent, Settings, Agent + FakeSim, Replay diag,
+      # and the PERF-05 working-set measurement of the normal zip (results in the job summary and artifacts/package-smoke/).
+      - name: Package smoke
+        shell: pwsh
+        timeout-minutes: 20
+        run: |
+          ./build/smoke-package.ps1 -OutDir out -Variants 'baseline'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fuelpace-windows
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            out/*.zip
+            tests/**/TestResults/**
+            artifacts/**
+            !artifacts/e2e/**
+      # The overlay renders of the 9 preview states (RenderTests), small and on their own for review against the mocks.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: renders
+          retention-days: 14
+          if-no-files-found: warn
+          path: artifacts/renders/*.png
+      # The Settings pages with the mocks' values (SettingsScreenshotTests), 1120 x 820, for review against mocks 7 and 8, and the
+      # stacks a hung STA test leaves (Sta.Run, hang-*.txt).
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: settings
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            artifacts/settings/*.png
+            artifacts/settings/hang-*.txt
+      # EndToEndTests: per test, the Agent's %APPDATA%\FuelPace (logs, recordings, profiles) and the processes' output, in
+      # the layout `FuelPace.Replay diag <folder>` reads.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e
+          retention-days: 14
+          if-no-files-found: warn
+          path: artifacts/e2e/**
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: fuelpace-windows
+          path: dl
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          shopt -s nullglob
+          zips=(dl/out/*.zip)
+          [ ${#zips[@]} -eq 2 ] || { echo "expected 2 zips, found ${#zips[@]}"; exit 1; }
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${zips[@]}" --clobber --repo "$REPO"
+          else
+            gh release create "$TAG" "${zips[@]}" --generate-notes --repo "$REPO"
+          fi

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>FuelPace.Preview</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FuelPace.Core\FuelPace.Core.csproj" />
+    <ProjectReference Include="..\..\src\FuelPace.App\FuelPace.App.csproj" />
+  </ItemGroup>
+
+</Project>

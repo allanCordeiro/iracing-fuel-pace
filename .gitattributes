@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.ibt binary
+*.sln text eol=crlf
+*.ttf binary
