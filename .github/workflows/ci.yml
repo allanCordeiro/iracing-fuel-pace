@@ -45,6 +45,23 @@ jobs:
           if ($env:REF_TYPE -eq 'tag' -and $env:REF_NAME -match '^v(\d+\.\d+\.\d+)$') { $base = $Matches[1] }
           $v = "$base+$($env:RUN_NUMBER).$($env:SHA.Substring(0,7))"
           "FP_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
+      # TEMPORARY (STA hang investigation): the race of the first Settings STA bodies, in a fresh process each time.
+      - name: STA race probe
+        shell: pwsh
+        timeout-minutes: 30
+        continue-on-error: true
+        env:
+          FP_STA_RACE: '1'
+          FP_STA_TIMEOUT_S: '30'
+        run: |
+          dotnet build tests/FuelPace.Windows.Tests -c Release "-p:InformationalVersion=$env:FP_VERSION" | Out-Null
+          $failed = 0; $n = 40
+          for ($i = 1; $i -le $n; $i++) {
+            $out = dotnet test --project tests/FuelPace.Windows.Tests -c Release --no-build -- --filter-method "*Concurrent_first_use_of_the_Settings_views" 2>&1
+            if ($LASTEXITCODE -ne 0) { $failed++; "iteration ${i}: FAILED"; $out | Select-Object -Last 40 } else { "iteration ${i}: ok" }
+          }
+          "race probe: $failed of $n iterations failed"
+          Get-ChildItem artifacts/settings/hang-*.txt -ErrorAction SilentlyContinue | Select-Object -First 1 | ForEach-Object { "---- $($_.Name)"; Get-Content $_ }
       - name: Test (full solution)
         run: dotnet test FuelPace.sln -c Release "-p:InformationalVersion=$env:FP_VERSION"
       - name: Package
