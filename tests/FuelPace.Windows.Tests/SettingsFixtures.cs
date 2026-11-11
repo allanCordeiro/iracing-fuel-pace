@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using FuelPace.App.Ipc;
@@ -134,19 +135,27 @@ internal static class SettingsMockData
 
 internal static class Sta
 {
-    /// <summary>Runs <paramref name="body"/> on a new STA thread (WPF) and rethrows what it threw.</summary>
-    public static void Run(Action body)
+    /// <summary>How long a body may run: 2 min, or <c>FP_STA_TIMEOUT_S</c> seconds.</summary>
+    static readonly TimeSpan Timeout =
+        TimeSpan.FromSeconds(int.TryParse(Environment.GetEnvironmentVariable("FP_STA_TIMEOUT_S"), out int s) && s > 0 ? s : 120);
+
+    /// <summary>Runs <paramref name="body"/> on a new STA thread (WPF) and rethrows what it threw. A body that does not finish
+    /// in time leaves the managed stacks of the process in <c>artifacts/settings/hang-*.txt</c> (<see cref="HangDump"/>) and
+    /// fails the test; its thread is a background one, so it does not keep the test process alive.</summary>
+    public static void Run(Action body, [CallerFilePath] string file = "", [CallerMemberName] string test = "")
     {
         ExceptionDispatchInfo? error = null;
+        var name = Path.GetFileNameWithoutExtension(file.Replace('\\', '/')) + "." + test;
         var t = new Thread(() =>
         {
             try { body(); }
             catch (Exception e) { error = ExceptionDispatchInfo.Capture(e); }
             finally { System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown(); }
-        });
+        }) { IsBackground = true, Name = "sta " + name };
         t.SetApartmentState(ApartmentState.STA);
         t.Start();
-        if (!t.Join(TimeSpan.FromMinutes(2))) throw new TimeoutException("STA body did not finish");
+        if (!t.Join(Timeout))
+            throw new TimeoutException($"STA body did not finish in {Timeout.TotalSeconds:0} s; stacks: {HangDump.Write(name, t.ManagedThreadId)}");
         error?.Throw();
     }
 }

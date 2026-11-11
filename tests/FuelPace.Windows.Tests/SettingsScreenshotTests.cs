@@ -18,7 +18,7 @@ public sealed class SettingsScreenshotTests
 {
     const int W = 1120, H = 820;
 
-    static string RepoRoot()
+    internal static string RepoRoot()
     {
         for (var d = new DirectoryInfo(AppContext.BaseDirectory); d is not null; d = d.Parent)
             if (File.Exists(Path.Combine(d.FullName, "FuelPace.sln"))) return d.FullName;
