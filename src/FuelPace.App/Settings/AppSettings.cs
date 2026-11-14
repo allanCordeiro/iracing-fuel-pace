@@ -43,7 +43,7 @@ public enum RedComplement { Pct, Seconds }
 // Settings records use set (not init): the System.Text.Json source generator leaves init-only properties absent from the file at default(T) instead of their initializer.
 public sealed record OverlaySettings
 {
-    public const double MinScale = 0.5, MaxScale = 2.5, MinContentOpacity = 0.3;
+    public const double MinScale = 0.5, MaxScale = 2.5, MinContentOpacity = 0.3, MinDeltaBarScale = 0.05, MaxDeltaBarScale = 0.50;
 
     /// <summary>GDI device name of the monitor (e.g. <c>\\.\DISPLAY1</c>); null = primary.</summary>
     public string? MonitorDeviceName { get; set; }
@@ -62,7 +62,6 @@ public sealed record OverlaySettings
     public double ContentOpacity { get; set; } = 1.0;
 
     public bool ShowPaceLine { get; set; }
-    public bool ShowInsightLine { get; set; } = true;
     public bool AutoHide { get; set; } = true;
     public RenderBackend RenderBackend { get; set; } = RenderBackend.Auto;
 
@@ -85,6 +84,8 @@ public sealed record OverlaySettings
         BackgroundOpacity = Clamp(BackgroundOpacity, 0, 1, 0.6),
         ContentOpacity = Clamp(ContentOpacity, MinContentOpacity, 1, 1.0),
         RenderBackend = Enum.IsDefined(RenderBackend) ? RenderBackend : RenderBackend.Auto,
+        DeltaBarScaleLpl = Math.Round(Clamp(DeltaBarScaleLpl, MinDeltaBarScale, MaxDeltaBarScale, 0.20), 2),
+        RedComplement = Enum.IsDefined(RedComplement) ? RedComplement : RedComplement.Pct,
     };
 
     internal static double Clamp(double v, double min, double max, double fallback)
@@ -118,7 +119,10 @@ public sealed record DebugSettings
 
 public sealed record AppSettings
 {
-    public int SchemaVersion { get; set; } = 1;
+    /// <summary>2 since v3 (the delta bar, red complement and MÉD settings; the insight line is gone).</summary>
+    public const int CurrentSchemaVersion = 2;
+
+    public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     public OverlaySettings Overlay { get; set; } = new();
 
     [JsonConverter(typeof(StrategyConfigJsonConverter))]
