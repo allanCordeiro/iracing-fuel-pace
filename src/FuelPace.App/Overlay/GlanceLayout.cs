@@ -169,7 +169,7 @@ public static class GlanceLayout
 
         // ---- F1 ----
 
-        void DecisionBlock(in GlanceView v, in GlanceTheme.DecisionPalette pal, float top)
+        readonly void DecisionBlock(in GlanceView v, in GlanceTheme.DecisionPalette pal, float top)
         {
             float k = _k, bh = BlockH * k, cy = top + bh / 2;
             // the block tint is the state colour itself (level 1, peripheral vision), not content: as the v2.1 ALVO row
