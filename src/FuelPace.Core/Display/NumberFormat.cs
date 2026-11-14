@@ -17,9 +17,13 @@ public static class NumberFormat
         if (float.IsNaN(v)) return Put(Dash, dest);
         if (dest.IsEmpty) return 0;
         int n = 0;
-        if (v < 0) { dest[n++] = Minus; v = -v; }
-        ReadOnlySpan<string> formats = ["F0", "F1", "F2", "F3"];
-        return ((double)v).TryFormat(dest[n..], out int w, formats[Math.Clamp(decimals, 0, 3)], Inv) ? n + w : 0;
+        decimals = Math.Clamp(decimals, 0, 3);
+        // A value that rounds to zero is "0.00", never "−0.00".
+        if (v < 0 && Math.Round(-(double)v, decimals, MidpointRounding.AwayFromZero) > 0) { dest[n++] = Minus; v = -v; }
+        else if (v < 0) v = 0;
+        // A switch on literals: a span of strings would allocate its array on every call.
+        string format = decimals switch { 0 => "F0", 1 => "F1", 2 => "F2", _ => "F3" };
+        return ((double)v).TryFormat(dest[n..], out int w, format, Inv) ? n + w : 0;
     }
 
     /// <summary>A whole number; a negative value writes "—" (the GlanceView's "unavailable" convention).</summary>
@@ -46,7 +50,7 @@ public static class NumberFormat
         if (float.IsNaN(v)) return Put(Dash, dest);
         if (dest.IsEmpty) return 0;
         int n = 0;
-        dest[n++] = v < 0 ? Minus : '+';
+        dest[n++] = v < 0 && Math.Round(-(double)v, 1, MidpointRounding.AwayFromZero) > 0 ? Minus : '+';
         if (!Math.Abs((double)v).TryFormat(dest[n..], out int w, "F1", Inv) || n + w + 2 > dest.Length) return 0;
         n += w;
         dest[n++] = ' ';
