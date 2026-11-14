@@ -6,6 +6,7 @@ using FuelPace.App.Host;
 using FuelPace.App.Ipc;
 using FuelPace.App.Overlay;
 using FuelPace.App.Settings;
+using FuelPace.Core.Display;
 using FuelPace.Core.Strategy;
 
 namespace FuelPace.App.SettingsUi.ViewModels;
@@ -26,7 +27,7 @@ public sealed partial class OverlayViewModel : ObservableObject
     readonly ISynchronizationContext _ui;
     readonly IDelayScheduler _sched;
     readonly ITextMeasurer _measurer;
-    readonly OverlayState _previewState = OverlayPreviews.All.First(p => p.Name == "azul").State;
+    readonly OverlayState _previewState = GlancePreviews.Inputs["azul"];
 
     AppSettings _confirmed = new();
     readonly List<AppSettings> _inFlight = [];
@@ -439,7 +440,14 @@ public sealed partial class OverlayViewModel : ObservableObject
         var edit = Hotkey.TryParse(ToggleEdit.Text, out var k) ? k.ToString() : HotkeySettings.DefaultToggleEdit;
         var options = new OverlayViewOptions(ScalePercent / 100.0, BackgroundOpacityPercent / 100.0, ContentOpacityPercent / 100.0,
             ShowPaceLine, false, false, false, edit, 0, 0);
-        OverlayLayout.Build(in _previewState, OverlayPreviews.Car, OverlayPreviews.Track, options, _measurer, list);
+        // The overlay's own builder over the "azul" mock: the Layout options show at once. The reserve stays the mock's
+        // (it is not a Layout option, and the sample numbers are the V3-3 ones); the red complement has nothing to show on blue.
+        var cfg = GlancePreviews.SampleConfig with
+        {
+            BarScaleL = DeltaBarScale, ComplementSeconds = RedComplementSeconds, ShowBar = ShowDeltaBar, ShowAvg = ShowAvgInSupport,
+        };
+        var view = GlanceViewBuilder.Build(in _previewState, in cfg);
+        GlanceLayout.Build(in view, options, _measurer, list);
         _preview = list;
         OnPropertyChanged(nameof(Preview));
     }

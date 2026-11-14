@@ -1,6 +1,9 @@
 using FuelPace.App.Ipc;
+using FuelPace.App.Overlay;
 using FuelPace.App.SettingsUi;
+using FuelPace.App.SettingsUi.ViewModels;
 using FuelPace.App.Settings;
+using FuelPace.Core.Display;
 using FuelPace.Core.Strategy;
 
 namespace FuelPace.App.Tests.SettingsUi;
@@ -131,6 +134,60 @@ public class OverlayViewModelTests
 
         r.Overlay.ShowPaceLine = true;
         Assert.True(r.Overlay.Preview.Size.H > 0);
+    }
+
+    static List<string> PreviewTexts(OverlayViewModel o)
+    {
+        var d = o.Preview;
+        var r = new List<string>();
+        foreach (var c in d.Commands)
+            if (c.Kind == CommandKind.Text) r.Add(new string(d.TextOf(in c)));
+        return r;
+    }
+
+    static DrawList Draw(in GlanceView v)
+    {
+        var d = new DrawList();
+        GlanceLayout.Build(in v, new OverlayViewOptions(1, 0.6, 1, false, false, false, false, "Ctrl+Shift+F", 0, 0), new FixedMetricsMeasurer(), d);
+        return d;
+    }
+
+    [Fact] // PRD v3: the preview is the v3 panel, the "azul" mock
+    public async Task Preview_is_the_azul_glance_panel()
+    {
+        var r = new SettingsRig();
+        await r.ConnectAsync();
+        var azul = GlancePreviews.All.Single(p => p.Name == "azul").View;
+        Assert.Equal(Draw(in azul).ContentHash, r.Overlay.Preview.ContentHash);
+        foreach (var t in new[] { "OK", "FOLGA", "2.7", "ATÉ", "2.45", "MÉD" })
+            Assert.Contains(t, PreviewTexts(r.Overlay));
+    }
+
+    [Fact] // the four Layout options show at once
+    public async Task Preview_follows_the_layout_options()
+    {
+        var r = new SettingsRig();
+        await r.ConnectAsync();
+        var azul = GlancePreviews.All.Single(p => p.Name == "azul").View;
+
+        r.Overlay.ShowAvgInSupport = false;
+        Assert.DoesNotContain("MÉD", PreviewTexts(r.Overlay));
+        Assert.Equal(Draw(azul with { ShowAvg = false }).ContentHash, r.Overlay.Preview.ContentHash);
+
+        r.Overlay.ShowDeltaBar = false;
+        Assert.Equal(Draw(azul with { ShowAvg = false, ShowBar = false, BarMarkerQ = GlanceView.BarAbsent, BarGhostQ = GlanceView.BarAbsent })
+            .ContentHash, r.Overlay.Preview.ContentHash);
+
+        r.Overlay.ShowDeltaBar = true;
+        r.Overlay.DeltaBarScale = 0.30; // the marker moves closer to the target line: −9 of 30 steps instead of 20
+        Assert.Equal(Draw(azul with { ShowAvg = false, BarSteps = 30 }).ContentHash, r.Overlay.Preview.ContentHash);
+
+        long before = r.Overlay.Preview.ContentHash;
+        r.Overlay.RedComplementSeconds = true; // only the red block has a complement: the blue preview stays
+        Assert.Equal(before, r.Overlay.Preview.ContentHash);
+
+        r.Overlay.ReserveL = 2; // not a Layout option: the sample keeps the mock's reserve
+        Assert.Equal(before, r.Overlay.Preview.ContentHash);
     }
 
     [Fact]
