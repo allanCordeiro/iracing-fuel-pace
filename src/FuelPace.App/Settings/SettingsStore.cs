@@ -15,6 +15,12 @@ public sealed class SettingsStore(string rootDir)
     /// </summary>
     public bool LastLoadWasFallback { get; private set; }
 
+    /// <summary>The <c>schemaVersion</c> the last <see cref="Load"/> upgraded from (and wrote back as the current one); null when it did not migrate.</summary>
+    public int? LastLoadMigratedFrom { get; private set; }
+
+    /// <summary>True when the last <see cref="Load"/> found a file it could not parse, renamed it to <c>.corrupt</c> and returned the defaults.</summary>
+    public bool LastLoadWasCorrupt { get; private set; }
+
     /// <summary>
     /// An absent or unreadable file (missing, locked by another process, access denied) gives the defaults and is left
     /// alone; a corrupt file is renamed to <c>.corrupt</c> and the defaults are returned. A locked file is retried for
@@ -24,6 +30,8 @@ public sealed class SettingsStore(string rootDir)
     {
         string text;
         LastLoadWasFallback = false;
+        LastLoadMigratedFrom = null;
+        LastLoadWasCorrupt = false;
         // Checked first: the read retries a missing file like a locked one (1.5 s).
         if (!File.Exists(_path) && !Directory.Exists(_path)) return new AppSettings().Normalize();
         try { text = retryLocked ? AtomicFile.ReadAllText(_path) : ReadOnce(_path); }
@@ -38,12 +46,36 @@ public sealed class SettingsStore(string rootDir)
         try
         {
             var s = JsonSerializer.Deserialize(text, AppSettingsJsonContext.Default.AppSettings);
-            if (s is not null) return s.Normalize();
+            if (s is not null)
+            {
+                // Peeked from the text: a missing schemaVersion deserializes as the current one, which would hide a v1 file.
+                int version = PeekSchemaVersion(text);
+                s = s.Normalize();
+                if (version < AppSettings.CurrentSchemaVersion)
+                {
+                    s = s with { SchemaVersion = AppSettings.CurrentSchemaVersion };
+                    LastLoadMigratedFrom = version;
+                    // Only a file that was read fine gets here, so nothing unread is overwritten. If the write fails the
+                    // settings are still right in memory and the next load migrates again.
+                    try { Save(s); }
+                    catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+                }
+                return s;
+            }
         }
         catch (JsonException) { }
 
+        LastLoadWasCorrupt = true;
         Quarantine();
         return new AppSettings().Normalize();
+    }
+
+    /// <summary>The top-level <c>schemaVersion</c>; 1 when absent, not a number or below 1 (every file before v3).</summary>
+    static int PeekSchemaVersion(string text)
+    {
+        using var doc = JsonDocument.Parse(text, new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+        return doc.RootElement is { ValueKind: JsonValueKind.Object } root && root.TryGetProperty("schemaVersion", out var v)
+            && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) && n >= 1 ? n : 1;
     }
 
     static string ReadOnce(string path)

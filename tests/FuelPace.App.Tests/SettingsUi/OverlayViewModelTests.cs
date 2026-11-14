@@ -1,4 +1,5 @@
 using FuelPace.App.Ipc;
+using FuelPace.App.SettingsUi;
 using FuelPace.App.Settings;
 using FuelPace.Core.Strategy;
 
@@ -29,7 +30,11 @@ public class OverlayViewModelTests
         Assert.Equal(60, o.BackgroundOpacityPercent);
         Assert.Equal(100, o.ContentOpacityPercent);
         Assert.False(o.ShowPaceLine);
-        Assert.True(o.ShowInsightLine);
+        Assert.True(o.ShowDeltaBar);
+        Assert.Equal(0.20, o.DeltaBarScale);
+        Assert.Equal("±0.20 L/v", o.DeltaBarScaleText);
+        Assert.False(o.RedComplementSeconds);
+        Assert.True(o.ShowAvgInSupport);
         Assert.True(o.AutoHide);
         Assert.Equal(0.5, o.ReserveL);
         Assert.Equal(5, o.MeanWindow);
@@ -367,5 +372,86 @@ public class OverlayViewModelTests
         await r.ConnectAsync();
         r.Conn.Raise(new Notice("warn", "configurações recarregadas do arquivo; confira e tente novamente"));
         Assert.Equal("Configurações recarregadas do arquivo; confira e tente novamente.", r.Overlay.StatusMessage);
+    }
+
+    [Fact]
+    public async Task Layout_fields_show_the_snapshot_and_reach_the_update()
+    {
+        var snap = new AppSettings();
+        snap.Overlay.ShowDeltaBar = false;
+        snap.Overlay.DeltaBarScaleLpl = 0.35;
+        snap.Overlay.RedComplement = RedComplement.Seconds;
+        snap.Overlay.ShowAvgInSupport = false;
+        var r = new SettingsRig();
+        await r.ConnectAsync(SettingsRig.Snap(snap));
+        var o = r.Overlay;
+        Assert.False(o.ShowDeltaBar);
+        Assert.False(o.DeltaBarScaleEnabled);
+        Assert.Equal(0.35, o.DeltaBarScale);
+        Assert.Equal("±0.35 L/v", o.DeltaBarScaleText);
+        Assert.True(o.RedComplementSeconds);
+        Assert.False(o.ShowAvgInSupport);
+
+        o.ShowDeltaBar = true;
+        o.DeltaBarScale = 0.12;
+        o.RedComplementSeconds = false;
+        o.ShowAvgInSupport = true;
+        Assert.True(o.DeltaBarScaleEnabled);
+        r.Sched.FireAll();
+        var u = Assert.Single(r.Conn.Of<UpdateSettings>()).Settings.Overlay;
+        Assert.True(u.ShowDeltaBar);
+        Assert.Equal(0.12, u.DeltaBarScaleLpl);
+        Assert.Equal(RedComplement.Pct, u.RedComplement);
+        Assert.True(u.ShowAvgInSupport);
+    }
+
+    [Theory]
+    [InlineData(0.01, 0.05)]
+    [InlineData(0.9, 0.50)]
+    [InlineData(0.234, 0.23)]
+    [InlineData(double.NaN, 0.20)]
+    public async Task Delta_bar_scale_is_clamped_to_005_050_in_steps_of_001(double typed, double expected)
+    {
+        var r = new SettingsRig();
+        await r.ConnectAsync();
+        r.Overlay.DeltaBarScale = typed;
+        Assert.Equal(expected, r.Overlay.DeltaBarScale);
+        r.Sched.FireAll();
+        if (expected == 0.20) { Assert.Empty(r.Conn.Of<UpdateSettings>()); return; } // NaN lands on the default: nothing changed, nothing sent
+        Assert.Equal(expected, Assert.Single(r.Conn.Of<UpdateSettings>()).Settings.Overlay.DeltaBarScaleLpl);
+    }
+
+    [Fact]
+    public async Task Delta_bar_scale_field_accepts_comma_or_dot()
+    {
+        var r = new SettingsRig();
+        await r.ConnectAsync();
+        Assert.True(NumberInput.TryParseDouble("0,3", out double a));
+        Assert.True(NumberInput.TryParseDouble("0.3", out double b));
+        Assert.Equal(a, b);
+        r.Overlay.DeltaBarScale = a;
+        Assert.Equal(0.3, r.Overlay.DeltaBarScale);
+    }
+
+    [Fact]
+    public async Task A_pending_layout_edit_survives_the_first_snapshot()
+    {
+        var r = new SettingsRig();
+        await r.Vm.ConnectAsync(); // no snapshot yet
+        r.Overlay.DeltaBarScale = 0.4;
+        r.Overlay.RedComplementSeconds = true;
+        r.Overlay.ShowAvgInSupport = false;
+        r.Overlay.ShowDeltaBar = false;
+        r.Conn.Raise(new Snapshot(SettingsRig.Snap(new AppSettings())));
+        Assert.Equal(0.4, r.Overlay.DeltaBarScale);
+        Assert.True(r.Overlay.RedComplementSeconds);
+        Assert.False(r.Overlay.ShowAvgInSupport);
+        Assert.False(r.Overlay.ShowDeltaBar);
+        r.Sched.FireAll();
+        var u = Assert.Single(r.Conn.Of<UpdateSettings>()).Settings.Overlay;
+        Assert.Equal(0.4, u.DeltaBarScaleLpl);
+        Assert.Equal(RedComplement.Seconds, u.RedComplement);
+        Assert.False(u.ShowAvgInSupport);
+        Assert.False(u.ShowDeltaBar);
     }
 }

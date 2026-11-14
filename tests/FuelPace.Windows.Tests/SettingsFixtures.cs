@@ -84,13 +84,13 @@ internal static class SettingsMockData
         Lap(21, 79.514, 2.403, 65), Lap(22, 79.134, 2.389, 67), Lap(23, 81.062, 2.289, 58),
     ];
 
-    /// <summary>Mock 8: monitor 1 at 1840 × 980, pace line off, insight line and auto-hide on, the default calculation.</summary>
+    /// <summary>Mock 8: monitor 1 at 1840 × 980, pace line off, auto-hide on, the default calculation.</summary>
     public static AppSettings Settings() => new()
     {
         Overlay = new OverlaySettings
         {
             MonitorDeviceName = @"\\.\DISPLAY1", OffsetX = 1840, OffsetY = 980, Scale = 1.0, BackgroundOpacity = 0.6,
-            ContentOpacity = 1.0, ShowPaceLine = false, ShowInsightLine = true, AutoHide = true,
+            ContentOpacity = 1.0, ShowPaceLine = false, AutoHide = true,
         },
     };
 

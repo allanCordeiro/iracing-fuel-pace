@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FuelPace.App.Host;
@@ -60,9 +61,20 @@ public sealed partial class OverlayViewModel : ObservableObject
     /// <summary>30–100.</summary>
     [ObservableProperty] public partial int ContentOpacityPercent { get; set; }
     [ObservableProperty] public partial bool ShowPaceLine { get; set; }
-    [ObservableProperty] public partial bool ShowInsightLine { get; set; }
     /// <summary>"Ocultar fora da pista".</summary>
     [ObservableProperty] public partial bool AutoHide { get; set; }
+
+    // ---- layout (PRD v3 §7)
+    [ObservableProperty] public partial bool ShowDeltaBar { get; set; }
+    /// <summary>The bar's half-range in L/lap, 0.05–0.50 in steps of 0.01.</summary>
+    [ObservableProperty] public partial double DeltaBarScale { get; set; }
+    /// <summary>True: the red block's complement is seconds per lap ("s/v"); false: percent.</summary>
+    [ObservableProperty] public partial bool RedComplementSeconds { get; set; }
+    [ObservableProperty] public partial bool ShowAvgInSupport { get; set; }
+    public bool DeltaBarScaleEnabled => ShowDeltaBar;
+    /// <summary>Always with a dot, like the other numbers of the page.</summary>
+    public string DeltaBarScaleText => "±" + DeltaBarScale.ToString("0.00", CultureInfo.InvariantCulture) + " L/v";
+    public string RedComplementHelp => "s/v precisa de uma baseline com ajuste consumo × tempo; sem ele, mostra %";
 
     // ---- calculation
     [ObservableProperty] public partial double ReserveL { get; set; }
@@ -149,7 +161,10 @@ public sealed partial class OverlayViewModel : ObservableObject
         Re(old.Overlay.BackgroundOpacity, edit.Overlay.BackgroundOpacity, v => BackgroundOpacityPercent = (int)Math.Round(v * 100));
         Re(old.Overlay.ContentOpacity, edit.Overlay.ContentOpacity, v => ContentOpacityPercent = (int)Math.Round(v * 100));
         Re(old.Overlay.ShowPaceLine, edit.Overlay.ShowPaceLine, v => ShowPaceLine = v);
-        Re(old.Overlay.ShowInsightLine, edit.Overlay.ShowInsightLine, v => ShowInsightLine = v);
+        Re(old.Overlay.ShowDeltaBar, edit.Overlay.ShowDeltaBar, v => ShowDeltaBar = v);
+        Re(old.Overlay.DeltaBarScaleLpl, edit.Overlay.DeltaBarScaleLpl, v => DeltaBarScale = v);
+        Re(old.Overlay.RedComplement, edit.Overlay.RedComplement, v => RedComplementSeconds = v == RedComplement.Seconds);
+        Re(old.Overlay.ShowAvgInSupport, edit.Overlay.ShowAvgInSupport, v => ShowAvgInSupport = v);
         Re(old.Overlay.AutoHide, edit.Overlay.AutoHide, v => AutoHide = v);
         Re(old.Overlay.MonitorDeviceName, edit.Overlay.MonitorDeviceName, v =>
         {
@@ -229,7 +244,10 @@ public sealed partial class OverlayViewModel : ObservableObject
             BackgroundOpacityPercent = (int)Math.Round(o.BackgroundOpacity * 100);
             ContentOpacityPercent = (int)Math.Round(o.ContentOpacity * 100);
             ShowPaceLine = o.ShowPaceLine;
-            ShowInsightLine = o.ShowInsightLine;
+            ShowDeltaBar = o.ShowDeltaBar;
+            DeltaBarScale = o.DeltaBarScaleLpl;
+            RedComplementSeconds = o.RedComplement == RedComplement.Seconds;
+            ShowAvgInSupport = o.ShowAvgInSupport;
             AutoHide = o.AutoHide;
             var c = s.Strategy;
             ReserveL = c.ReserveL;
@@ -253,7 +271,23 @@ public sealed partial class OverlayViewModel : ObservableObject
     partial void OnOffsetXChanged(int value) => Edited();
     partial void OnOffsetYChanged(int value) => Edited();
     partial void OnShowPaceLineChanged(bool value) => Edited();
-    partial void OnShowInsightLineChanged(bool value) => Edited();
+    partial void OnShowAvgInSupportChanged(bool value) => Edited();
+    partial void OnRedComplementSecondsChanged(bool value) => Edited();
+
+    partial void OnShowDeltaBarChanged(bool value)
+    {
+        OnPropertyChanged(nameof(DeltaBarScaleEnabled));
+        Edited();
+    }
+
+    partial void OnDeltaBarScaleChanged(double value)
+    {
+        // 0.01 steps and the same NaN default as OverlaySettings.Normalize.
+        var c = Math.Round(OverlaySettings.Clamp(value, OverlaySettings.MinDeltaBarScale, OverlaySettings.MaxDeltaBarScale, 0.20), 2);
+        if (c != value) { DeltaBarScale = c; return; }
+        OnPropertyChanged(nameof(DeltaBarScaleText));
+        Edited();
+    }
     partial void OnAutoHideChanged(bool value) => Edited();
     partial void OnLapsAutoChanged(bool value) => Edited();
 
@@ -352,7 +386,10 @@ public sealed partial class OverlayViewModel : ObservableObject
             BackgroundOpacity = BackgroundOpacityPercent / 100.0,
             ContentOpacity = ContentOpacityPercent / 100.0,
             ShowPaceLine = ShowPaceLine,
-            ShowInsightLine = ShowInsightLine,
+            ShowDeltaBar = ShowDeltaBar,
+            DeltaBarScaleLpl = DeltaBarScale,
+            RedComplement = RedComplementSeconds ? RedComplement.Seconds : RedComplement.Pct,
+            ShowAvgInSupport = ShowAvgInSupport,
             AutoHide = AutoHide,
         };
         if (SelectedMonitorIndex >= 0 && SelectedMonitorIndex < _deviceNames.Count)
@@ -401,7 +438,7 @@ public sealed partial class OverlayViewModel : ObservableObject
         var list = new DrawList();
         var edit = Hotkey.TryParse(ToggleEdit.Text, out var k) ? k.ToString() : HotkeySettings.DefaultToggleEdit;
         var options = new OverlayViewOptions(ScalePercent / 100.0, BackgroundOpacityPercent / 100.0, ContentOpacityPercent / 100.0,
-            ShowPaceLine, ShowInsightLine, false, false, edit, 0, 0);
+            ShowPaceLine, false, false, false, edit, 0, 0);
         OverlayLayout.Build(in _previewState, OverlayPreviews.Car, OverlayPreviews.Track, options, _measurer, list);
         _preview = list;
         OnPropertyChanged(nameof(Preview));
