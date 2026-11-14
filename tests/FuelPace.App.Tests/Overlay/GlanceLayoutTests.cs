@@ -428,9 +428,7 @@ public sealed class GlanceLayoutTests
     {
         var d = Build(Red());
         var fuel = Text(d, "74.0");
-        Assert.Equal((FontRole.Value, 600), (fuel.Role, fuel.Weight));
-        // 12 px nominal, shrunk once for the widest template (100.0 L · dá 99 v · faltam 999 next to ~2.30)
-        Assert.InRange(fuel.SizePx, 10f, 12f);
+        Assert.Equal((FontRole.Value, 600, 12f), (fuel.Role, fuel.Weight, fuel.SizePx)); // V3-3 values fit at full size
         Assert.Equal(White, fuel.Color);
         Assert.Equal(11f, fuel.X, 0.01);
         var rest = Text(d, " L · dá 31 v · faltam 32");
@@ -449,7 +447,8 @@ public sealed class GlanceLayoutTests
         var b = Build(Blue());
         Assert.True(Has(b, "ATÉ"));
         Assert.True(Has(b, "2.45"));
-        Assert.True(Has(b, " L · dá 31 v · faltam 30"));
+        Assert.Equal(12f, Text(b, " L · dá 31 v · faltam 30").SizePx);
+        Assert.Equal(15f, Text(b, "2.45").SizePx);
         Assert.False(Has(b, "ALVO"));
     }
 
@@ -485,24 +484,47 @@ public sealed class GlanceLayoutTests
         Assert.True(Has(Build(stint), "stint 12"));
     }
 
-    [Fact]
-    public void Autonomy_font_size_does_not_depend_on_the_values()
+    static float AutonomySize(GlanceView v)
     {
-        foreach (var baseView in new[] { Red(), Blue(), Pit() })
-        {
-            var a = baseView; a.LapsRemaining = 100; a.IsEstimate = false;
-            var b = baseView; b.LapsRemaining = 99; b.IsEstimate = true;
-            var c = baseView; c.LapsRemaining = 999; c.Fuel = 100.0f; c.LapsPossible = 99; c.IsEstimate = true; c.IsStint = true;
-            float Size(GlanceView v)
-            {
-                var d = Build(v);
-                return Texts(d).First(t => t.Cmd.Role == FontRole.Value && t.Cmd.Weight == 600 && t.Cmd.Color == White
-                    && t.Cmd.BaselineY > Panel(d).Rect.Y + 60).Cmd.SizePx;
-            }
-            Assert.Equal(Size(a), Size(b));
-            Assert.Equal(Size(a), Size(c));
-            Assert.Equal(Size(baseView), Size(a));
-        }
+        var d = Build(v);
+        float y = Panel(d).Rect.Y + 60;
+        return Texts(d).First(t => t.Cmd.Role == FontRole.Value && t.Cmd.Weight == 600 && t.Cmd.Color == White && t.Cmd.BaselineY > y).Cmd.SizePx;
+    }
+
+    static GlanceView Widest(GlanceView v)
+    {
+        v.LapsRemaining = 999; v.Fuel = 100.0f; v.LapsPossible = 99; v.IsEstimate = true;
+        return v;
+    }
+
+    [Fact]
+    public void Autonomy_has_two_sizes_full_when_it_fits_and_one_fallback_otherwise()
+    {
+        // the V3-3 mock values draw at the full 12 px
+        Assert.Equal(12f, AutonomySize(Red()));
+        Assert.Equal(12f, AutonomySize(Blue()));
+        Assert.Equal(12f, AutonomySize(Pit()));
+
+        // within one fit class the size does not move: faltam 32 vs 31, the "~" on/off while it still fits (ATÉ is short)
+        var r31 = Red(); r31.LapsRemaining = 31;
+        Assert.Equal(AutonomySize(Red()), AutonomySize(r31));
+        var blueEst = Blue(); blueEst.IsEstimate = true;
+        Assert.True(Has(Build(blueEst), "~2.45"));
+        Assert.Equal(12f, AutonomySize(blueEst));
+
+        // every overflowing row shares the one fallback size of the widest template
+        float fallback = AutonomySize(Widest(Red()));
+        Assert.InRange(fallback, 9f, 11.99f);
+        var redEst = Red(); redEst.IsEstimate = true;                       // "~2.30" next to faltam 32 overflows
+        Assert.Equal(fallback, AutonomySize(redEst));
+        var big = Red(); big.LapsRemaining = 999;
+        Assert.Equal(fallback, AutonomySize(big));
+        var stint = Widest(Red()); stint.IsStint = true;
+        Assert.Equal(fallback, AutonomySize(stint));
+        Assert.Equal(fallback, AutonomySize(Widest(Blue())));
+
+        // PIT: the widest template fits its two-line arrangement, so it stays at 12 px
+        Assert.Equal(12f, AutonomySize(Widest(Pit())));
     }
 
     [Fact]

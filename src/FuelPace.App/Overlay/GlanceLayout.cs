@@ -314,7 +314,6 @@ public static class GlanceLayout
             float k = _k, bl = top + Asc(FontRole.ValueBold, TargetFont);
             float xl = _x0 + RowInset * k, xr = _right - RowInset * k;
             bool target = v.TargetLabel != TargetLabel.None, pit = v.TargetLabel == TargetLabel.PitMin;
-            float f = AutonomyFactor(pit);
 
             // left: COMB, then " L · dá N v · faltam N" (or "stint N"); in PIT the laps left go to the second line
             Span<char> fuel = stackalloc char[16], rest = stackalloc char[40], value = stackalloc char[16], grey = stackalloc char[24];
@@ -326,38 +325,53 @@ public static class GlanceLayout
             nr = Cat(rest, nr, pit ? "" : " · ");
             nr = Cat(rest, nr, v.IsStint ? "stint " : "faltam ");
             nr += NumberFormat.Count(v.LapsRemaining, rest[nr..]);
+            int nl = pit ? line2 : nr;
 
             // right: [alvo A ·] LABEL value. The "~" marks the estimated target (PRD v3 §5.4); in PIT that is the grey
             // "alvo" number, not MÍN.
+            int nv = !target ? 0 : pit ? NumberFormat.Fixed(v.FeasibleMin, 2, value) : Target(in v, value);
+            int ng = 0;
+            if (pit)
+            {
+                ng = Cat(grey, 0, "alvo ");
+                ng += Target(in v, grey[ng..]);
+                ng = Cat(grey, ng, " ·");
+            }
+            string word = GlanceTheme.TargetWord(v.TargetLabel);
+            float wv = target ? W(value[..nv], FontRole.ValueBold, 700, TargetFont, 0) : 0;
+            float ww = target ? TargetGap * k + W(word, FontRole.Label, 600, SupportLabelFont, SupportLabelSpacing) : 0;
+
+            // Two sizes only: the full size whenever the current line 1 fits, else the one fallback size of the widest
+            // template. The size changes only when the content crosses the fit threshold (faltam 999 → 99), never from
+            // per-frame noise in the values.
+            float need = W(fuel[..nf], FontRole.Value, 600, AutonomyFont, 0) + W(rest[..nl], FontRole.Value, 400, AutonomyFont, 0)
+                + (target ? AutonomyMinGap * k + wv + ww : 0) + (pit ? TargetGap * k + W(grey[..ng], FontRole.Value, 400, PitTargetFont, 0) : 0);
+            float f = need <= xr - xl + 0.001f * k ? 1 : AutonomyFactor(pit);
+
             float rx = xr;
             if (target)
             {
-                int nv = pit ? NumberFormat.Fixed(v.FeasibleMin, 2, value) : Target(in v, value);
-                rx -= W(value[..nv], FontRole.ValueBold, 700, TargetFont, 0);
+                rx -= wv;
                 T(value[..nv], FontRole.ValueBold, 700, TargetFont, 0, false, GlanceTheme.Text, rx, bl);
-                string word = GlanceTheme.TargetWord(v.TargetLabel);
-                rx -= TargetGap * k + W(word, FontRole.Label, 600, SupportLabelFont, SupportLabelSpacing);
+                rx -= ww;
                 T(word, FontRole.Label, 600, SupportLabelFont, SupportLabelSpacing, false, GlanceTheme.Label, rx, bl);
                 if (pit)
                 {
-                    int ng = Cat(grey, 0, "alvo ");
-                    ng += Target(in v, grey[ng..]);
-                    ng = Cat(grey, ng, " ·");
                     rx -= TargetGap * k + W(grey[..ng], FontRole.Value, 400, PitTargetFont * f, 0);
                     T(grey[..ng], FontRole.Value, 400, PitTargetFont * f, 0, false, GlanceTheme.Label, rx, bl);
                 }
             }
             float wf = T(fuel[..nf], FontRole.Value, 600, AutonomyFont * f, 0, false, GlanceTheme.Text, xl, bl);
-            T(rest[..(pit ? line2 : nr)], FontRole.Value, 400, AutonomyFont * f, 0, false, GlanceTheme.Secondary, xl + wf, bl, true);
+            T(rest[..nl], FontRole.Value, 400, AutonomyFont * f, 0, false, GlanceTheme.Secondary, xl + wf, bl, true);
             if (pit)
                 T(rest[line2..nr], FontRole.Value, 400, AutonomyFont * f, 0, false, GlanceTheme.Secondary, xl, bl + (AutonomyH + Gap) * k);
         }
 
         /// <summary>
-        /// Overflow fallback for the F4 secondary runs (left text, grey "alvo"), against the widest template of the
-        /// arrangement (V3-7: 100.0 L · dá 99 v · faltam 999 next to ~2.30), never against the values shown: a given scale
-        /// always draws F4 at one size, so it does not jump when faltam loses a digit or the "~" comes and goes. The target
-        /// label and value keep their size.
+        /// The fallback factor for the F4 secondary runs (left text, grey "alvo") when the current content does not fit:
+        /// computed against the widest template of the arrangement (V3-7: 100.0 L · dá 99 v · faltam 999 next to ~2.30),
+        /// not against the values shown, so every overflowing row of a scale shares one size. The target label and value
+        /// keep their size.
         /// </summary>
         readonly float AutonomyFactor(bool pit)
         {

@@ -26,7 +26,7 @@
 <rect x="25" y="213" width="564" height="2" rx="0" fill="#A9B2BD" fill-opacity="0.22"/>
 <text x="513" y="247" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="30" font-weight="700" fill="#F2F4F7">2.45</text>
 <text x="467.56" y="247" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="600" letter-spacing="1.6" fill="#A9B2BD">ATÉ</text>
-<text x="29" y="247" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="21.78" font-weight="600" fill="#F2F4F7">74.0<tspan font-family="'JetBrains Mono', monospace" font-size="21.78" font-weight="400" fill="#D5DAE0"> L · dá 31 v · faltam 30</tspan></text>
+<text x="29" y="247" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="24" font-weight="600" fill="#F2F4F7">74.0<tspan font-family="'JetBrains Mono', monospace" font-size="24" font-weight="400" fill="#D5DAE0"> L · dá 31 v · faltam 30</tspan></text>
 <rect x="473" y="275" width="134" height="36" rx="10" fill="#0A0C10" fill-opacity="0.6"/>
 <rect x="487" y="287" width="12" height="12" rx="6" fill="#FF5A5A"/>
 <text x="509" y="299" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="20" font-weight="600" fill="#F2F4F7">REC 4/9</text>
