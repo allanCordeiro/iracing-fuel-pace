@@ -9,6 +9,8 @@
   <ItemGroup>
     <!-- Same allocation measurement rules as the Core tests (see its remarks) -->
     <Compile Include="..\FuelPace.Tests\Support\AllocationMeasure.cs" Link="Support\AllocationMeasure.cs" />
+    <!-- The same fixture lookup (and skip when the .ibt is absent, as on CI) as the Core tests -->
+    <Compile Include="..\FuelPace.Tests\Support\Fixtures.cs" Link="Support\Fixtures.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\FuelPace.Core\FuelPace.Core.csproj" />
