@@ -242,4 +242,40 @@ public sealed class RenderTests
         Assert.Equal(0.86f * 10, m.Ascent(FontRole.Value, 10), 2);
         Assert.Equal((0.5f + (1984 - 494) / 2048f / 2) * 10, m.Ascent(FontRole.Label, 10), 2);
     }
+
+    [Fact]
+    public void FillTriangle_points_to_the_requested_side()
+    {
+        using var fonts = new DWriteFonts();
+        using var warp = new WarpTarget(fonts);
+        var red = new Rgba(255, 0, 0, 255);
+        // Rect (10,10)-(30,30), 40x40 canvas; the base is a full 20 px edge, the tip a point at the middle of the opposite edge.
+        foreach (bool right in new[] { true, false })
+        {
+            var list = new DrawList();
+            list.FillTriangle(new RectF(10, 10, 20, 20), right, red);
+            var px = warp.Render(list, 40, 40);
+            int baseX = right ? 11 : 28, tipX = right ? 27 : 12;
+            string side = right ? "right" : "left";
+            Assert.Equal((255, 0, 0), Pixel(px, 40, baseX, 11)); // base corner, opaque
+            Assert.Equal((255, 0, 0), Pixel(px, 40, baseX, 28));
+            Assert.Equal((255, 0, 0), Pixel(px, 40, tipX, 19)); // beside the tip, on the middle line
+            Assert.Equal((255, 0, 0), Pixel(px, 40, tipX, 20));
+            Assert.True(px[(11 * 40 + tipX) * 4 + 3] == 0, $"{side}: the tip-side corner must stay empty");
+            Assert.True(px[(28 * 40 + tipX) * 4 + 3] == 0, $"{side}: the tip-side corner must stay empty");
+            Assert.True(px[(5 * 40 + baseX) * 4 + 3] == 0, $"{side}: nothing outside the rect");
+        }
+    }
+
+    [Fact]
+    public void FillTriangle_applies_the_color_alpha()
+    {
+        using var fonts = new DWriteFonts();
+        using var warp = new WarpTarget(fonts);
+        var list = new DrawList();
+        list.FillTriangle(new RectF(10, 10, 20, 20), true, new Rgba(255, 0, 0, 128));
+        var px = warp.Render(list, 40, 40);
+        int a = px[(20 * 40 + 14) * 4 + 3];
+        Assert.InRange(a, 124, 132);
+    }
 }
