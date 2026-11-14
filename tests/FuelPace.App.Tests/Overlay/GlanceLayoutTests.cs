@@ -1,5 +1,6 @@
 using FuelPace.App.Overlay;
 using FuelPace.Core.Display;
+using FuelPace.Core.Strategy;
 using FuelPace.Tests.Support;
 
 namespace FuelPace.App.Tests.Overlay;
@@ -611,6 +612,44 @@ public sealed class GlanceLayoutTests
         Assert.False(Has(d, "VOLTA"));
         Assert.Empty(Fills(d, GlanceTheme.Divider));
         Assert.Equal(PanelBg, Panel(d).Color); // the background keeps its own opacity
+    }
+
+    [Fact]
+    public void Unknown_autonomy_shows_only_the_fuel()
+    {
+        // PRD v3 §3: "—" disappears. No sim (— L), electric car, or a practice start without any mean.
+        foreach (var mode in new[] { GlanceMode.Inactive, GlanceMode.Compact })
+        {
+            var v = Compact(); v.Mode = mode; v.LapsPossible = -1; v.MinutesPossible = -1;
+            var d = Build(v);
+            Assert.True(Has(d, "74.0"));
+            Assert.DoesNotContain(Texts(d), t => t.Text.Contains("dá") || t.Text.Contains("min"));
+            Assert.Equal(mode == GlanceMode.Inactive ? 7f + 21 + 7 : Panel(Build(Compact())).Rect.H, Panel(d).Rect.H, 0.01);
+        }
+        var noSim = Compact(); noSim.Mode = GlanceMode.Inactive; noSim.Pills = StatusPills.None; noSim.Fuel = float.NaN; noSim.LapsPossible = -1; noSim.MinutesPossible = -1;
+        Assert.Equal(["—", "L"], Texts(Build(noSim)).Select(t => t.Text));
+    }
+
+    [Fact]
+    public void Inactive_through_the_engine_shows_fuel_and_autonomy()
+    {
+        // B1: in the box with a stint mean of 2.37 L at 80.14 s the real engine and builder give COMB and the autonomy
+        var i = new StrategyInput
+        {
+            SessionTime = 100, FuelL = 74, LapDistPct = 0, LapProjectionL = double.NaN, LastLapL = 2.38, StintMeanL = 2.37,
+            StintMeanLapS = 80.14, LastLapTimeS = double.NaN, SessionTimeRemain = double.NaN, LeaderPaceS = double.NaN,
+            LeaderLapDistPct = double.NaN, EstLapTimeS = double.NaN, IsRaceSession = true, SessionLapsRemainEx = 19,
+            Race = RaceKind.Laps, Inactive = true,
+        };
+        var h = new SignalHysteresis();
+        var s = FuelStrategyEngine.Compute(in i, null, new StrategyConfig(), ref h);
+        var v = GlanceViewBuilder.Build(in s, GlanceConfig.Default);
+        var d = Build(v);
+        Assert.Equal(GlanceMode.Inactive, v.Mode);
+        Assert.Equal(128, Text(d, "74.0").Color.A);
+        Assert.Equal(128, Text(d, "dá 31 v · 41 min").Color.A);
+        Assert.DoesNotContain(Texts(d), t => t.Text.Contains('—'));
+        Assert.Equal(7f + 21 + 7, Panel(d).Rect.H, 0.01);
     }
 
     [Fact]

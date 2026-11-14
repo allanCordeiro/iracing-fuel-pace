@@ -404,10 +404,13 @@ public static class GlanceLayout
             float wf = T(buf[..n], FontRole.Value, 600, CompactFuelFont, 0, false, GlanceTheme.Text, xl, bl);
             T("L", FontRole.Body, 400, CompactUnitFont, 0, false, GlanceTheme.Label, xl + wf + CompactUnitGap * k, bl);
 
+            // PRD v3 §3: unknown autonomy is left out rather than shown as "—" (no sim, electric car, no mean yet), and so
+            // are unknown minutes
+            if (v.LapsPossible < 0) return;
             n = Cat(buf, 0, "dá ");
             n += NumberFormat.Count(v.LapsPossible, buf[n..]);
             n = Cat(buf, n, " v");
-            if (v.MinutesPossible >= 0) // unknown minutes are left out rather than shown as "—"
+            if (v.MinutesPossible >= 0)
             {
                 n = Cat(buf, n, " · ");
                 n += NumberFormat.Count(v.MinutesPossible, buf[n..]);

@@ -229,23 +229,44 @@ public class FuelStrategyEngineTests
     // ---- Inactive ----
 
     [Fact]
-    public void Inactive_shows_only_fuel()
+    public void Inactive_shows_only_fuel_and_the_autonomy_inputs()
     {
+        // PRD v3 §6.5: the inactive panel keeps COMB and the autonomy, so the mean and the pace are exposed (same
+        // expressions as the active path, no new math); everything else stays unavailable.
         var i = Input.LapsRace(50, 19, 2.38);
         i.Inactive = true;
         i.StintMeanL = 2.40;
+        i.StintMeanLapS = 80.5;
         i.LapProjectionL = 2.3;
         var s = Run(i);
         Assert.Equal(SignalState.Inactive, s.State);
         Assert.Equal(new Insight(InsightKind.None), s.Insight);
         Assert.Equal(50, s.FuelL);
+        Assert.Equal(2.40, s.MeanL, 9);
+        Assert.False(s.MeanFromBaseline);
+        Assert.Equal(80.5, s.PaceS, 9);
         Assert.True(double.IsNaN(s.TargetL));
-        Assert.True(double.IsNaN(s.MeanL));
         Assert.True(double.IsNaN(s.LapProjectionL));
         Assert.True(double.IsNaN(s.LastLapL));
         Assert.True(double.IsNaN(s.AutonomyLaps));
+        Assert.True(double.IsNaN(s.AutonomyMin));
         Assert.True(double.IsNaN(s.LapsRemaining));
         Assert.True(double.IsNaN(s.FeasibleMinL));
+        Assert.True(double.IsNaN(s.FuelVsTimeB));
+
+        // without a stint mean: the baseline's, in italics, and its pace
+        i.StintMeanL = double.NaN;
+        i.StintMeanLapS = double.NaN;
+        s = Run(i);
+        Assert.Equal(FixtureBaseline.FuelMeanL, s.MeanL, 9);
+        Assert.True(s.MeanFromBaseline);
+        Assert.Equal(FixtureBaseline.LapMeanS, s.PaceS, 9);
+
+        // no mean at all (no stint laps, no baseline): still unknown
+        s = Run(i, null, Default);
+        Assert.True(double.IsNaN(s.MeanL));
+        Assert.False(s.MeanFromBaseline);
+        Assert.True(double.IsNaN(s.PaceS));
     }
 
     [Fact]
@@ -280,6 +301,8 @@ public class FuelStrategyEngineTests
         Assert.Equal(SignalState.Inactive, s.State);
         Assert.Equal(InsightKind.None, s.Insight.Kind);
         Assert.True(double.IsNaN(s.TargetL));
+        Assert.Equal(FixtureBaseline.FuelMeanL, s.MeanL, 9); // the inactive panel keeps its autonomy (PRD v3 §6.5)
+        Assert.Equal(FixtureBaseline.LapMeanS, s.PaceS, 9);
 
         i.StintLapsDone = 30;
         Assert.Equal(SignalState.Inactive, Run(i, FixtureBaseline, cfg).State);

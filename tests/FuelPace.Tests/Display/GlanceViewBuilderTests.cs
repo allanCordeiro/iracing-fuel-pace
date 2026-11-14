@@ -203,6 +203,30 @@ public class GlanceViewBuilderTests
     }
 
     [Fact]
+    public void Inactive_through_the_engine_keeps_laps_and_minutes_possible()
+    {
+        // PRD v3 §6.5: pit lane / box / garage keep COMB and the autonomy. Stint mean 2.37 L at 80.14 s:
+        // floor(73.5 / 2.37) = 31 laps, round(31 × 80.14 / 60) = 41 min.
+        var h = new SignalHysteresis();
+        var i = Input(74, 20, 2.38, 100);
+        i.Inactive = true;
+        i.StintMeanL = 2.37;
+        i.StintMeanLapS = 80.14;
+        var v = Build(Engine(in i, ref h));
+        Assert.Equal(GlanceMode.Inactive, v.Mode);
+        Assert.Equal((74.0f, (short)31, (short)41), (v.Fuel, v.LapsPossible, v.MinutesPossible));
+
+        // no stint laps yet: the baseline's mean and pace
+        i.StintMeanL = N;
+        i.StintMeanLapS = N;
+        h = new SignalHysteresis();
+        v = Build(Engine(in i, ref h));
+        short laps = (short)Math.Floor(73.5 / FixtureBaseline.FuelMeanL);
+        Assert.Equal(laps, v.LapsPossible);
+        Assert.Equal((short)Math.Round(laps * FixtureBaseline.LapMeanS / 60, MidpointRounding.AwayFromZero), v.MinutesPossible);
+    }
+
+    [Fact]
     public void Minutes_possible_only_outside_full()
     {
         var s = St(SignalState.Red, fuel: 74, lr: 32, proj: 2.38, last: 2.39, mean: 2.37, target: 73.5 / 32, lim: 2.23, pace: 108);

@@ -16,10 +16,15 @@ public static class FuelStrategyEngine
             return Inactive(ref s, new Insight(InsightKind.ElectricUnsupported), input.SessionTime, ref hysteresis);
 
         s.FuelL = input.FuelL;
+        double myPace = Positive(input.StintMeanLapS, Positive(baseline?.LapMeanS ?? double.NaN, input.EstLapTimeS));
+        // PRD v3 §6.5: the inactive panel keeps COMB and the autonomy, so the mean and the pace are exposed before the
+        // early returns too (the same expressions, assigned earlier; nothing else of the inactive output changes).
+        s.MeanFromBaseline = double.IsNaN(input.StintMeanL) && baseline is not null;
+        s.MeanL = s.MeanFromBaseline ? baseline!.FuelMeanL : input.StintMeanL;
+        s.PaceS = myPace;
         if (input.Inactive)
             return Inactive(ref s, new Insight(InsightKind.None), input.SessionTime, ref hysteresis);
 
-        double myPace = Positive(input.StintMeanLapS, Positive(baseline?.LapMeanS ?? double.NaN, input.EstLapTimeS));
         double lRest = LapsRemaining(in input, cfg, myPace);
         if (lRest <= 0)
             return Inactive(ref s, new Insight(InsightKind.None), input.SessionTime, ref hysteresis);
@@ -31,11 +36,8 @@ public static class FuelStrategyEngine
         s.LastLapTimeS = input.LastLapTimeS;
         s.MeanLapTimeS = input.StintMeanLapS;
         s.BaselineLapTimeS = baseline?.LapMedianS ?? double.NaN;
-        s.MeanFromBaseline = double.IsNaN(input.StintMeanL) && baseline is not null;
-        s.MeanL = s.MeanFromBaseline ? baseline!.FuelMeanL : input.StintMeanL;
         s.AutonomyLaps = usable / s.MeanL;
         s.AutonomyMin = s.AutonomyLaps * myPace / 60;
-        s.PaceS = myPace;
         s.FuelVsTimeB = baseline?.FuelVsTime?.B ?? double.NaN;
         s.LapsRemaining = lRest;
         s.IsStintMode = cfg.Mode == LapsMode.Stint;

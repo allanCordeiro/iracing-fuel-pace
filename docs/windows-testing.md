@@ -101,7 +101,7 @@ Antes: desmarque **Ocultar fora da pista** e use uma sessão com limite de volta
 - [ ] Lift & coast: ao economizar, o marcador cruza a linha do alvo e muda de cor antes de o bloco trocar de vermelho para azul (o bloco espera 1,5 s).
 - [ ] NÃO FACTÍVEL: bloco cinza `PIT FALTAM x.x L`, **sem barra**, última linha em duas partes (`alvo x.xx · MÍN y.yy` e `faltam N`).
 - [ ] SEM BASELINE (carro/pista sem captura): painel compacto, `74.0 L` grande, `dá N v · M min`, apoio; sem `ALVO —` nem "Sem baseline para …".
-- [ ] INATIVO (esmaecido, só combustível e autonomia): no pit, garagem ou replay (com **Ocultar fora da pista** desmarcado; marcado, ele some depois de 3 s).
+- [ ] INATIVO (esmaecido, só combustível e autonomia, como `74.0 L … dá 31 v · 41 min`; sem nenhuma média ainda, só o combustível, nunca `dá — v`): no pit, garagem ou replay (com **Ocultar fora da pista** desmarcado; marcado, ele some depois de 3 s).
 - [ ] Pílulas: `● REC v/t` com a captura ligada; `~ CAUTION` e `~` antes do alvo em bandeira amarela numa corrida por tempo.
 - [ ] Os números do overlay batem com o que você vê no carro (combustível do iRacing, voltas restantes).
 

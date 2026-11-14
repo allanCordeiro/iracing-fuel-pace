@@ -1,5 +1,6 @@
 using FuelPace.App.Overlay;
 using FuelPace.Core.Display;
+using FuelPace.Core.Strategy;
 
 namespace FuelPace.App.Tests.Overlay;
 
@@ -74,6 +75,25 @@ public sealed class GlancePreviewsTests
         var input = GlancePreviews.Inputs[name];
         var built = GlanceViewBuilder.Build(in input, GlancePreviews.SampleConfig);
         Assert.Equal(Get(name).View, built);
+    }
+
+    [Fact] // B1: the inactive preview is what the app draws in the box, not a hand-made view
+    public void The_inactive_preview_is_what_the_engine_and_builder_make()
+    {
+        var i = new StrategyInput
+        {
+            SessionTime = 100, FuelL = 74, LapDistPct = 0, LapProjectionL = double.NaN, LastLapL = 2.39, StintMeanL = 2.37,
+            StintMeanLapS = 80.14, LastLapTimeS = 79.51, SessionTimeRemain = double.NaN, LeaderPaceS = double.NaN,
+            LeaderLapDistPct = double.NaN, EstLapTimeS = double.NaN, IsRaceSession = true, SessionLapsRemainEx = 31,
+            Race = RaceKind.Laps, Inactive = true,
+        };
+        var h = new SignalHysteresis();
+        var engine = FuelStrategyEngine.Compute(in i, null, new StrategyConfig(), ref h);
+        Assert.Equal(engine, GlancePreviews.InactiveInput);
+        var built = GlanceViewBuilder.Build(in engine, GlancePreviews.SampleConfig);
+        Assert.Equal(built, Get("inativo").View);
+        var texts = Texts(Get("inativo"));
+        Assert.Equal(["74.0", "L", "dá 31 v · 41 min"], texts);
     }
 
     [Fact]

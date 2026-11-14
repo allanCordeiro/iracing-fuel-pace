@@ -10,15 +10,14 @@ public sealed record GlancePreview(string Name, GlanceView View, OverlayViewOpti
 /// <summary>
 /// The v3 review previews (PRD v3 V3-10, §11.4): the four mocks (screens 9–12) with the V3-3 numbers, plus the edge cases
 /// (inactive, saturated bar with every pill, bar off, edit mode, 250 %). tools/FuelPace.Preview writes them as SVG into
-/// <c>docs/v3/preview</c>. The views are built by hand so the previews do not depend on the builder; <see cref="Inputs"/>
+/// <c>docs/v3/preview</c>. The mock views are built by hand so those previews do not depend on the builder; <see cref="Inputs"/>
 /// holds the V3-3 engine outputs behind the four mocks, and a test checks that the builder makes exactly these views of them.
+/// The inactive one comes from the builder (<see cref="InactiveInput"/>), so it shows what the app really draws in the box.
 /// </summary>
 public static class GlancePreviews
 {
     /// <summary>Padding around the overlay in the SVG, over the game-scene backdrop.</summary>
     public const int Padding = 40;
-
-    public static IReadOnlyList<GlancePreview> All { get; } = Build();
 
     /// <summary>V3-3: the display settings of the mocks (res 0.5, S 0.20, complement in %, bar and MÉD on).</summary>
     public static GlanceConfig SampleConfig { get; } = GlanceConfig.Default;
@@ -29,6 +28,22 @@ public static class GlancePreviews
     /// options (bar, scale, MÉD) show through the same builder the overlay uses.
     /// </summary>
     public static IReadOnlyDictionary<string, OverlayState> Inputs { get; } = BuildInputs();
+
+    /// <summary>
+    /// The engine output behind <c>inativo</c>: in the box during the race of the mocks (C 74.0, stint MÉD 2.37 at
+    /// 80.14 s). The inactive path exposes only the fuel, the mean and the pace (PRD v3 §6.5), so the preview is built by
+    /// the builder from it rather than by hand.
+    /// </summary>
+    public static OverlayState InactiveInput { get; } = new()
+    {
+        State = SignalState.Inactive, FuelL = 74.0, MeanL = 2.37, PaceS = 80.14,
+        LapsRemaining = double.NaN, LapProjectionL = double.NaN, LastLapL = double.NaN, TargetL = double.NaN, FeasibleMinL = double.NaN,
+        AutonomyLaps = double.NaN, AutonomyMin = double.NaN, FuelVsTimeB = double.NaN,
+        LastLapTimeS = double.NaN, MeanLapTimeS = double.NaN, BaselineLapTimeS = double.NaN, Insight = new Insight(InsightKind.None),
+    };
+
+    /// <summary>The previews; declared after the inputs above, which the static initializers must have set first.</summary>
+    public static IReadOnlyList<GlancePreview> All { get; } = Build();
 
     static Dictionary<string, OverlayState> BuildInputs()
     {
@@ -92,7 +107,9 @@ public static class GlancePreviews
             Pills = StatusPills.Rec, RecValid = 4, RecTotal = 9,
             LastLapTimeS = float.NaN, MeanLapTimeS = float.NaN, BaselineLapTimeS = float.NaN,
         };
-        var inactive = compact with { Mode = GlanceMode.Inactive, Pills = StatusPills.None };
+        // in the box (PRD v3 §6.5): from the builder, as the app draws it
+        var inactiveInput = InactiveInput;
+        var inactive = GlanceViewBuilder.Build(in inactiveInput, SampleConfig);
         // VOLTA 2.50 against ALVO 2.30: +0.20 = the end of the ±0.20 scale; caution freezes the target (estimate)
         var saturated = red with
         {
