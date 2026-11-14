@@ -9,6 +9,10 @@ public struct OverlayState
     public SignalState State;
     public double FuelL, AutonomyLaps, AutonomyMin, LapProjectionL, LastLapL, MeanL, TargetL, LapsRemaining, FeasibleMinL,
         LastLapTimeS, MeanLapTimeS, BaselineLapTimeS;
+
+    /// <summary>PRD v3: exposed for the GlanceView builder, no new math. The pace the autonomy minutes use (stint mean,
+    /// else baseline mean, else the car's estimate; s/lap) and the baseline's fuel-vs-time slope B (NaN without a fit).</summary>
+    public double PaceS, FuelVsTimeB;
     public bool LastLapInvalid, MeanFromBaseline, TargetIsEstimate, IsStintMode, IsPractice, Recording, BopMismatch;
     public int RecValid, RecTotal;
     public Insight Insight;

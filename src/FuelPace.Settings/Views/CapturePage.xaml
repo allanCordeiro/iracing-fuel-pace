@@ -46,9 +46,19 @@
                         <TextBlock Grid.Column="2" Style="{StaticResource MonoCell}" Text="{Binding Fuel}" />
                         <TextBlock Grid.Column="3" Style="{StaticResource MonoCell}" Text="{Binding FullThrottle}" Foreground="{StaticResource TextNav}" />
                         <TextBlock x:Name="Status" Grid.Column="4" Style="{StaticResource Cell}" Text="{Binding Status}" Foreground="{StaticResource Link}" />
-                        <Button Grid.Column="5" Style="{StaticResource LinkButton}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="16,9"
-                                Content="{Binding ActionText}" Command="{Binding ProfileCommand}"
+                        <Button Grid.Column="5" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="16,9"
+                                Content="{Binding ActionText}" Command="{Binding ProfileCommand}" ToolTipService.ShowOnDisabled="True"
                                 Visibility="{Binding ActionText, Converter={StaticResource NotEmptyVisible}}">
+                            <Button.Style>
+                                <!-- Disabled while the capture runs (it is saved when it stops): say so instead of a dead link -->
+                                <Style TargetType="Button" BasedOn="{StaticResource LinkButton}">
+                                    <Style.Triggers>
+                                        <Trigger Property="IsEnabled" Value="False">
+                                            <Setter Property="ToolTip" Value="Disponível quando a captura terminar e for salva." />
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
                             <AutomationProperties.Name>
                                 <MultiBinding StringFormat="{}{0} a volta {1}">
                                     <Binding Path="ActionText" />

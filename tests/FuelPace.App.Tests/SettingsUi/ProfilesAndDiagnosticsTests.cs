@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using FuelPace.App.Ipc;
 
 namespace FuelPace.App.Tests.SettingsUi;
@@ -80,6 +81,33 @@ public class ProfilesViewModelTests
         r.Conn.Raise(new Profile("ligier__zolder", ProfileJson.Doc("cap-2", [(null, 1, 80.0, 2.4, 60, 0)])));
         Assert.Equal("cap-2", Assert.Single(r.Profiles.Captures).Id);
         Assert.True(r.Conn.Of<ListProfiles>().Count > lists);
+    }
+
+    [Fact] // feedback 2026-11-13: the list that the profile's arrival asks for emptied the captures table
+    public async Task Captures_stay_when_the_list_is_refreshed()
+    {
+        var r = new SettingsRig();
+        await r.ConnectAsync();
+        // What WPF's ListBox does: clearing its items drops the selection, through the two-way binding.
+        r.Profiles.Items.CollectionChanged += (_, e) =>
+        {
+            if (e.Action == NotifyCollectionChangedAction.Reset) r.Profiles.SelectedItem = null;
+        };
+        r.Conn.Raise(new ProfileList([Ligier, Other]));
+        r.Profiles.SelectedItem = r.Profiles.Items[0];
+        r.Conn.Raise(new Profile("ligier__zolder", ProfileJson.Doc("cap-1", [(null, 1, 80.0, 2.4, 60, 0)])));
+        Assert.Equal("cap-1", Assert.Single(r.Profiles.Captures).Id);
+
+        r.Conn.Raise(new ProfileList([Ligier with { Captures = 3 }, Other])); // the reply to the refresh: the counts changed
+        Assert.Equal("ligier__zolder", r.Profiles.SelectedItem?.Key);
+        Assert.Contains("3 capturas", r.Profiles.SelectedItem!.Text);
+        Assert.Equal("cap-1", Assert.Single(r.Profiles.Captures).Id);
+        Assert.Single(r.Conn.Of<GetProfile>()); // the selection did not really change: nothing is asked again
+
+        // the selected profile is gone (its file was deleted): nothing selected, no captures
+        r.Conn.Raise(new ProfileList([Other]));
+        Assert.Null(r.Profiles.SelectedItem);
+        Assert.Empty(r.Profiles.Captures);
     }
 
     [Fact]

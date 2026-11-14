@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "overlay": {
+    "monitorDeviceName": "\\\\.\\DISPLAY1",
+    "offsetX": 1804,
+    "offsetY": 900,
+    "scale": 1.66,
+    "backgroundOpacity": 0.6,
+    "contentOpacity": 1,
+    "showPaceLine": false,
+    "showInsightLine": true,
+    "autoHide": false,
+    "renderBackend": "auto"
+  },
+  "strategy": {
+    "reserveL": 0.5,
+    "meanWindow": 5,
+    "maxSavingFraction": 0.06,
+    "extraLaps": 0,
+    "mode": "auto",
+    "stintLaps": 25,
+    "practiceLapsFromTime": true
+  },
+  "hotkeys": {
+    "toggleEdit": "Ctrl\u002BShift\u002BF",
+    "toggleVisible": "Ctrl\u002BShift\u002BH",
+    "debugMark": "Ctrl\u002BShift\u002BM"
+  },
+  "debug": {
+    "enabled": false,
+    "recordTelemetry": true,
+    "maxRecordingsGB": 2
+  },
+  "startWithWindows": false
+}

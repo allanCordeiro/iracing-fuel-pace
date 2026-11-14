@@ -35,6 +35,8 @@ public static class FuelStrategyEngine
         s.MeanL = s.MeanFromBaseline ? baseline!.FuelMeanL : input.StintMeanL;
         s.AutonomyLaps = usable / s.MeanL;
         s.AutonomyMin = s.AutonomyLaps * myPace / 60;
+        s.PaceS = myPace;
+        s.FuelVsTimeB = baseline?.FuelVsTime?.B ?? double.NaN;
         s.LapsRemaining = lRest;
         s.IsStintMode = cfg.Mode == LapsMode.Stint;
         s.IsPractice = !input.IsRaceSession;
@@ -126,6 +128,7 @@ public static class FuelStrategyEngine
         FuelL = double.NaN, AutonomyLaps = double.NaN, AutonomyMin = double.NaN, LapProjectionL = double.NaN,
         LastLapL = double.NaN, MeanL = double.NaN, TargetL = double.NaN, LapsRemaining = double.NaN,
         FeasibleMinL = double.NaN, LastLapTimeS = double.NaN, MeanLapTimeS = double.NaN, BaselineLapTimeS = double.NaN,
+        PaceS = double.NaN, FuelVsTimeB = double.NaN,
         Recording = input.Recording, RecValid = input.RecValid, RecTotal = input.RecTotal,
         Insight = new Insight(InsightKind.None),
     };

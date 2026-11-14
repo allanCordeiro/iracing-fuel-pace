@@ -27,6 +27,7 @@ namespace FuelPace.App.Ipc;
 [JsonDerivedType(typeof(BundleCreated), "bundleCreated")]
 [JsonDerivedType(typeof(Notice), "notice")]
 [JsonDerivedType(typeof(FullscreenChanged), "fullscreenChanged")]
+[JsonDerivedType(typeof(SessionChanged), "sessionChanged")]
 [JsonDerivedType(typeof(Error), "error")]
 public abstract record IpcMessage;
 
@@ -57,6 +58,10 @@ public sealed record BundleCreated(string Path) : IpcMessage;
 public sealed record Notice(string Level, string Text) : IpcMessage;
 /// <summary>The sim went into or out of exclusive fullscreen (the Settings window's banner follows it).</summary>
 public sealed record FullscreenChanged(bool On) : IpcMessage;
+/// <summary>The sim connected or went away, or its session (car, track, session type) changed: the same fields as the
+/// <see cref="AgentSnapshot"/>, sent to open Settings windows only when one of them changes.</summary>
+public sealed record SessionChanged(bool SimConnected, string? ProfileKey, string? CarName, string? TrackName, string? SessionType,
+    double? TankCapacityL) : IpcMessage;
 public sealed record Error(string Text) : IpcMessage;
 
 /// <summary>Wire form of a captured lap; reasons as <see cref="LapReasonCodes"/>. NaN doubles travel as null.</summary>

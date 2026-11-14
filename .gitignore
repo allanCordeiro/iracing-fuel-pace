@@ -7,7 +7,7 @@ BenchmarkDotNet.Artifacts/
 .vs/
 *.user
 .superpowers/
-feedback/
+/feedback/
 out/
 artifacts/
 TestResults/
