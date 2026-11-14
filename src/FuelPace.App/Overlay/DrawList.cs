@@ -20,12 +20,14 @@ public readonly record struct RectF(float X, float Y, float W, float H);
 
 public readonly record struct SizeF(float W, float H);
 
-public enum CommandKind : byte { FillRoundedRect, StrokeDashedRect, FillRect, StrokeRect, Text }
+public enum CommandKind : byte { FillRoundedRect, StrokeDashedRect, FillRect, StrokeRect, Text, FillTriangle }
 
 /// <summary>
 /// One draw command. For <see cref="CommandKind.Text"/>, <c>Rect.X</c>/<c>Rect.Y</c> are x and the baseline y (W/H unused).
 /// <c>Weight</c> is the CSS font weight (400..800). <c>Continuation</c> marks a text run that follows the previous run on the
 /// same baseline (flow-capable renderers such as SVG may ignore its X and let the text flow). <c>Radius</c> is the corner radius for rounded fills and the line width for strokes.
+/// <see cref="CommandKind.FillTriangle"/> fills an isosceles triangle inside <c>Rect</c>: its tip at the middle of the right
+/// edge when <c>Radius</c> &gt; 0, of the left edge otherwise (the base is the opposite edge).
 /// </summary>
 public readonly record struct DrawCommand(
     CommandKind Kind, RectF Rect, float Radius, Rgba Color,
@@ -65,6 +67,9 @@ public sealed class DrawList
     public void StrokeDashedRect(RectF r, float width, Rgba color) => Add(new(CommandKind.StrokeDashedRect, r, width, color, 0, 0, default, 0, 0, false));
     public void FillRect(RectF r, Rgba color) => Add(new(CommandKind.FillRect, r, 0, color, 0, 0, default, 0, 0, false));
     public void StrokeRect(RectF r, float width, Rgba color) => Add(new(CommandKind.StrokeRect, r, width, color, 0, 0, default, 0, 0, false));
+
+    /// <summary>A triangle inside <paramref name="r"/> pointing right (tip at the middle of the right edge) or left.</summary>
+    public void FillTriangle(RectF r, bool pointsRight, Rgba color) => Add(new(CommandKind.FillTriangle, r, pointsRight ? 1 : -1, color, 0, 0, default, 0, 0, false));
 
     /// <summary>Copies <paramref name="text"/> into the arena and returns its start.</summary>
     public int Append(ReadOnlySpan<char> text)

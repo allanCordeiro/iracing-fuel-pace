@@ -1,7 +1,6 @@
 using FuelPace.App.Overlay;
 using FuelPace.App.Placement;
 using FuelPace.App.Settings;
-using FuelPace.Core.Strategy;
 
 namespace FuelPace.App.Tests.Placement;
 
@@ -69,12 +68,12 @@ public sealed class OverlayPlacementTests
     {
         // Callers must build the layout with Scale = 1 (non-edit) and let Resolve apply Scale x Dpi. Pin that the layout
         // at Scale 2 is exactly twice the Scale 1 size (so passing it would double-scale).
-        var s = new OverlayState { State = SignalState.Blue, FuelL = 41.8, AutonomyLaps = 17.3, AutonomyMin = 23 };
+        var v = GlancePreviews.All.First(p => p.Name == "azul").View;
         SizeF Build(double scale)
         {
             var d = new DrawList();
-            OverlayLayout.Build(s, "LMP2", "Zolder",
-                new OverlayViewOptions(scale, 0.6, 1, false, true, false, false, "Ctrl+Shift+F", 0, 0), new FixedMetricsMeasurer(), d);
+            GlanceLayout.Build(in v, new OverlayViewOptions(scale, 0.6, 1, false, false, false, "Ctrl+Shift+F", 0, 0),
+                new FixedMetricsMeasurer(), d);
             return d.Size;
         }
         var one = Build(1);

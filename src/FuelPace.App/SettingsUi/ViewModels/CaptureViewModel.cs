@@ -83,17 +83,31 @@ public sealed partial class CaptureViewModel : ObservableObject
 
     internal void Apply(AgentSnapshot s)
     {
-        _profileKey = s.ProfileKey;
+        SetSession(s.SimConnected, s.ProfileKey, s.CarName, s.TrackName, s.SessionType, s.TankCapacityL);
         _captureId = s.CaptureId;
-        _tankL = s.TankCapacityL;
-        _sim = s.SimConnected;
         _laps = [.. s.CaptureLaps];
         _valid = s.Valid;
         _total = s.Total;
-        SessionLine = s.CarName is null
-            ? s.SimConnected ? "Aguardando uma sessão do iRacing" : "iRacing não está conectado"
-            : string.Join(" · ", new[] { s.CarName, s.TrackName, s.SessionType }.Where(x => !string.IsNullOrEmpty(x)));
         SetCapturing(s.CaptureActive, rebuild: true);
+    }
+
+    /// <summary>The sim connected or left, or its session changed after the snapshot: the header line, the profile the lap
+    /// actions edit and the tank of the autonomy card follow it; the laps and the saved capture stay.</summary>
+    internal void OnSession(SessionChanged s)
+    {
+        if (s.ProfileKey != _profileKey) _captureId = null; // the saved capture shown is another profile's
+        SetSession(s.SimConnected, s.ProfileKey, s.CarName, s.TrackName, s.SessionType, s.TankCapacityL);
+        Rebuild();
+    }
+
+    void SetSession(bool sim, string? profileKey, string? car, string? track, string? sessionType, double? tankL)
+    {
+        _sim = sim;
+        _profileKey = profileKey;
+        _tankL = tankL;
+        SessionLine = car is null
+            ? sim ? "Aguardando uma sessão do iRacing" : "iRacing não está conectado"
+            : string.Join(" · ", new[] { car, track, sessionType }.Where(x => !string.IsNullOrEmpty(x)));
     }
 
     internal void OnLapAdded(CaptureLapAdded m)

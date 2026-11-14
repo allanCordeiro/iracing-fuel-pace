@@ -87,6 +87,9 @@ public sealed class D2DDrawListRenderer : IDisposable
                     _target.DrawRectangle(new RawRectF(r.X + hw, r.Y + hw, r.X + r.W - hw, r.Y + r.H - hw), _brush, c.Radius,
                         c.Kind == CommandKind.StrokeDashedRect ? _dashed : null);
                     break;
+                case CommandKind.FillTriangle:
+                    FillTriangle(r, c.Radius > 0);
+                    break;
                 case CommandKind.Text:
                     var e = Layout(list.TextOf(in c), c.Role, c.Weight, c.SizePx, c.LetterSpacingEm, c.Italic);
                     float x = c.Continuation && prevText ? prevX + prevAdvance : c.X;
@@ -97,6 +100,36 @@ public sealed class D2DDrawListRenderer : IDisposable
             }
             prevText = c.Kind == CommandKind.Text;
         }
+    }
+
+    /// <summary>
+    /// An isosceles triangle inside <paramref name="r"/>: tip at the middle of the right edge when pointing right, of the
+    /// left edge otherwise (as the SVG's polygon). The geometry and its sink are released right here; triangles are a
+    /// handful per frame at a few redraws per second, so a path geometry per command is simpler than caching.
+    /// </summary>
+    private void FillTriangle(RectF r, bool pointsRight)
+    {
+        float x0 = r.X, x1 = r.X + r.W, y0 = r.Y, y1 = r.Y + r.H, ym = y0 + r.H / 2;
+        using var factory = _target.Factory;
+        using var geometry = factory.CreatePathGeometry();
+        using (var sink = geometry.Open())
+        {
+            if (pointsRight)
+            {
+                sink.BeginFigure(new Vector2(x0, y0), FigureBegin.Filled);
+                sink.AddLine(new Vector2(x1, ym));
+                sink.AddLine(new Vector2(x0, y1));
+            }
+            else
+            {
+                sink.BeginFigure(new Vector2(x1, y0), FigureBegin.Filled);
+                sink.AddLine(new Vector2(x0, ym));
+                sink.AddLine(new Vector2(x1, y1));
+            }
+            sink.EndFigure(FigureEnd.Closed);
+            sink.Close();
+        }
+        _target.FillGeometry(geometry, _brush);
     }
 
     private Entry Layout(ReadOnlySpan<char> text, FontRole role, int weight, float size, float spacing, bool italic)

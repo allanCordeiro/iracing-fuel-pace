@@ -75,9 +75,12 @@ public sealed partial class ProfilesViewModel : ObservableObject
 
     partial void OnSelectedItemChanged(ProfileItemViewModel? value)
     {
+        // While the list reloads, the ListBox drops the selection (its items were cleared) and OnList puts the same profile back:
+        // the captures shown are still that profile's.
+        if (_loading) return;
         Captures.Clear();
         PendingDelete = null;
-        if (!_loading && value is not null) _out.Send(new GetProfile(value.Key));
+        if (value is not null) _out.Send(new GetProfile(value.Key));
     }
 
     internal void Refresh() => _out.Send(new ListProfiles());
@@ -93,7 +96,11 @@ public sealed partial class ProfilesViewModel : ObservableObject
             SelectedItem = selected is null ? null : Items.FirstOrDefault(i => i.Key == selected);
         }
         finally { _loading = false; }
-        if (SelectedItem is null) Captures.Clear();
+        if (SelectedItem is null)
+        {
+            Captures.Clear();
+            PendingDelete = null;
+        }
     }
 
     internal void OnProfile(Profile p)

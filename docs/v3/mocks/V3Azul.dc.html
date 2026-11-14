@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Proposta no alvo</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="position: relative; width: 760px; height: 400px; overflow: hidden; background: #1C2026; font-family: Inter, system-ui, sans-serif">
+  <div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 760px; height: 170px; background: #3A4552"></div>
+  <div aria-hidden="true" style="position: absolute; left: 0; top: 170px; width: 760px; height: 230px; background: #262B31"></div>
+  <div aria-hidden="true" style="position: absolute; left: 0; top: 170px; width: 760px; height: 230px; background: #3B4048; clip-path: polygon(46% 0, 54% 0, 100% 100%, 0 100%)"></div>
+  <div aria-hidden="true" style="position: absolute; left: 0; top: 330px; width: 760px; height: 70px; background: #0E1013"></div>
+
+  <div style="position: absolute; left: 80px; top: 60px; width: 600px; box-sizing: border-box; padding: 14px 18px 16px; border-radius: 12px; background: rgba(10, 12, 16, {{bgAlpha}}); display: flex; flex-direction: column; gap: 12px; color: #F2F4F7">
+
+    <div style="display: flex; align-items: center; gap: 18px; padding: 10px 14px; border-radius: 8px; background: rgba(47, 128, 237, 0.28)">
+      <span style="padding: 8px 14px; border-radius: 6px; background: #1E6BD6; font-size: 22px; font-weight: 800; letter-spacing: 0.08em; color: #FFFFFF">OK</span>
+      <span style="font-size: 22px; font-weight: 600; letter-spacing: 0.06em; color: #CFE2FF">FOLGA</span>
+      <span style="display: flex; align-items: baseline; gap: 8px">
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 50px; font-weight: 700; line-height: 1">2.7</span>
+        <span style="font-size: 24px; color: #CFE2FF">L</span>
+      </span>
+    </div>
+
+    <div role="img" aria-label="Volta atual 0.09 L abaixo do alvo; última volta 0.08 abaixo" style="position: relative; height: 36px; margin: 0 6px">
+      <div aria-hidden="true" style="position: absolute; left: 0; top: 14px; width: 50%; height: 8px; border-radius: 4px 0 0 4px; background: rgba(47, 128, 237, 0.45)"></div>
+      <div aria-hidden="true" style="position: absolute; left: 50%; top: 14px; width: 50%; height: 8px; border-radius: 0 4px 4px 0; background: rgba(235, 87, 87, 0.40)"></div>
+      <div aria-hidden="true" style="position: absolute; left: 50%; top: 0; width: 3px; height: 36px; margin-left: -1px; background: #F2F4F7"></div>
+      <div aria-hidden="true" style="position: absolute; left: 165px; top: 6px; width: 3px; height: 24px; background: rgba(242, 244, 247, 0.55)"></div>
+      <div aria-hidden="true" style="position: absolute; left: 146px; top: 2px; width: 12px; height: 32px; border-radius: 3px; background: #6AAEFF"></div>
+    </div>
+
+    <div style="display: flex; align-items: baseline; gap: 34px; padding: 0 4px">
+      <div style="display: flex; align-items: baseline; gap: 10px">
+        <span style="font-size: 16px; font-weight: 600; letter-spacing: 0.1em; color: #A9B2BD">VOLTA</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 600; color: #6AAEFF">2.36</span>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 10px">
+        <span style="font-size: 16px; font-weight: 600; letter-spacing: 0.1em; color: #A9B2BD">ÚLT</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 500; color: #9CC8FF">2.37</span>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 10px">
+        <span style="font-size: 16px; font-weight: 600; letter-spacing: 0.1em; color: #A9B2BD">MÉD</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 500; color: #D5DAE0">2.37</span>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 8px 4px 0; border-top: 1px solid rgba(169, 178, 189, 0.22)">
+      <span style="font-family: 'JetBrains Mono', monospace; font-size: 24px; color: #D5DAE0"><strong style="font-weight: 600; color: #F2F4F7">74.0</strong> L · dá 31 v · faltam 30</span>
+      <span style="display: flex; align-items: baseline; gap: 8px">
+        <span style="font-size: 16px; font-weight: 600; letter-spacing: 0.1em; color: #A9B2BD">ATÉ</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 700; color: #F2F4F7">2.45</span>
+      </span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"bgOpacity":{"editor":"range","min":0,"max":100,"step":5,"unit":"%","default":60},"$preview":{"width":760,"height":400}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const o = this.props.bgOpacity ?? 60;
+    return { bgAlpha: (o / 100).toFixed(2) };
+  }
+}
+</script>
+</body>
+</html>

@@ -4,7 +4,7 @@ Este guia vem no zip como `LEIA-ME.md`. Leva uns 15 minutos para o primeiro test
 
 ## 1. Baixar
 
-- No GitHub: aba **Actions**, último run verde da branch `feat/fuelpace`, seção **Artifacts**, baixar `fuelpace-windows` (um zip; descompactado, tem a pasta `out/` com os dois zips):
+- No GitHub: aba **Actions**, último run verde da branch em teste (`feat/v3-glance` para a v3), seção **Artifacts**, baixar `fuelpace-windows` (um zip; descompactado, tem a pasta `out/` com os dois zips):
   - `FuelPace-<versão>-win-x64-debug.zip`: **use este para testar** (traz o modo debug ligado e o FakeSim).
   - `FuelPace-<versão>-win-x64.zip`: versão normal, sem debug.
 - A página de **Releases** só passa a ter os zips quando uma versão (tag `v…`) for publicada.
@@ -48,7 +48,16 @@ O zip `-debug` já vem com o arquivo `FuelPace.debug` ao lado do exe, que liga o
 
 ## 6. Corrida
 
-Use o overlay numa corrida (ou treino com limite de voltas/tempo). Ele mostra ALVO, VOLTA, ÚLT, MÉD e o insight.
+Use o overlay numa corrida (ou treino com limite de voltas/tempo). Desde a v3 ele é de **leitura rápida**, em quatro faixas:
+
+1. **Decisão** (fundo na cor do estado): `ECONOMIZE 0.08 −3%` no vermelho (economize 0,08 L por volta), `OK FOLGA 2.7 L` no azul (sobram 2,7 L), `PIT FALTAM 2.3 L` quando não fecha nem economizando.
+2. **Barra de delta** (só no azul e no vermelho): a linha do meio é o alvo por volta, o marcador é a volta atual (projeção) e o traço fino é a última volta; à esquerda gasta menos, à direita mais. Na ponta da escala o marcador vira um triângulo.
+3. **Apoio:** `VOLTA`, `ÚLT` e `MÉD` (L/volta).
+4. **Autonomia:** `74.0 L · dá 31 v · faltam 32` e, à direita, `ALVO` (vermelho: o que é preciso fazer por volta), `ATÉ` (azul: o máximo que dá para gastar) ou `alvo · MÍN` (PIT).
+
+Embaixo do painel aparecem pílulas quando valem: `● REC 4/9` (captura ligada), `BoP≠` (baseline com BoP ou tanque diferentes) e `~ CAUTION` (alvo estimado durante bandeira amarela). Sem baseline, o painel fica **compacto**: combustível, `dá N v · M min` e o apoio. Não existe mais a linha de insight.
+
+Na seção **LAYOUT** de **Configurações › Overlay e cálculo** dá para desligar a barra, mudar a escala dela (±0,05 a ±0,50 L/v), trocar o complemento do vermelho de `%` para segundos por volta (`s/v`, precisa de baseline com ajuste consumo × tempo) e tirar o `MÉD` do apoio. A prévia da tela muda na hora.
 
 ## 7. Durante o teste: marcadores
 
@@ -86,25 +95,89 @@ Antes: desmarque **Ocultar fora da pista** e use uma sessão com limite de volta
 - [ ] Ligar **Capturar voltas**, fechar o Settings, completar voltas, reabrir: as voltas aparecem no resumo e a captura continua ativa.
 - [ ] A caixa **Capturar voltas** só existe no Settings (não há outro lugar).
 
-**Os 5 estados do overlay**
-- [ ] AZUL (selo NO ALVO) e VERMELHO (selo ACIMA).
-- [ ] NÃO FACTÍVEL (selo PIT, "alvo X · mín possível Y").
-- [ ] SEM BASELINE (`ALVO —`): carro/pista sem captura.
-- [ ] INATIVO (esmaecido, só COMB): no pit, garagem ou replay (com **Ocultar fora da pista** desmarcado; marcado, ele some depois de 3 s).
+**Os estados do overlay (v3, leitura rápida)**
+- [ ] VERMELHO: bloco vermelho `ECONOMIZE 0.xx −N%`, marcador da barra à direita do alvo, `ALVO` na última linha.
+- [ ] AZUL: bloco azul `OK FOLGA x.x L`, marcador à esquerda do alvo, `ATÉ` na última linha.
+- [ ] Lift & coast: ao economizar, o marcador cruza a linha do alvo e muda de cor antes de o bloco trocar de vermelho para azul (o bloco espera 1,5 s).
+- [ ] NÃO FACTÍVEL: bloco cinza `PIT FALTAM x.x L`, **sem barra**, última linha em duas partes (`alvo x.xx · MÍN y.yy` e `faltam N`).
+- [ ] SEM BASELINE (carro/pista sem captura): painel compacto, `74.0 L` grande, `dá N v · M min`, apoio; sem `ALVO —` nem "Sem baseline para …".
+- [ ] INATIVO (esmaecido, só combustível e autonomia, como `74.0 L … dá 31 v · 41 min`; sem nenhuma média ainda, só o combustível, nunca `dá — v`): no pit, garagem ou replay (com **Ocultar fora da pista** desmarcado; marcado, ele some depois de 3 s).
+- [ ] Pílulas: `● REC v/t` com a captura ligada; `~ CAUTION` e `~` antes do alvo em bandeira amarela numa corrida por tempo.
+- [ ] Os números do overlay batem com o que você vê no carro (combustível do iRacing, voltas restantes).
+
+**Seção LAYOUT (Configurações › Overlay e cálculo)**
+- [ ] Desmarcar **Barra de delta**: a barra some e o painel encolhe; ligar de novo: volta.
+- [ ] Mudar a **Escala da barra**: o marcador se aproxima do alvo com escala maior.
+- [ ] **Complemento do vermelho** em `s/v`: no vermelho aparece `+x.x s` no lugar de `−N%` (sem baseline com ajuste consumo × tempo continua `%`).
+- [ ] Desmarcar **Mostrar MÉD**: a faixa de apoio fica com `VOLTA` e `ÚLT`.
+- [ ] A prévia da tela muda na hora em cada uma das quatro opções.
+
+**Atualização da v2.1**
+- [ ] Depois de trocar a v2.1 pela v3, posição, escala, opacidades e atalhos continuam os mesmos (o `settings.json` é migrado sozinho; o log tem "settings.json migrated from schema 1 to 2").
 
 **Ocultar fora da pista** (marque de novo para este item)
 - [ ] Entrar no pit lane ou na garagem: o overlay fica esmaecido e some uns 3 s depois; volta sozinho na pista.
 
 ## 11. Roteiro PERF-01 (impacto nos fps)
 
-Meta: o app não pode derrubar o desempenho do iRacing (fps médio ≥ 99,5% do fps sem o app, 1% low ≥ 99%, sem mais quadros > 2× o frametime médio).
+Meta: o app não pode derrubar o desempenho do iRacing (fps médio ≥ 99,5% do fps sem o app, 1% low ≥ 99%, sem mais quadros > 2× o frametime médio). São 6 rodadas de 5 min: 3 **sem** o app e 3 **com** o app.
 
-1. Baixe você mesmo o PresentMon (console) em https://github.com/GameTechDev/PresentMon/releases. O script não baixa nada. Se o exe do iRacing tiver outro nome, use `-ProcessName <nome.exe>`.
-2. Use o **zip normal** (`FuelPace-<versão>-win-x64.zip`, sem o arquivo `FuelPace.debug`): o modo debug grava a telemetria e registra muito mais, e não é o que se mede. Confira que o ponteiro sobre o ícone da bandeja mostra `FuelPace <versão>` **sem** "(debug)" e que **Configurações › Diagnóstico › Modo debug** está desmarcado.
-3. Desmarque **Ocultar fora da pista** (seção 3a). Mesmo carro, pista e clima, numa sessão **com limite de voltas ou de tempo** (treino offline com tempo ou corrida contra a IA; **não** replay nem Test Drive), iRacing em 120 fps. Faça **3 rodadas de 5 min sem o app** (Agent fechado: Bandeja › Sair) e **3 com o app** (Agent aberto). Nas rodadas "com", **olhe o overlay na tela** durante toda a rodada: se ele sumir, a rodada não vale.
-4. Num PowerShell como administrador, com o iRacing na pista (o script está na pasta do app):
-   `.\presentmon.ps1 -PresentMon C:\Caminho\PresentMon.exe -Label sem` e depois `-Label com`. Os CSVs ficam em `%APPDATA%\FuelPace\perf\` e entram no pacote de diagnóstico.
-5. Compare cada par: `.\FuelPace.Replay.exe presentmon <com.csv> <sem.csv>`. A última linha diz `PERF-01: APROVADO` ou `REPROVADO`. Anote que o zip medido foi o normal.
+### 11.1 Preparar (uma vez)
+
+1. Descompacte o **zip normal** (`FuelPace-<versão>-win-x64.zip`, **sem** `-debug`) numa pasta própria, por exemplo `C:\FuelPacePerf`. O modo debug grava a telemetria e registra muito mais, e não é o que se mede. Atenção: o `fuelpace-windows` baixado do GitHub traz os dois zips dentro de `out\`. O `presentmon.ps1` fica **dentro** do zip do app, não na pasta do download.
+2. Baixe o PresentMon em https://github.com/GameTechDev/PresentMon/releases: o arquivo `PresentMon-<versão>-x64.exe` (a versão de console, não o instalador). **Coloque o exe na mesma pasta** (`C:\FuelPacePerf`). O script acha sozinho qualquer `PresentMon*.exe` nessa pasta (ou em Downloads).
+3. Rode o `FuelPace.Agent.exe` dessa pasta e confira que o ponteiro sobre o ícone da bandeja mostra `FuelPace <versão>` **sem** "(debug)". Em Configurações, desmarque **Ocultar fora da pista** (seção 3a).
+
+A pasta fica assim:
+
+```
+C:\FuelPacePerf\
+  FuelPace.Agent.exe
+  FuelPace.Replay.exe
+  presentmon.ps1
+  PresentMon-2.6.0-x64.exe
+  ...
+```
+
+### 11.2 Abrir o PowerShell como administrador
+
+Menu Iniciar › digite `powershell` › botão direito em **Windows PowerShell** › **Executar como administrador**. Nele, vá para a pasta (copie e cole):
+
+```
+cd C:\FuelPacePerf
+```
+
+### 11.3 Medir
+
+Mesmo carro, pista e clima, numa sessão **com limite de voltas ou de tempo** (treino offline com tempo ou corrida contra a IA; **não** replay nem Test Drive), iRacing em 120 fps, em janela sem borda. Com o carro **já na pista**, cole o comando e continue pilotando; ele para sozinho depois de 5 min e diz `Pronto: <arquivo>.csv`.
+
+- Rodada **sem** o app: feche o Agent antes (Bandeja › Sair) e use
+
+  ```
+  powershell -ExecutionPolicy Bypass -File .\presentmon.ps1 -Label sem
+  ```
+
+- Rodada **com** o app: abra o Agent (`FuelPace.Agent.exe`), confira o overlay na tela e use
+
+  ```
+  powershell -ExecutionPolicy Bypass -File .\presentmon.ps1 -Label com
+  ```
+
+  Se o overlay sumir durante a rodada, ela não vale.
+
+Repita até ter 3 de cada. Os CSVs ficam em `%APPDATA%\FuelPace\perf\` e entram no pacote de diagnóstico.
+
+Por que esse comando e não só `presentmon.ps1`: o PowerShell só roda um script da pasta atual com `.\` na frente, e o Windows bloqueia scripts por padrão. O `-ExecutionPolicy Bypass` libera **só esta execução**, sem mudar nada no sistema. Se o PresentMon estiver em outra pasta, acrescente `-PresentMon "C:\caminho\PresentMon-2.6.0-x64.exe"`.
+
+### 11.4 Comparar
+
+Cada par (um `com` e um `sem`):
+
+```
+.\FuelPace.Replay.exe presentmon "$env:APPDATA\FuelPace\perf\com-AAAAMMDD-HHMMSS.csv" "$env:APPDATA\FuelPace\perf\sem-AAAAMMDD-HHMMSS.csv"
+```
+
+A última linha diz `PERF-01: APROVADO` ou `REPROVADO`. Ou simplesmente gere o pacote de diagnóstico (seção 8) e mande: ele leva os CSVs. Anote que o zip medido foi o normal.
 
 ## 12. Testar sem o iRacing (FakeSim, só no zip debug)
 

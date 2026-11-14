@@ -2,6 +2,7 @@ using System.Globalization;
 using FuelPace.Core.Baselines;
 using FuelPace.Core.Capture;
 using FuelPace.Core.Diagnostics;
+using FuelPace.Core.Display;
 using FuelPace.Core.Laps;
 using FuelPace.Core.Pipeline;
 using FuelPace.Core.Storage;
@@ -138,6 +139,47 @@ public class TelemetryPipelineTests
         var traces = Drain(log).Where(r => r.Event == DiagEvent.StrategyTrace).ToArray();
         Assert.NotEmpty(traces);
         Assert.All(traces, r => Assert.Equal((int)RaceKind.Laps, r.I0));
+    }
+
+    [Fact] // PRD v3 §8.4: the strategy thread builds the GlanceView right after the engine, with the pipeline's config
+    public void Publishes_the_glance_view_built_with_its_config()
+    {
+        var glance = GlanceConfig.Default with { ShowAvg = false, BarScaleL = 0.30 };
+        var cfg = new StrategyConfig();
+        using var rig = new Rig(new LapSim(lapTimeS: 20, fuelPerLapL: 2.4).SessionLaps(10).Run(4, endPct: 0.5), LapsRaceYaml(10));
+        rig.Pipeline.SetGlanceConfig(glance);
+        rig.Step();
+        rig.Pipeline.OnSessionContext(rig.Info, DocWithFixtureBaseline(rig.Info));
+        rig.StepAll();
+
+        var s = rig.Pipeline.Overlay.Read();
+        var v = rig.Pipeline.Overlay.ReadView();
+        Assert.Equal(GlanceViewBuilder.Build(in s, in glance), v);
+        Assert.Equal(GlanceMode.Full, v.Mode);
+        Assert.False(v.ShowAvg);
+        Assert.Equal(30, v.BarSteps);
+        Assert.Equal(glance, rig.Pipeline.GlanceConfig);
+    }
+
+    [Fact]
+    public void A_glance_config_change_applies_on_the_next_strategy_run_and_moves_the_version()
+    {
+        var frame = new LapSim(lapTimeS: 20).SessionLaps(10).Run(0, endPct: 0.5).Last();
+        using var rig = new Rig(Enumerable.Repeat(frame, 120), LapsRaceYaml(10));
+        rig.Step();
+        long before = rig.Pipeline.Overlay.Version;
+        Assert.True(rig.Pipeline.Overlay.ReadView().ShowAvg);
+        rig.Pipeline.SetGlanceConfig(GlanceConfig.Default with { ShowAvg = false });
+        for (int i = 0; i < TelemetryPipeline.StrategyEvery; i++) rig.Step();
+        Assert.False(rig.Pipeline.Overlay.ReadView().ShowAvg);
+        Assert.Equal(before + 1, rig.Pipeline.Overlay.Version);
+    }
+
+    [Fact]
+    public void The_default_glance_config_uses_the_strategy_reserve()
+    {
+        var p = new TelemetryPipeline(new StrategyConfig { ReserveL = 1.5 }, new FixedTimeProvider(T0), null, null);
+        Assert.Equal(GlanceConfig.Default with { ReserveL = 1.5 }, p.GlanceConfig);
     }
 
     [Fact]
@@ -547,8 +589,6 @@ public class TelemetryPipelineTests
         rig.Step();
         Assert.Equal("Ligier", rig.Pipeline.CarShort);
         Assert.Equal("Zolder Alternate", rig.Pipeline.TrackShort);
-        Assert.Equal("Ligier", rig.Pipeline.Overlay.CarShort);
-        Assert.Equal("Zolder Alternate", rig.Pipeline.Overlay.TrackShort);
 
         rig.Pipeline.OnSessionContext(rig.Info with { TrackDisplayShortName = "", TrackConfigName = "", CarScreenNameShort = "" }, null);
         Assert.Equal("Ligier JS P320", rig.Pipeline.CarShort);

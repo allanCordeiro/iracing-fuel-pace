@@ -12,6 +12,8 @@ namespace FuelPace.App.Host;
 public sealed partial class AgentHost
 {
     private static readonly TimeSpan UiRequestTimeout = TimeSpan.FromSeconds(5);
+    private readonly Lock _sessionGate = new();
+    private SessionChanged? _lastSessionSent;
     internal const string SettingsUnreadableText = "configurações ainda não puderam ser lidas; tente novamente";
     internal const string SettingsReloadedText = "configurações recarregadas do arquivo; confira e tente novamente";
 
@@ -142,12 +144,37 @@ public sealed partial class AgentHost
             labels[i] = OverlayPlacement.DescribeForUi(monitors[i], i);
             devices[i] = monitors[i].DeviceName;
         }
-        return new AgentSnapshot(AppInfo.Version, _simConnected, info?.ProfileKey, info?.CarScreenName,
-            info is null ? null : TrackLabel(info.TrackDisplayName, info.TrackConfigName),
-            info?.FindSession(Volatile.Read(ref _sessionNum))?.Type, _pipeline.CaptureActive, laps, valid, laps.Count,
+        var session = CurrentSession();
+        return new AgentSnapshot(AppInfo.Version, session.SimConnected, session.ProfileKey, session.CarName, session.TrackName,
+            session.SessionType, _pipeline.CaptureActive, laps, valid, laps.Count,
             _settings, _debugMode, _surface.BackendName, _fullscreen, _hotkeyFailures, labels,
-            info?.TankCapacityL, _pipeline.CaptureActive ? null : Volatile.Read(ref _lastCaptureId), devices,
+            session.TankCapacityL, _pipeline.CaptureActive ? null : Volatile.Read(ref _lastCaptureId), devices,
             _o.DebugMarker ? "marker" : _o.DebugFromCommandLine ? "commandLine" : null);
+    }
+
+    /// <summary>The session fields of the snapshot, as they are now.</summary>
+    private SessionChanged CurrentSession()
+    {
+        var info = _sessionInfo;
+        return new SessionChanged(_simConnected, info?.ProfileKey, info?.CarScreenName,
+            info is null ? null : TrackLabel(info.TrackDisplayName, info.TrackConfigName),
+            info?.FindSession(Volatile.Read(ref _sessionNum))?.Type, info?.TankCapacityL);
+    }
+
+    /// <summary>
+    /// Any thread: tells the open Settings windows when the sim connects or leaves, or its session changes (a window opened
+    /// before iRacing would otherwise keep the snapshot it got at connect). Sent only when a field changed (iRacing rewrites
+    /// the session info every few seconds); under the gate, so the last state is the last one sent.
+    /// </summary>
+    private void PublishSession()
+    {
+        using (_sessionGate.EnterScope())
+        {
+            var s = CurrentSession();
+            if (s == _lastSessionSent) return;
+            _lastSessionSent = s;
+            Broadcast(s);
+        }
     }
 
     private static string TrackLabel(string display, string config) =>

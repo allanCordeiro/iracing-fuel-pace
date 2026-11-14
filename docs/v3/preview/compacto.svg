@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="380" height="161" viewBox="0 0 380 161">
+<rect width="380" height="161" fill="#1C2026"/>
+<rect width="380" height="69.23" fill="#3A4552"/>
+<rect y="69.23" width="380" height="91.77" fill="#262B31"/>
+<polygon points="174.8,69.23 205.2,69.23 380,161 0,161" fill="#3B4048"/>
+<rect y="132.02" width="380" height="28.98" fill="#0E1013"/>
+<g transform="translate(40 40)">
+<rect x="0" y="0" width="300" height="59" rx="6" fill="#0A0C10" fill-opacity="0.6"/>
+<text x="11" y="23.8" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="21" font-weight="600" fill="#F2F4F7">74.0</text>
+<text x="65.4" y="23.8" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="400" fill="#A9B2BD">L</text>
+<text x="164.2" y="23.8" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="13" font-weight="400" fill="#D5DAE0">dá 25 v · 45 min</text>
+<rect x="9" y="34" width="282" height="1" rx="0" fill="#A9B2BD" fill-opacity="0.22"/>
+<text x="11" y="49.4" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="8" font-weight="600" letter-spacing="0.8" fill="#A9B2BD">VOLTA</text>
+<text x="47.2" y="49.4" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="13" font-weight="600" fill="#D5DAE0">2.91</text>
+<text x="95.4" y="49.4" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="8" font-weight="600" letter-spacing="0.8" fill="#A9B2BD">ÚLT</text>
+<text x="119.12" y="49.4" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="13" font-weight="500" fill="#D5DAE0">2.91</text>
+<text x="167.32" y="49.4" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="8" font-weight="600" letter-spacing="0.8" fill="#A9B2BD">MÉD</text>
+<text x="191.04" y="49.4" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="13" font-weight="500" fill="#D5DAE0">2.92</text>
+<rect x="233" y="63" width="67" height="18" rx="5" fill="#0A0C10" fill-opacity="0.6"/>
+<rect x="240" y="69" width="6" height="6" rx="3" fill="#FF5A5A"/>
+<text x="251" y="75" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="10" font-weight="600" fill="#F2F4F7">REC 4/9</text>
+</g>
+</svg>

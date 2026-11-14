@@ -5,7 +5,7 @@ Target (PRD §11): average fps with the app >= 99.5% of without; 1% low >= 99%; 
 
 1. Get a PresentMon console exe yourself (https://github.com/GameTechDev/PresentMon/releases). The script downloads nothing.
 2. In an elevated PowerShell, with iRacing running and on track:
-   `.\presentmon.ps1 -PresentMon C:\Tools\PresentMon.exe -Label sem` (app closed), then again with `-Label com` (Agent running).
+   `powershell -ExecutionPolicy Bypass -File .\presentmon.ps1 -Label sem` (app closed), then again with `-Label com` (Agent running). Without `-PresentMon <exe>` the script looks for `PresentMon*.exe` next to itself, then in Downloads. `-ExecutionPolicy Bypass` because Windows blocks scripts by default.
    CSVs go to `%APPDATA%\FuelPace\perf\<label>-<date>.csv`; the diagnostic bundle includes that folder.
 3. Compare a pair: `FuelPace.Replay presentmon <csv-com> <csv-sem>`. Exit code 0 = APROVADO, 1 = REPROVADO.
 
