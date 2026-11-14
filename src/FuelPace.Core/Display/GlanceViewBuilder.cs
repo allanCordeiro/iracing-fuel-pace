@@ -73,9 +73,13 @@ public static class GlanceViewBuilder
                 {
                     double save = R2(NonNegative(refL - a));
                     v.DecisionValue = F(save);
-                    int pct = refL > 0 ? RoundToInt(100 * save / refL) : 0;
-                    v.ComplementPct = (sbyte)-Math.Min(Math.Max(1, pct), 127);
-                    if (cfg.ComplementSeconds && !double.IsNaN(s.FuelVsTimeB))
+                    // During the 1.5 s hold after Red→Blue the state is still Red but ref <= A: no saving, no complement.
+                    if (save > 0)
+                    {
+                        int pct = refL > 0 ? RoundToInt(100 * save / refL) : 0;
+                        v.ComplementPct = (sbyte)-Math.Min(Math.Max(1, pct), 127);
+                    }
+                    if (save > 0 && cfg.ComplementSeconds && !double.IsNaN(s.FuelVsTimeB))
                         v.ComplementSec = F(R1(-s.FuelVsTimeB * save));
                 }
                 v.TargetLabel = TargetLabel.Alvo;

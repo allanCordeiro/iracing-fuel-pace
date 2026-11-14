@@ -29,13 +29,14 @@ public class GlanceViewBuilderTests
     [Fact]
     public void V3_1_blue_L19_slack_saturated_left()
     {
-        var v = Build(St(SignalState.Blue, fuel: 50, lr: 19, last: 2.38, mean: 2.37, target: 49.5 / 19, lim: 2.23));
+        var v = Build(St(SignalState.Blue, fuel: 50, lr: 19, proj: 2.38, last: 2.38, mean: 2.37, target: 49.5 / 19, lim: 2.23));
         Assert.Equal(GlanceMode.Full, v.Mode);
         Assert.Equal(DecisionKind.Ok, v.Decision);
         Assert.Equal(4.3f, v.DecisionValue);
         Assert.Equal(0, v.ComplementPct);
         Assert.True(v.ShowBar);
         Assert.Equal(20, v.BarSteps);
+        Assert.Equal(-20, v.BarMarkerQ);
         Assert.Equal(-20, v.BarGhostQ); // ÚLT 2.38 − 2.61 = −23 → saturated at −Q
         Assert.Equal(TargetLabel.Ate, v.TargetLabel);
         Assert.Equal(2.61f, v.Target);
@@ -236,8 +237,8 @@ public class GlanceViewBuilderTests
     [Fact]
     public void V3_4_half_cent_rounds_up_to_plus_one()
     {
-        // VOLTA 2.385 rounds (away from zero) to 2.39; A = 2.38 → +1 (the layout colours q > 0 red).
-        var v = Build(St(SignalState.Red, fuel: 74, lr: 30, proj: 2.385, last: 2.38, mean: 2.37, target: 2.38, lim: 2.23));
+        // VOLTA 2.385 rounds (away from zero) to 2.39; A = 2.38 → +1 (the layout colours q > 0 red, by position).
+        var v = Build(St(SignalState.Blue, fuel: 74, lr: 30, proj: 2.385, last: 2.38, mean: 2.37, target: 2.38, lim: 2.23));
         Assert.Equal(1, v.BarMarkerQ);
         Assert.Equal(0, v.BarGhostQ);
     }
@@ -265,7 +266,9 @@ public class GlanceViewBuilderTests
         var h = new SignalHysteresis();
         var i = Input(74, 32, 2.39, 100);
         i.LapProjectionL = 2.39;
-        Assert.Equal(SignalState.Red, Engine(in i, ref h).State);
+        var first = Engine(in i, ref h);
+        Assert.Equal(SignalState.Red, first.State);
+        Assert.True(Build(first).BarMarkerQ > 0);
 
         // Lr 30 and a lower projection: raw is blue, the held state is still red.
         i = Input(74, 30, 2.37, 101);
@@ -275,6 +278,8 @@ public class GlanceViewBuilderTests
         Assert.Equal(SignalState.Red, held.State);
         Assert.Equal(DecisionKind.Economize, vHeld.Decision);
         Assert.True(vHeld.BarMarkerQ < 0); // the marker already follows the position (blue side)
+        Assert.Equal(0.0f, vHeld.DecisionValue);   // no "ECONOMIZE 0.00 −1%" during the hold
+        Assert.Equal(0, vHeld.ComplementPct);
 
         i.SessionTime = 102.6;
         var done = Engine(in i, ref h);
