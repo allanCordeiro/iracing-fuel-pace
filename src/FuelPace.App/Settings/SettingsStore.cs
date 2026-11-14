@@ -3,6 +3,14 @@ using FuelPace.Core.Storage;
 
 namespace FuelPace.App.Settings;
 
+/// <summary>What one <see cref="SettingsStore.Load"/> did to the file, for the log.</summary>
+/// <param name="MigratedFrom">The schema version it upgraded from (and wrote back); null when it did not migrate.</param>
+/// <param name="WasCorrupt">It could not parse the file, renamed it to <c>.corrupt</c> and returned the defaults.</param>
+public sealed record SettingsLoadReport(int? MigratedFrom, bool WasCorrupt)
+{
+    public static SettingsLoadReport Of(SettingsStore store) => new(store.LastLoadMigratedFrom, store.LastLoadWasCorrupt);
+}
+
 /// <summary>Reads and writes <c>&lt;rootDir&gt;/settings.json</c>. Only the Agent writes it.</summary>
 public sealed class SettingsStore(string rootDir)
 {

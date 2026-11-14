@@ -165,6 +165,7 @@ public sealed partial class AgentHost : IDisposable
         if (Interlocked.Exchange(ref _started, 1) != 0) throw new InvalidOperationException("The agent host is already started.");
         AppDiagEvents.RegisterAll();
         var settings = _settingsStore.Load();
+        var loaded = SettingsLoadReport.Of(_settingsStore);
         _settingsFallback = _settingsStore.LastLoadWasFallback;
         _settings = settings;
         _debugMode = _o.DebugFromCommandLine || _o.DebugMarker || settings.Debug.Enabled;
@@ -178,6 +179,10 @@ public sealed partial class AgentHost : IDisposable
         if (_settingsFallback)
             _log.Text(DiagLevel.Warn, "settings", "settings.json could not be read (locked or access denied): defaults in use; "
                 + "it is re-read every 5 s and before every snapshot, and never written until a read succeeds");
+        // The Agent reads the render backend before the host exists, and that load is the one that migrates or quarantines
+        // the file: this load then finds it already done, so both are reported.
+        var early = _o.EarlierSettingsLoad;
+        LogLoad(new SettingsLoadReport(loaded.MigratedFrom ?? early?.MigratedFrom, loaded.WasCorrupt || (early?.WasCorrupt ?? false)));
 
         _profiles = new ProfileStore(_o.AppDataRoot, _log);
         _io = new BackgroundWorkQueue("FuelPace.IO", _log) { OnError = e => _log.Exception("io", e) };
@@ -618,6 +623,7 @@ public sealed partial class AgentHost : IDisposable
         var loaded = _settingsStore.Load(retryLocked: false);
         if (_settingsStore.LastLoadWasFallback) return false;
         _log.Text(DiagLevel.Info, "settings", "settings.json is readable again: the user's settings are in use");
+        LogLoad(SettingsLoadReport.Of(_settingsStore));
         ApplySettings(loaded, save: false);
         _settingsFallback = false;
         Broadcast(new SettingsApplied(_settings));
@@ -649,6 +655,15 @@ public sealed partial class AgentHost : IDisposable
         if (debugChanged || next.Hotkeys != prev.Hotkeys) RegisterHotkeys();
         InvalidateView();
         if (save) EnqueueSave(next);
+    }
+
+    private void LogLoad(SettingsLoadReport r)
+    {
+        if (r.MigratedFrom is { } from)
+            _log.Text(DiagLevel.Info, "settings", string.Create(CultureInfo.InvariantCulture,
+                $"settings.json migrated from schema {from} to {AppSettings.CurrentSchemaVersion}"));
+        if (r.WasCorrupt)
+            _log.Text(DiagLevel.Warn, "settings", "settings.json could not be parsed: renamed to settings.json.corrupt, defaults in use");
     }
 
     private void SaveIfPending()

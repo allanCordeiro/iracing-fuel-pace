@@ -391,6 +391,67 @@ public sealed class AgentHostTests
         Assert.Equal(1.0, rig.Host.Settings.Overlay.Scale);
     }
 
+    static string RepoFile(params string[] parts)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "FuelPace.sln"))) dir = dir.Parent;
+        Assert.NotNull(dir);
+        return Path.Combine([dir.FullName, .. parts]);
+    }
+
+    static List<JsonElement> SettingsLines(HostRig rig, string level) =>
+        rig.LogLines().Where(l => l.GetProperty("cat").GetString() == "settings" && l.GetProperty("lvl").GetString() == level
+            && l.TryGetProperty("msg", out _)).ToList();
+
+    [Fact] // front D carry-over: the migration is logged even when the host's own load is the one that migrates
+    public void A_schema_1_file_migrated_by_the_host_is_logged()
+    {
+        using var rig = new HostRig();
+        File.Copy(RepoFile("tests", "fixtures", "settings", "v1-real.json"), rig.SettingsPath);
+        rig.Start();
+        var line = Assert.Single(SettingsLines(rig, "info"), l => l.GetProperty("msg").GetString()!.Contains("migrated"));
+        Assert.Equal("settings.json migrated from schema 1 to 2", line.GetProperty("msg").GetString());
+    }
+
+    [Fact] // front D carry-over: Program.cs loads (and migrates) before the host exists; that load reaches the log
+    public void A_migration_done_by_the_earlier_load_is_logged()
+    {
+        using var rig = new HostRig();
+        File.Copy(RepoFile("tests", "fixtures", "settings", "v1-real.json"), rig.SettingsPath);
+        var early = new SettingsStore(rig.AppData);
+        early.Load(retryLocked: false); // what Program.cs does to pick the backend
+        Assert.Equal(1, early.LastLoadMigratedFrom);
+        rig.Options = rig.Options with { EarlierSettingsLoad = SettingsLoadReport.Of(early) };
+        rig.Start();
+        var line = Assert.Single(SettingsLines(rig, "info"), l => l.GetProperty("msg").GetString()!.Contains("migrated"));
+        Assert.Equal("settings.json migrated from schema 1 to 2", line.GetProperty("msg").GetString());
+        Assert.Equal(AppSettings.CurrentSchemaVersion, rig.Host.Settings.SchemaVersion);
+    }
+
+    [Fact]
+    public void A_corrupt_file_found_by_the_earlier_load_is_a_warning()
+    {
+        using var rig = new HostRig();
+        File.WriteAllText(rig.SettingsPath, "{ not json");
+        var early = new SettingsStore(rig.AppData);
+        early.Load(retryLocked: false);
+        Assert.True(early.LastLoadWasCorrupt);
+        rig.Options = rig.Options with { EarlierSettingsLoad = SettingsLoadReport.Of(early) };
+        rig.Start();
+        Assert.Single(SettingsLines(rig, "warn"), l => l.GetProperty("msg").GetString()!.Contains(".corrupt"));
+        Assert.DoesNotContain(SettingsLines(rig, "info"), l => l.GetProperty("msg").GetString()!.Contains("migrated"));
+    }
+
+    [Fact]
+    public void A_current_file_logs_neither_migration_nor_corruption()
+    {
+        using var rig = new HostRig();
+        rig.WriteSettings(new AppSettings());
+        rig.Start();
+        Assert.DoesNotContain(SettingsLines(rig, "info"), l => l.GetProperty("msg").GetString()!.Contains("migrated"));
+        Assert.Empty(SettingsLines(rig, "warn"));
+    }
+
     static AppSettings UserSettings()
     {
         var mine = new AppSettings();
