@@ -456,12 +456,21 @@ public sealed class GlanceLayoutTests
     {
         var d = Build(Pit());
         var alvo = Text(d, "alvo 2.16 ·");
-        Assert.Equal((FontRole.Value, 11f, Label), (alvo.Role, alvo.SizePx, alvo.Color));
+        Assert.Equal((FontRole.Value, Label), (alvo.Role, alvo.Color));
         var min = Text(d, "MÍN");
         var val = Text(d, "2.23");
+        Assert.Equal((15f, 8f), (val.SizePx, min.SizePx)); // the label and value keep their size
+        Assert.Equal(289f, val.X + Width("2.23", val), 0.01);
         Assert.Equal(min.X - 4, alvo.X + Width("alvo 2.16 ·", alvo), 0.01);
         Assert.Equal(val.X - 4, min.X + Width("MÍN", min), 0.01);
-        Assert.True(Has(d, " L · dá 31 v · faltam 34"));
+        var rest = Text(d, " L · dá 31 v · faltam 34");
+        // 74.0 L · dá 31 v · faltam 34 + alvo 2.16 · do not fit at 12 / 11 px (the PIT mock wraps): both secondary runs
+        // shrink by the same factor, and no further than needed
+        float f = rest.SizePx / 12;
+        Assert.InRange(f, 0.7f, 0.99f);
+        Assert.Equal(11 * f, alvo.SizePx, 0.01);
+        Assert.Equal(12 * f, Text(d, "74.0").SizePx, 0.01);
+        Assert.Equal(alvo.X - 8, rest.X + Width(" L · dá 31 v · faltam 34", rest), 0.01);
     }
 
     [Fact]
