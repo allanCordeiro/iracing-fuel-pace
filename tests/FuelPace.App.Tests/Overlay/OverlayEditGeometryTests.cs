@@ -7,11 +7,10 @@ public sealed class OverlayEditGeometryTests
 {
     static DrawList EditList(double scale = 1, double dpi = 1)
     {
-        var p = OverlayPreviews.All.First(x => x.Name == "azul");
-        var s = p.State;
+        var p = GlancePreviews.All.First(x => x.Name == "azul");
+        var v = p.View;
         var d = new DrawList();
-        OverlayLayout.Build(in s, OverlayPreviews.Car, OverlayPreviews.Track, p.Options with { EditMode = true, Scale = scale, DpiScale = dpi },
-            new FixedMetricsMeasurer(), d);
+        GlanceLayout.Build(in v, p.Options with { EditMode = true, Scale = scale, DpiScale = dpi }, new FixedMetricsMeasurer(), d);
         return d;
     }
 
@@ -49,10 +48,10 @@ public sealed class OverlayEditGeometryTests
     [Fact]
     public void A_locked_list_has_no_handles()
     {
-        var p = OverlayPreviews.All.First(x => x.Name == "azul");
-        var s = p.State;
+        var p = GlancePreviews.All.First(x => x.Name == "azul");
+        var v = p.View;
         var d = new DrawList();
-        OverlayLayout.Build(in s, OverlayPreviews.Car, OverlayPreviews.Track, p.Options, new FixedMetricsMeasurer(), d);
+        GlanceLayout.Build(in v, p.Options, new FixedMetricsMeasurer(), d);
         Assert.Equal(OverlayHit.Caption, OverlayEditGeometry.HitTest(d, 1, 1));
     }
 

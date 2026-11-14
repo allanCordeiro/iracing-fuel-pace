@@ -99,9 +99,30 @@
 
                 <WrapPanel Margin="0,14,0,0">
                     <CheckBox Margin="0,0,24,0" Content="Linha de pace" IsChecked="{Binding ShowPaceLine, Mode=TwoWay}" />
-                    <CheckBox Margin="0,0,24,0" Content="Linha de insight" IsChecked="{Binding ShowInsightLine, Mode=TwoWay}" />
                     <CheckBox Content="Ocultar fora da pista" IsChecked="{Binding AutoHide, Mode=TwoWay}" />
                 </WrapPanel>
+
+                <!-- LAYOUT -->
+                <Border Margin="0,22,0,0" Style="{StaticResource Section}">
+                    <StackPanel>
+                        <local:SpacedText Style="{StaticResource H2}" Text="LAYOUT" AutomationProperties.HeadingLevel="Level2" />
+                        <CheckBox Margin="0,14,0,0" Content="Barra de delta" IsChecked="{Binding ShowDeltaBar, Mode=TwoWay}" />
+                        <DockPanel Margin="0,10,0,0" IsEnabled="{Binding DeltaBarScaleEnabled}">
+                            <Label DockPanel.Dock="Left" Style="{StaticResource SliderLabel}" Content="Escala da barra" Target="{Binding ElementName=BarScaleSlider}" />
+                            <TextBlock DockPanel.Dock="Right" Style="{StaticResource SliderValue}" Text="{Binding DeltaBarScaleText}" />
+                            <TextBox x:Name="BarScale" DockPanel.Dock="Right" Width="64" Margin="12,0,12,0" Style="{StaticResource NumberBox}" AutomationProperties.Name="Escala da barra (L/v)"
+                                     Text="{Binding DeltaBarScale, Mode=TwoWay, Converter={StaticResource Number}}" />
+                            <Slider x:Name="BarScaleSlider" Minimum="0.05" Maximum="0.5" TickFrequency="0.01" IsSnapToTickEnabled="True" Value="{Binding DeltaBarScale, Mode=TwoWay}" />
+                        </DockPanel>
+                        <TextBlock Margin="0,14,0,0" FontSize="13" Foreground="{StaticResource TextLabel}" Text="Complemento do vermelho" />
+                        <StackPanel Margin="0,8,0,0" Orientation="Horizontal">
+                            <RadioButton Margin="0,0,24,0" GroupName="RedComplement" Content="%" IsChecked="{Binding RedComplementSeconds, Mode=TwoWay, Converter={StaticResource Not}}" />
+                            <RadioButton GroupName="RedComplement" Content="s/v" IsChecked="{Binding RedComplementSeconds, Mode=TwoWay}" />
+                        </StackPanel>
+                        <TextBlock Margin="0,6,0,0" Style="{StaticResource SmallHelp}" Text="{Binding RedComplementHelp}" />
+                        <CheckBox Margin="0,14,0,0" Content="Mostrar MÉD" IsChecked="{Binding ShowAvgInSupport, Mode=TwoWay}" />
+                    </StackPanel>
+                </Border>
 
                 <!-- CÁLCULO -->
                 <Border Margin="0,22,0,0" Style="{StaticResource Section}">

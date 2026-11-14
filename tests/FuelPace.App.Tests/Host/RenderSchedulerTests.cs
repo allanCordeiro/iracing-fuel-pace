@@ -1,6 +1,7 @@
 using FuelPace.App.Host;
 using FuelPace.App.Simulation;
 using FuelPace.App.Tests.Fakes;
+using FuelPace.Core.Display;
 using FuelPace.Core.Pipeline;
 using FuelPace.Core.Strategy;
 using FuelPace.Tests.Support;
@@ -30,7 +31,11 @@ public sealed class RenderSchedulerTests
         }
     }
 
-    static void Publish(OverlayStatePublisher p, double fuel) => p.Publish(new OverlayState { State = SignalState.Blue, FuelL = fuel });
+    static void Publish(OverlayStatePublisher p, double fuel)
+    {
+        var s = new OverlayState { State = SignalState.Blue, FuelL = fuel };
+        p.Publish(in s, GlanceViewBuilder.Build(in s, GlanceConfig.Default));
+    }
 
     [Fact]
     public void Requests_are_spaced_100ms_apart_and_never_stacked()

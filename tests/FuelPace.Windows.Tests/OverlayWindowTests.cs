@@ -203,10 +203,10 @@ public sealed class OverlayWindowTests
 {
     static DrawList Build(bool edit)
     {
-        var p = OverlayPreviews.All[0];
-        var s = p.State;
+        var p = GlancePreviews.All[0];
+        var v = p.View;
         var d = new DrawList();
-        OverlayLayout.Build(in s, OverlayPreviews.Car, OverlayPreviews.Track, p.Options with { EditMode = edit }, new FixedMetricsMeasurer(), d);
+        GlanceLayout.Build(in v, p.Options with { EditMode = edit }, new FixedMetricsMeasurer(), d);
         return d;
     }
 

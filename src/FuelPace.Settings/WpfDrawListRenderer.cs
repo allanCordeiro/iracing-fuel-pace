@@ -57,6 +57,22 @@ public sealed class WpfDrawListRenderer : FrameworkElement
                     dc.DrawRectangle(null, pen, new Rect(r.X + hw, r.Y + hw, Math.Max(0, r.W - c.Radius), Math.Max(0, r.H - c.Radius)));
                     break;
                 }
+                case CommandKind.FillTriangle:
+                {
+                    // Tip at the middle of the right edge when Radius > 0, of the left edge otherwise (as the SVG's polygon).
+                    double x0 = r.X, x1 = r.X + r.W, y0 = r.Y, y1 = r.Y + r.H, ym = y0 + r.H / 2;
+                    bool right = c.Radius > 0;
+                    var g = new StreamGeometry();
+                    using (var ctx = g.Open())
+                    {
+                        ctx.BeginFigure(new Point(right ? x0 : x1, y0), true, true);
+                        ctx.LineTo(new Point(right ? x1 : x0, ym), true, false);
+                        ctx.LineTo(new Point(right ? x0 : x1, y1), true, false);
+                    }
+                    g.Freeze();
+                    dc.DrawGeometry(Brush(c.Color), null, g);
+                    break;
+                }
                 case CommandKind.Text:
                 {
                     double x = c.Continuation && prevText ? prevX + prevAdvance : c.X;

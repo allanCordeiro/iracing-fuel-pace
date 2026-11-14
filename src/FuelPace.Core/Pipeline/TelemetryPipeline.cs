@@ -1,6 +1,7 @@
 using FuelPace.Core.Baselines;
 using FuelPace.Core.Capture;
 using FuelPace.Core.Diagnostics;
+using FuelPace.Core.Display;
 using FuelPace.Core.Laps;
 using FuelPace.Core.Race;
 using FuelPace.Core.Storage;
@@ -11,10 +12,10 @@ namespace FuelPace.Core.Pipeline;
 
 /// <summary>
 /// Per-tick wiring: lap detection, stint and leader tracking every frame (60 Hz), strategy every
-/// <see cref="StrategyEvery"/>th frame (10 Hz), capture start/stop and profile persistence. <see cref="Tick"/> runs on the
-/// telemetry thread and allocates nothing while no capture starts or stops. <see cref="OnLayout"/>,
-/// <see cref="OnSessionContext"/>, <see cref="SetConfig"/> and the capture requests may come from any thread; they swap
-/// references the next tick picks up.
+/// <see cref="StrategyEvery"/>th frame (10 Hz) followed by the v3 <see cref="GlanceViewBuilder"/> (PRD v3 §8.4), capture
+/// start/stop and profile persistence. <see cref="Tick"/> runs on the telemetry thread and allocates nothing while no capture
+/// starts or stops. <see cref="OnLayout"/>, <see cref="OnSessionContext"/>, <see cref="SetConfig"/>,
+/// <see cref="SetGlanceConfig"/> and the capture requests may come from any thread; they swap references the next tick picks up.
 /// </summary>
 public sealed class TelemetryPipeline : ILapSink
 {
@@ -36,6 +37,8 @@ public sealed class TelemetryPipeline : ILapSink
 
     // Written by any thread, read by the tick.
     private StrategyConfig _requestedCfg;
+    /// <summary>A box so the multi-field config is swapped whole (no torn read); a new box per change, none per tick.</summary>
+    private GlanceBox _glance;
     private SessionContext? _ctx;
     private VarLayout? _layout;
     private int _request;
@@ -62,9 +65,13 @@ public sealed class TelemetryPipeline : ILapSink
     private SignalState _prevRaw, _prevShown;
     private InsightKind _prevInsight;
 
-    public TelemetryPipeline(StrategyConfig cfg, TimeProvider clock, ProfileStore? store, BackgroundWorkQueue? io, DiagLog? log = null)
+    /// <param name="glance">The display settings of the v3 view; by default <see cref="GlanceConfig.Default"/> with the
+    /// strategy's reserve.</param>
+    public TelemetryPipeline(StrategyConfig cfg, TimeProvider clock, ProfileStore? store, BackgroundWorkQueue? io, DiagLog? log = null,
+        GlanceConfig? glance = null)
     {
         _requestedCfg = _cfg = cfg;
+        _glance = new GlanceBox(glance ?? GlanceConfig.Default with { ReserveL = cfg.ReserveL });
         _clock = clock;
         _store = store;
         _io = io;
@@ -93,10 +100,10 @@ public sealed class TelemetryPipeline : ILapSink
 
     public bool CaptureActive => _captureActive;
 
-    /// <summary>Car name for the no-baseline insight (decision 3); empty before the first session context.</summary>
+    /// <summary>Short car name of the session context (decision 3); empty before the first one.</summary>
     public string CarShort => Volatile.Read(ref _ctx)?.CarShort ?? "";
 
-    /// <summary>Track name for the no-baseline insight (decision 3); empty before the first session context.</summary>
+    /// <summary>Short track name of the session context (decision 3); empty before the first one.</summary>
     public string TrackShort => Volatile.Read(ref _ctx)?.TrackShort ?? "";
 
     /// <summary>The race leader's pace as the strategy sees it. Telemetry thread only (diagnostics and tests).</summary>
@@ -122,11 +129,7 @@ public sealed class TelemetryPipeline : ILapSink
             if (cur is null || !cur.ProfileLoaded || cur.ProfileKey != info.ProfileKey) return false;
             if (SameInfo(cur.Info, info)) return true;
             var next = new SessionContext(info, cur.Profile, profileLoaded: true);
-            if (ReferenceEquals(Interlocked.CompareExchange(ref _ctx, next, cur), cur))
-            {
-                Overlay.SetLabels(next.CarShort, next.TrackShort);
-                return true;
-            }
+            if (ReferenceEquals(Interlocked.CompareExchange(ref _ctx, next, cur), cur)) return true;
         }
     }
 
@@ -140,25 +143,23 @@ public sealed class TelemetryPipeline : ILapSink
             bool sameKey = cur is not null && cur.ProfileKey == info.ProfileKey;
             // A profile already in use for this key (e.g. just saved by a capture) stays, and counts as loaded.
             var next = new SessionContext(info, sameKey ? cur!.Profile : null, profileLoaded: sameKey && cur!.ProfileLoaded);
-            if (ReferenceEquals(Interlocked.CompareExchange(ref _ctx, next, cur), cur))
-            {
-                Overlay.SetLabels(next.CarShort, next.TrackShort);
-                return;
-            }
+            if (ReferenceEquals(Interlocked.CompareExchange(ref _ctx, next, cur), cur)) return;
         }
     }
 
-    private void Install(SessionContext ctx)
-    {
-        Volatile.Write(ref _ctx, ctx);
-        Overlay.SetLabels(ctx.CarShort, ctx.TrackShort);
-    }
+    private void Install(SessionContext ctx) => Volatile.Write(ref _ctx, ctx);
 
     private static bool SameInfo(SessionInfo a, SessionInfo b) =>
         a.Sessions.SequenceEqual(b.Sessions) && a == b with { Sessions = a.Sessions };
 
     /// <summary>Takes effect on the next tick; a different <see cref="StrategyConfig.MeanWindow"/> only resizes the means (stint and history kept).</summary>
     public void SetConfig(StrategyConfig cfg) => Volatile.Write(ref _requestedCfg, cfg);
+
+    /// <summary>The display settings the next strategy run builds the <see cref="GlanceView"/> with.</summary>
+    public GlanceConfig GlanceConfig => Volatile.Read(ref _glance).Value;
+
+    /// <summary>Takes effect on the next strategy run (PRD v3 §8.4); the engine is not affected.</summary>
+    public void SetGlanceConfig(in GlanceConfig cfg) => Volatile.Write(ref _glance, new GlanceBox(cfg));
 
     /// <summary>Starts a capture on the next tick that has a session context. The last request wins.</summary>
     public void RequestCaptureStart() => Volatile.Write(ref _request, StartRequest);
@@ -303,8 +304,9 @@ public sealed class TelemetryPipeline : ILapSink
         };
 
         var s = FuelStrategyEngine.Compute(in input, baseline, cfg, ref _hysteresis);
+        var view = GlanceViewBuilder.Build(in s, in Volatile.Read(ref _glance).Value);
         long versionBefore = Overlay.Version;
-        Overlay.Publish(in s);
+        Overlay.Publish(in s, in view);
         EmitStrategyDiagnostics(in input, in s, baseline, cfg, versionBefore);
     }
 
@@ -440,6 +442,11 @@ public sealed class TelemetryPipeline : ILapSink
             if (cur is null || cur.ProfileKey != ctx.ProfileKey) return;
             if (ReferenceEquals(Interlocked.CompareExchange(ref _ctx, new SessionContext(cur.Info, doc, profileLoaded: true), cur), cur)) return;
         }
+    }
+
+    private sealed class GlanceBox(GlanceConfig value)
+    {
+        public readonly GlanceConfig Value = value;
     }
 
     private static double Positive(double x, double fallback) => x > 0 ? x : fallback;

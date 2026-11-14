@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="830" height="375" viewBox="0 0 830 375">
+<rect width="830" height="375" fill="#1C2026"/>
+<rect width="830" height="161.25" fill="#3A4552"/>
+<rect y="161.25" width="830" height="213.75" fill="#262B31"/>
+<polygon points="381.8,161.25 448.2,161.25 830,375 0,375" fill="#3B4048"/>
+<rect y="307.5" width="830" height="67.5" fill="#0E1013"/>
+<g transform="translate(40 40)">
+<rect x="0" y="0" width="750" height="295" rx="15" fill="#0A0C10" fill-opacity="0.6"/>
+<rect x="22.5" y="17.5" width="705" height="87.5" rx="10" fill="#EB5757" fill-opacity="0.302"/>
+<rect x="40" y="37.5" width="223.1" height="47.5" rx="7.5" fill="#C7362F"/>
+<text x="57.5" y="69.5" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="27.5" font-weight="800" letter-spacing="2.2" fill="#FFFFFF">ECONOMIZE</text>
+<text x="285.6" y="80" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="62.5" font-weight="700" fill="#F2F4F7">0.08</text>
+<text x="642.5" y="72.5" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="37.5" font-weight="600" fill="#FFD9D9">−3%</text>
+<rect x="30" y="137.5" width="345" height="10" rx="5" fill="#2F80ED" fill-opacity="0.42"/>
+<rect x="375" y="137.5" width="345" height="10" rx="5" fill="#EB5757" fill-opacity="0.42"/>
+<rect x="373.13" y="120" width="3.75" height="45" rx="0" fill="#F2F4F7"/>
+<rect x="528.38" y="127.5" width="3.75" height="30" rx="0" fill="#F2F4F7" fill-opacity="0.549"/>
+<rect x="505.5" y="122.5" width="15" height="40" rx="3.75" fill="#FF7A7A"/>
+<text x="27.5" y="206" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="600" letter-spacing="2" fill="#A9B2BD">VOLTA</text>
+<text x="118" y="206" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="32.5" font-weight="600" fill="#FF7A7A">2.38</text>
+<text x="238.5" y="206" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="600" letter-spacing="2" fill="#A9B2BD">ÚLT</text>
+<text x="297.8" y="206" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="32.5" font-weight="500" fill="#FFA8A8">2.39</text>
+<text x="418.3" y="206" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="600" letter-spacing="2" fill="#A9B2BD">MÉD</text>
+<text x="477.6" y="206" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="32.5" font-weight="500" fill="#D5DAE0">2.37</text>
+<rect x="22.5" y="227.5" width="705" height="2.5" rx="0" fill="#A9B2BD" fill-opacity="0.22"/>
+<text x="632.5" y="270" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="37.5" font-weight="700" fill="#F2F4F7">2.30</text>
+<text x="560.1" y="270" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="600" letter-spacing="2" fill="#A9B2BD">ALVO</text>
+<text x="27.5" y="270" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="30" font-weight="600" fill="#F2F4F7">74.0<tspan font-family="'JetBrains Mono', monospace" font-size="30" font-weight="400" fill="#D5DAE0"> L · dá 31 v · faltam 32</tspan></text>
+</g>
+</svg>

@@ -9,7 +9,7 @@ namespace FuelPace.Agent.Overlay;
 /// </summary>
 public sealed class DWriteTextMeasurer(DWriteFonts fonts) : ITextMeasurer
 {
-    private const int Slots = 1024; // the layout measures about 60 distinct runs per frame, plus the insight cut-off search
+    private const int Slots = 1024; // the v3 layout measures a few dozen distinct runs per frame, the F4 fit templates included
 
     private readonly ulong[] _keys = new ulong[Slots];
     private readonly float[] _widths = new float[Slots];

@@ -4,7 +4,7 @@ using FuelPace.App.Settings;
 namespace FuelPace.App.Placement;
 
 /// <summary>
-/// Pure placement math. Units: <c>logicalSize</c> is the PANEL size at Scale 1.0 in DIPs, i.e. <see cref="OverlayLayout"/>
+/// Pure placement math. Units: <c>logicalSize</c> is the PANEL size at Scale 1.0 in DIPs, i.e. <see cref="GlanceLayout"/>
 /// built with <c>Scale = 1</c> and EditMode off (the layout already multiplies the panel by its own Scale, so passing a
 /// layout built at the user's Scale would double-scale). Physical size = logicalSize x OverlaySettings.Scale x
 /// monitor.DpiScale. Offsets are physical pixels from the monitor's WorkArea origin. Only the panel is clamped into the

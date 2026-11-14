@@ -23,7 +23,11 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(1.0, s.Overlay.Scale);
         Assert.Equal(0.6, s.Overlay.BackgroundOpacity);
         Assert.Equal(1.0, s.Overlay.ContentOpacity);
-        Assert.True(s.Overlay.ShowInsightLine);
+        Assert.True(s.Overlay.ShowDeltaBar);
+        Assert.Equal(0.20, s.Overlay.DeltaBarScaleLpl);
+        Assert.Equal(RedComplement.Pct, s.Overlay.RedComplement);
+        Assert.True(s.Overlay.ShowAvgInSupport);
+        Assert.Equal(2, s.SchemaVersion);
         Assert.False(s.Overlay.ShowPaceLine);
         Assert.True(s.Overlay.AutoHide);
         Assert.Equal("Ctrl+Shift+F", s.Hotkeys.ToggleEdit);
@@ -41,8 +45,9 @@ public sealed class SettingsStoreTests : IDisposable
             Overlay = new OverlaySettings
             {
                 MonitorDeviceName = @"\\.\DISPLAY2", OffsetX = 12, OffsetY = 34, Scale = 1.5, BackgroundOpacity = 0.25,
-                ContentOpacity = 0.8, ShowPaceLine = true, ShowInsightLine = false, AutoHide = false,
-                RenderBackend = RenderBackend.Layered,
+                ContentOpacity = 0.8, ShowPaceLine = true, AutoHide = false,
+                RenderBackend = RenderBackend.Layered, ShowDeltaBar = false, DeltaBarScaleLpl = 0.35,
+                RedComplement = RedComplement.Seconds, ShowAvgInSupport = false,
             },
             Strategy = new StrategyConfig { ReserveL = 1.2, MeanWindow = 8, MaxSavingFraction = 0.04, ExtraLaps = 1, Mode = LapsMode.Stint, StintLaps = 30, PracticeLapsFromTime = false },
             Hotkeys = new HotkeySettings { ToggleEdit = "Alt+F9", ToggleVisible = "Ctrl+Alt+H", DebugMark = "Ctrl+Shift+1" },
@@ -208,7 +213,7 @@ public sealed class SettingsStoreTests : IDisposable
         var text = File.ReadAllText(SettingsPath);
         Assert.Contains("\"renderBackend\": \"auto\"", text);
         Assert.Contains("\"mode\": \"auto\"", text);
-        Assert.Contains("\"schemaVersion\": 1", text);
+        Assert.Contains("\"schemaVersion\": 2", text);
         Assert.Contains("\"meanWindow\": 5", text);
     }
 
@@ -218,5 +223,167 @@ public sealed class SettingsStoreTests : IDisposable
         var nested = Path.Combine(_dir, "a", "b");
         new SettingsStore(nested).Save(new AppSettings());
         Assert.True(File.Exists(Path.Combine(nested, "settings.json")));
+    }
+
+    // ---- PRD v3 §9 / V3-9: schema 2 and the migration
+
+    static string RepoFile(params string[] parts)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "FuelPace.sln"))) dir = dir.Parent;
+        Assert.NotNull(dir);
+        return Path.Combine([dir.FullName, .. parts]);
+    }
+
+    [Fact] // V3-9
+    public void V3_9_real_v1_file_migrates_to_v2_preserving_the_pilots_settings()
+    {
+        File.Copy(RepoFile("tests", "fixtures", "settings", "v1-real.json"), SettingsPath);
+        var store = new SettingsStore(_dir);
+        var s = store.Load();
+
+        Assert.Equal(1, store.LastLoadMigratedFrom);
+        Assert.False(store.LastLoadWasCorrupt);
+        Assert.False(store.LastLoadWasFallback);
+        Assert.Equal(2, s.SchemaVersion);
+        Assert.Equal(@"\\.\DISPLAY1", s.Overlay.MonitorDeviceName);
+        Assert.Equal(1804, s.Overlay.OffsetX);
+        Assert.Equal(900, s.Overlay.OffsetY);
+        Assert.Equal(1.66, s.Overlay.Scale);
+        Assert.Equal(0.6, s.Overlay.BackgroundOpacity);
+        Assert.Equal(1.0, s.Overlay.ContentOpacity);
+        Assert.False(s.Overlay.AutoHide);
+        Assert.False(s.Overlay.ShowPaceLine);
+        Assert.Equal(new StrategyConfig(), s.Strategy);
+        Assert.Equal("Ctrl+Shift+F", s.Hotkeys.ToggleEdit);
+        Assert.Equal("Ctrl+Shift+H", s.Hotkeys.ToggleVisible);
+        Assert.Equal("Ctrl+Shift+M", s.Hotkeys.DebugMark);
+        Assert.True(s.Overlay.ShowDeltaBar);
+        Assert.Equal(0.20, s.Overlay.DeltaBarScaleLpl);
+        Assert.Equal(RedComplement.Pct, s.Overlay.RedComplement);
+        Assert.True(s.Overlay.ShowAvgInSupport);
+
+        var text = File.ReadAllText(SettingsPath);
+        Assert.Contains("\"schemaVersion\": 2", text);
+        Assert.Contains("\"showDeltaBar\": true", text);
+        Assert.Contains("\"deltaBarScaleLpl\": 0.2", text);
+        Assert.Contains("\"redComplement\": \"pct\"", text);
+        Assert.Contains("\"showAvgInSupport\": true", text);
+        Assert.DoesNotContain("showInsightLine", text);
+        Assert.False(File.Exists(SettingsPath + ".corrupt"));
+        Assert.Equal(s, new SettingsStore(_dir).Load()); // the rewritten file reads back the same, with no new migration
+    }
+
+    [Fact]
+    public void A_v2_file_is_not_migrated_or_rewritten()
+    {
+        var store = new SettingsStore(_dir);
+        store.Save(new AppSettings { Overlay = new OverlaySettings { Scale = 1.3 } });
+        var before = File.GetLastWriteTimeUtc(SettingsPath);
+        File.SetLastWriteTimeUtc(SettingsPath, before.AddMinutes(-5));
+        var stamp = File.GetLastWriteTimeUtc(SettingsPath);
+        Assert.Equal(1.3, store.Load().Overlay.Scale);
+        Assert.Null(store.LastLoadMigratedFrom);
+        Assert.Equal(stamp, File.GetLastWriteTimeUtc(SettingsPath));
+    }
+
+    [Theory] // no schemaVersion at all is a v1 (the app always wrote one, but a hand-made file may not have it)
+    [InlineData("""{"overlay":{"scale":1.4}}""")]
+    [InlineData("""{"schemaVersion":0,"overlay":{"scale":1.4}}""")]
+    public void A_file_without_a_usable_schema_version_is_migrated(string json)
+    {
+        File.WriteAllText(SettingsPath, json);
+        var store = new SettingsStore(_dir);
+        Assert.Equal(1.4, store.Load().Overlay.Scale);
+        Assert.NotNull(store.LastLoadMigratedFrom);
+        Assert.Contains("\"schemaVersion\": 2", File.ReadAllText(SettingsPath));
+    }
+
+    [Fact]
+    public void A_newer_schema_is_read_as_is_and_never_rewritten()
+    {
+        const string json = """{"schemaVersion":3,"overlay":{"scale":1.4,"futureField":7},"future":{"x":1}}""";
+        File.WriteAllText(SettingsPath, json);
+        var store = new SettingsStore(_dir);
+        var s = store.Load();
+        Assert.Equal(1.4, s.Overlay.Scale);
+        Assert.Equal(3, s.SchemaVersion);
+        Assert.Null(store.LastLoadMigratedFrom);
+        Assert.Equal(json, File.ReadAllText(SettingsPath));
+    }
+
+    [Fact]
+    public void A_file_that_could_not_be_read_is_never_written_over()
+    {
+        File.WriteAllText(SettingsPath, """{"schemaVersion":1,"overlay":{"scale":2}}""");
+        var store = new SettingsStore(_dir);
+        using (new FileStream(SettingsPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            store.Load(retryLocked: false);
+            Assert.True(store.LastLoadWasFallback);
+            Assert.Null(store.LastLoadMigratedFrom);
+        }
+        Assert.Contains("\"schemaVersion\":1", File.ReadAllText(SettingsPath));
+    }
+
+    [Fact]
+    public void Corruption_is_reported_and_migration_status_is_reset_on_every_load()
+    {
+        var store = new SettingsStore(_dir);
+        File.WriteAllText(SettingsPath, "{ not json");
+        store.Load();
+        Assert.True(store.LastLoadWasCorrupt);
+        Assert.Null(store.LastLoadMigratedFrom);
+        Assert.True(File.Exists(SettingsPath + ".corrupt"));
+        store.Load(); // now missing
+        Assert.False(store.LastLoadWasCorrupt);
+    }
+
+    [Fact]
+    public void A_showInsightLine_in_an_old_file_is_ignored()
+    {
+        File.WriteAllText(SettingsPath, """{"schemaVersion":2,"overlay":{"showInsightLine":false,"scale":1.2}}""");
+        Assert.Equal(1.2, new SettingsStore(_dir).Load().Overlay.Scale);
+        Assert.False(File.Exists(SettingsPath + ".corrupt"));
+    }
+
+    [Theory]
+    [InlineData(0.01, 0.05)]
+    [InlineData(0.9, 0.50)]
+    [InlineData(0.2349, 0.23)]
+    [InlineData(double.NaN, 0.20)]
+    [InlineData(double.PositiveInfinity, 0.50)]
+    public void Delta_bar_scale_is_clamped_and_rounded_to_hundredths(double input, double expected)
+        => Assert.Equal(expected, new OverlaySettings { DeltaBarScaleLpl = input }.Normalize().DeltaBarScaleLpl);
+
+    [Theory]
+    [InlineData("\"seconds\"", RedComplement.Seconds)]
+    [InlineData("\"Pct\"", RedComplement.Pct)]
+    [InlineData("\"percent\"", RedComplement.Pct)]
+    [InlineData("3", RedComplement.Pct)]
+    public void Red_complement_is_read_leniently_and_undefined_becomes_pct(string json, RedComplement expected)
+    {
+        File.WriteAllText(SettingsPath, """{"schemaVersion":2,"overlay":{"redComplement":""" + json + "}}");
+        Assert.Equal(expected, new SettingsStore(_dir).Load().Overlay.RedComplement);
+    }
+
+    [Fact]
+    public void A_failed_migration_write_keeps_the_original_file_and_returns_the_migrated_settings()
+    {
+        var original = File.ReadAllBytes(RepoFile("tests", "fixtures", "settings", "v1-real.json"));
+        File.WriteAllBytes(SettingsPath, original);
+        // A directory where the atomic write puts its temp file: the write fails with UnauthorizedAccessException on Linux and Windows alike.
+        Directory.CreateDirectory(SettingsPath + ".tmp");
+        var store = new SettingsStore(_dir);
+
+        var s = store.Load();
+
+        Assert.Equal(2, s.SchemaVersion);
+        Assert.Equal(1, store.LastLoadMigratedFrom);
+        Assert.Equal(1804, s.Overlay.OffsetX);
+        Assert.Equal(1.66, s.Overlay.Scale);
+        Assert.True(s.Overlay.ShowDeltaBar);
+        Assert.Equal(original, File.ReadAllBytes(SettingsPath));
+        Assert.False(File.Exists(SettingsPath + ".corrupt"));
     }
 }

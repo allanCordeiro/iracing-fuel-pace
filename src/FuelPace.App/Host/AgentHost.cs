@@ -9,6 +9,7 @@ using FuelPace.App.Recording;
 using FuelPace.App.Settings;
 using FuelPace.Core.Capture;
 using FuelPace.Core.Diagnostics;
+using FuelPace.Core.Display;
 using FuelPace.Core.Pipeline;
 using FuelPace.Core.Storage;
 using FuelPace.Core.Strategy;
@@ -52,7 +53,7 @@ public sealed partial class AgentHost : IDisposable
         FuelL = double.NaN, AutonomyLaps = double.NaN, AutonomyMin = double.NaN, LapProjectionL = double.NaN,
         LastLapL = double.NaN, MeanL = double.NaN, TargetL = double.NaN, LapsRemaining = double.NaN,
         FeasibleMinL = double.NaN, LastLapTimeS = double.NaN, MeanLapTimeS = double.NaN, BaselineLapTimeS = double.NaN,
-        Insight = new Insight(InsightKind.None),
+        PaceS = double.NaN, FuelVsTimeB = double.NaN, Insight = new Insight(InsightKind.None),
     };
 
     private readonly AgentOptions _o;
@@ -117,6 +118,7 @@ public sealed partial class AgentHost : IDisposable
     private MonitorDesc? _monitor;
     private OverlayViewOptions? _view, _measureView;
     private AppSettings? _viewSettings;
+    private GlanceConfig _glance;
     private double _viewDpi;
 
     private sealed record SessionTap(string Yaml, int Version, SessionInfo Info);
@@ -155,6 +157,8 @@ public sealed partial class AgentHost : IDisposable
     internal bool TelemetryThreadAlive => _telemetry?.IsAlive ?? false;
     /// <summary>The state the last render decided to show (UI thread).</summary>
     internal OverlayState LastRendered { get; private set; }
+    /// <summary>The view the last render built from <see cref="LastRendered"/> (UI thread).</summary>
+    internal GlanceView LastRenderedView { get; private set; }
     internal string LogsDir => Path.Combine(_o.AppDataRoot, "logs");
     internal bool WaitIo(TimeSpan timeout) => _io.WaitIdle(timeout);
     internal void FlushLogs() => _sink?.FlushNow();
@@ -165,6 +169,7 @@ public sealed partial class AgentHost : IDisposable
         if (Interlocked.Exchange(ref _started, 1) != 0) throw new InvalidOperationException("The agent host is already started.");
         AppDiagEvents.RegisterAll();
         var settings = _settingsStore.Load();
+        var loaded = SettingsLoadReport.Of(_settingsStore);
         _settingsFallback = _settingsStore.LastLoadWasFallback;
         _settings = settings;
         _debugMode = _o.DebugFromCommandLine || _o.DebugMarker || settings.Debug.Enabled;
@@ -178,10 +183,14 @@ public sealed partial class AgentHost : IDisposable
         if (_settingsFallback)
             _log.Text(DiagLevel.Warn, "settings", "settings.json could not be read (locked or access denied): defaults in use; "
                 + "it is re-read every 5 s and before every snapshot, and never written until a read succeeds");
+        // The Agent reads the render backend before the host exists, and that load is the one that migrates or quarantines
+        // the file: this load then finds it already done, so both are reported.
+        var early = _o.EarlierSettingsLoad;
+        LogLoad(new SettingsLoadReport(loaded.MigratedFrom ?? early?.MigratedFrom, loaded.WasCorrupt || (early?.WasCorrupt ?? false)));
 
         _profiles = new ProfileStore(_o.AppDataRoot, _log);
         _io = new BackgroundWorkQueue("FuelPace.IO", _log) { OnError = e => _log.Exception("io", e) };
-        _pipeline = new TelemetryPipeline(settings.Strategy, _clock, _profiles, _io, _log);
+        _pipeline = new TelemetryPipeline(settings.Strategy, _clock, _profiles, _io, _log, settings.ToGlanceConfig());
         _pipeline.CaptureCompleted += OnCaptureCompleted;
         _pipeline.CaptureLapRecorded += OnCaptureLap;
         _scheduler = new RenderScheduler(_pipeline.Overlay, _ui, Render, _clock);
@@ -568,13 +577,13 @@ public sealed partial class AgentHost : IDisposable
     private void OnUserMoved(PixelRect r) => OnUi(() => UserPlaced(r, resized: false));
     private void OnUserResized(PixelRect r) => OnUi(() => UserPlaced(r, resized: true));
 
-    /// <summary><paramref name="window"/> is the whole window; the panel sits <see cref="OverlayLayout.PanelOffset"/> inside it.</summary>
+    /// <summary><paramref name="window"/> is the whole window; the panel sits <see cref="GlanceLayout.PanelOffset"/> inside it.</summary>
     private void UserPlaced(PixelRect window, bool resized)
     {
         var monitors = _monitors;
         if (monitors.Count == 0) return;
         double dpi = _monitor?.DpiScale ?? 1.0;
-        var off = OverlayLayout.PanelOffset(_editMode, dpi);
+        var off = GlanceLayout.PanelOffset(_editMode, dpi);
         var panel = new PixelRect(window.X + Px(off.W), window.Y + Px(off.H),
             Math.Max(1, window.Width - _chromeW), _hasPanel ? _panel.Height : window.Height);
         _bounds = null; // the user moved the window: the next render sends the bounds even if the placement resolves the same
@@ -618,6 +627,7 @@ public sealed partial class AgentHost : IDisposable
         var loaded = _settingsStore.Load(retryLocked: false);
         if (_settingsStore.LastLoadWasFallback) return false;
         _log.Text(DiagLevel.Info, "settings", "settings.json is readable again: the user's settings are in use");
+        LogLoad(SettingsLoadReport.Of(_settingsStore));
         ApplySettings(loaded, save: false);
         _settingsFallback = false;
         Broadcast(new SettingsApplied(_settings));
@@ -631,6 +641,8 @@ public sealed partial class AgentHost : IDisposable
         var prev = _settings;
         _settings = next;
         if (next.Strategy != prev.Strategy) _pipeline.SetConfig(next.Strategy);
+        var glance = next.ToGlanceConfig();
+        if (glance != prev.ToGlanceConfig()) _pipeline.SetGlanceConfig(in glance); // the dirty flag of the next ticks
         if (next.StartWithWindows != prev.StartWithWindows)
         {
             try { _sys.SetAutostart(next.StartWithWindows); }
@@ -649,6 +661,15 @@ public sealed partial class AgentHost : IDisposable
         if (debugChanged || next.Hotkeys != prev.Hotkeys) RegisterHotkeys();
         InvalidateView();
         if (save) EnqueueSave(next);
+    }
+
+    private void LogLoad(SettingsLoadReport r)
+    {
+        if (r.MigratedFrom is { } from)
+            _log.Text(DiagLevel.Info, "settings", string.Create(CultureInfo.InvariantCulture,
+                $"settings.json migrated from schema {from} to {AppSettings.CurrentSchemaVersion}"));
+        if (r.WasCorrupt)
+            _log.Text(DiagLevel.Warn, "settings", "settings.json could not be parsed: renamed to settings.json.corrupt, defaults in use");
     }
 
     private void SaveIfPending()
@@ -712,9 +733,12 @@ public sealed partial class AgentHost : IDisposable
     });
 
     /// <summary>
-    /// UI thread, posted by the <see cref="RenderScheduler"/>. Placement contract (Task 7): <see cref="OverlayPlacement.Resolve"/>
-    /// gets the panel size at Scale 1.0 (a second layout); the list drawn is built at Scale × DpiScale (physical px) and sizes
-    /// the window. Only a list whose <see cref="DrawList.ContentHash"/> changed reaches the surface.
+    /// UI thread, posted by the <see cref="RenderScheduler"/>. The <see cref="GlanceView"/> is built here again from the
+    /// published state with the current settings (the same allocation-free builder the strategy thread runs for the dirty
+    /// flag): it covers the state without the sim and a settings change that no tick has seen yet. Placement contract (Task 7):
+    /// <see cref="OverlayPlacement.Resolve"/> gets the panel size at Scale 1.0 (a second layout); the list drawn is built at
+    /// Scale × DpiScale (physical px) and sizes the window. Only a list whose <see cref="DrawList.ContentHash"/> changed
+    /// reaches the surface.
     /// </summary>
     private void Render()
     {
@@ -755,11 +779,17 @@ public sealed partial class AgentHost : IDisposable
         }
         if (!show) return;
 
-        var car = _pipeline.Overlay.CarShort;
-        var track = _pipeline.Overlay.TrackShort;
-        if (!ReferenceEquals(_viewSettings, s)) { _view = null; _measureView = null; _viewSettings = s; }
+        if (!ReferenceEquals(_viewSettings, s))
+        {
+            _view = null;
+            _measureView = null;
+            _viewSettings = s;
+            _glance = s.ToGlanceConfig();
+        }
+        var view = GlanceViewBuilder.Build(in state, in _glance);
+        LastRenderedView = view;
         _measureView ??= ViewOptions(s, 1.0, edit: false, dpi: 1.0);
-        OverlayLayout.Build(in state, car, track, _measureView, _measurer, _measure);
+        GlanceLayout.Build(in view, _measureView, _measurer, _measure);
 
         var monitors = _monitors;
         if (monitors.Count > 0)
@@ -774,11 +804,11 @@ public sealed partial class AgentHost : IDisposable
             _view = ViewOptions(s, s.Overlay.Scale, _editMode, dpi);
             _viewDpi = dpi;
         }
-        OverlayLayout.Build(in state, car, track, _view, _measurer, _list);
+        GlanceLayout.Build(in view, _view, _measurer, _list);
 
         if (_hasPanel)
         {
-            var off = OverlayLayout.PanelOffset(_editMode, dpi);
+            var off = GlanceLayout.PanelOffset(_editMode, dpi);
             var bounds = new PixelRect(_panel.X - Px(off.W), _panel.Y - Px(off.H),
                 (int)Math.Ceiling(_list.Size.W), (int)Math.Ceiling(_list.Size.H));
             _chromeW = bounds.Width - _panel.Width; // kept: a gesture clears _bounds, a second one before the next render needs this
@@ -800,7 +830,7 @@ public sealed partial class AgentHost : IDisposable
 
     /// <summary>The panel is drawn at <paramref name="scale"/> × <paramref name="dpi"/>, the edit chrome at <paramref name="dpi"/>.</summary>
     private OverlayViewOptions ViewOptions(AppSettings s, double scale, bool edit, double dpi) => new(
-        scale, s.Overlay.BackgroundOpacity, s.Overlay.ContentOpacity, s.Overlay.ShowPaceLine, s.Overlay.ShowInsightLine,
+        scale, s.Overlay.BackgroundOpacity, s.Overlay.ContentOpacity, s.Overlay.ShowPaceLine,
         edit, _debugMode, s.Hotkeys.ToggleEdit, s.Overlay.OffsetX, s.Overlay.OffsetY, dpi);
 
     private static int Px(float v) => (int)Math.Round(v, MidpointRounding.AwayFromZero);
