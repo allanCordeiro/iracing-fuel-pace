@@ -1,5 +1,6 @@
 using System.Text;
 using FuelPace.Core.Display;
+using FuelPace.Core.Strategy;
 
 namespace FuelPace.App.Overlay;
 
@@ -9,7 +10,8 @@ public sealed record GlancePreview(string Name, GlanceView View, OverlayViewOpti
 /// <summary>
 /// The v3 review previews (PRD v3 V3-10, §11.4): the four mocks (screens 9–12) with the V3-3 numbers, plus the edge cases
 /// (inactive, saturated bar with every pill, bar off, edit mode, 250 %). tools/FuelPace.Preview writes them as SVG into
-/// <c>docs/v3/preview</c>; the views are built by hand so the previews do not depend on the builder.
+/// <c>docs/v3/preview</c>. The views are built by hand so the previews do not depend on the builder; <see cref="Inputs"/>
+/// holds the V3-3 engine outputs behind the four mocks, and a test checks that the builder makes exactly these views of them.
 /// </summary>
 public static class GlancePreviews
 {
@@ -17,6 +19,46 @@ public static class GlancePreviews
     public const int Padding = 40;
 
     public static IReadOnlyList<GlancePreview> All { get; } = Build();
+
+    /// <summary>V3-3: the display settings of the mocks (res 0.5, S 0.20, complement in %, bar and MÉD on).</summary>
+    public static GlanceConfig SampleConfig { get; } = GlanceConfig.Default;
+
+    /// <summary>
+    /// V3-3: the engine outputs behind <c>vermelho</c>, <c>azul</c>, <c>pit</c> and <c>compacto</c> (res 0.5, MÉD 2.37,
+    /// lim 2.23, C 74.0; A = (C − res) / L_rest). The Settings window builds its live preview from <c>azul</c>, so the Layout
+    /// options (bar, scale, MÉD) show through the same builder the overlay uses.
+    /// </summary>
+    public static IReadOnlyDictionary<string, OverlayState> Inputs { get; } = BuildInputs();
+
+    static Dictionary<string, OverlayState> BuildInputs()
+    {
+        const double N = double.NaN;
+        var red = new OverlayState
+        {
+            State = SignalState.Red, FuelL = 74.0, LapsRemaining = 32, LapProjectionL = 2.38, LastLapL = 2.39, MeanL = 2.37,
+            TargetL = 73.5 / 32, FeasibleMinL = 2.23, AutonomyLaps = N, AutonomyMin = N, PaceS = 80.14, FuelVsTimeB = N,
+            LastLapTimeS = 79.51, MeanLapTimeS = 80.14, BaselineLapTimeS = 80.12, Insight = new Insight(InsightKind.None),
+        };
+        var blue = red;
+        blue.State = SignalState.Blue;
+        blue.LapsRemaining = 30;
+        blue.LapProjectionL = 2.36;
+        blue.LastLapL = 2.37;
+        blue.TargetL = 73.5 / 30;
+        var pit = red;
+        pit.State = SignalState.NotFeasible;
+        pit.LapsRemaining = 34;
+        pit.TargetL = 73.5 / 34;
+        // no baseline (screen 12): MÉD 2.92 → dá 25 v; 108 s laps → 45 min
+        var compact = new OverlayState
+        {
+            State = SignalState.NoBaseline, FuelL = 74.0, LapsRemaining = N, LapProjectionL = 2.91, LastLapL = 2.91, MeanL = 2.92,
+            TargetL = N, FeasibleMinL = N, AutonomyLaps = N, AutonomyMin = N, PaceS = 108, FuelVsTimeB = N,
+            LastLapTimeS = N, MeanLapTimeS = N, BaselineLapTimeS = N, Recording = true, RecValid = 4, RecTotal = 9,
+            Insight = new Insight(InsightKind.None),
+        };
+        return new(StringComparer.Ordinal) { ["vermelho"] = red, ["azul"] = blue, ["pit"] = pit, ["compacto"] = compact };
+    }
 
     static List<GlancePreview> Build()
     {
@@ -27,7 +69,7 @@ public static class GlancePreviews
             ShowBar = true, BarSteps = 20, BarMarkerQ = 8, BarGhostQ = 9,
             LapProj = 2.38f, LapLast = 2.39f, LapAvg = 2.37f, ShowAvg = true,
             Fuel = 74.0f, LapsPossible = 31, LapsRemaining = 32, TargetLabel = TargetLabel.Alvo, Target = 2.30f, FeasibleMin = float.NaN,
-            MinutesPossible = 41, LastLapTimeS = 79.51f, MeanLapTimeS = 80.14f, BaselineLapTimeS = 80.12f,
+            MinutesPossible = -1, LastLapTimeS = 79.51f, MeanLapTimeS = 80.14f, BaselineLapTimeS = 80.12f,
         };
         var blue = red with
         {
@@ -43,7 +85,7 @@ public static class GlancePreviews
         // no baseline (screen 12): MÉD 2.92 → dá 25 v
         var compact = new GlanceView
         {
-            Mode = GlanceMode.Compact, Decision = DecisionKind.None, DecisionValue = float.NaN, ComplementSec = float.NaN,
+            Mode = GlanceMode.Compact, Decision = DecisionKind.None, DecisionValue = float.NaN, ComplementSec = float.NaN, BarSteps = 20,
             BarMarkerQ = GlanceView.BarAbsent, BarGhostQ = GlanceView.BarAbsent,
             LapProj = 2.91f, LapLast = 2.91f, LapAvg = 2.92f, ShowAvg = true,
             Fuel = 74.0f, LapsPossible = 25, LapsRemaining = -1, Target = float.NaN, FeasibleMin = float.NaN, MinutesPossible = 45,

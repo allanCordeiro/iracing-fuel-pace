@@ -64,6 +64,32 @@ public sealed class GlancePreviewsTests
         Assert.Equal(GlanceMode.Inactive, Get("inativo").View.Mode);
     }
 
+    [Theory] // V3-3 / V3-10: the hand-made mock views are exactly what the builder makes of the V3-3 engine outputs
+    [InlineData("vermelho")]
+    [InlineData("azul")]
+    [InlineData("pit")]
+    [InlineData("compacto")]
+    public void The_builder_makes_the_mock_views_from_the_V3_3_inputs(string name)
+    {
+        var input = GlancePreviews.Inputs[name];
+        var built = GlanceViewBuilder.Build(in input, GlancePreviews.SampleConfig);
+        Assert.Equal(Get(name).View, built);
+    }
+
+    [Fact]
+    public void The_V3_3_inputs_are_the_mock_numbers()
+    {
+        Assert.Equal(new GlanceConfig(0.5, 0.20, false, true, true), GlancePreviews.SampleConfig);
+        Assert.Equal(["azul", "compacto", "pit", "vermelho"], GlancePreviews.Inputs.Keys.Order(StringComparer.Ordinal));
+        foreach (var (name, s) in GlancePreviews.Inputs)
+        {
+            Assert.Equal(74.0, s.FuelL);
+            if (name == "compacto") continue;
+            Assert.Equal((2.37, 2.23), (s.MeanL, s.FeasibleMinL));
+            Assert.Equal(73.5 / s.LapsRemaining, s.TargetL, 12); // A = (C − res) / L_rest
+        }
+    }
+
     [Fact]
     public void Preview_writes_one_svg_per_preview()
     {
