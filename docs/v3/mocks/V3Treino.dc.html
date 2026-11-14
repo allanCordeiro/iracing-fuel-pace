@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Proposta treino capturando</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="position: relative; width: 760px; height: 400px; overflow: hidden; background: #1C2026; font-family: Inter, system-ui, sans-serif">
+  <div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 760px; height: 170px; background: #3A4552"></div>
+  <div aria-hidden="true" style="position: absolute; left: 0; top: 170px; width: 760px; height: 230px; background: #262B31"></div>
+  <div aria-hidden="true" style="position: absolute; left: 0; top: 170px; width: 760px; height: 230px; background: #3B4048; clip-path: polygon(46% 0, 54% 0, 100% 100%, 0 100%)"></div>
+  <div aria-hidden="true" style="position: absolute; left: 0; top: 330px; width: 760px; height: 70px; background: #0E1013"></div>
+
+  <div style="position: absolute; left: 80px; top: 110px; width: 600px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px">
+    <div style="width: 600px; box-sizing: border-box; padding: 14px 18px 16px; border-radius: 12px; background: rgba(10, 12, 16, {{bgAlpha}}); display: flex; flex-direction: column; gap: 12px; color: #F2F4F7">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 0 4px">
+        <span style="display: flex; align-items: baseline; gap: 8px">
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 42px; font-weight: 600; line-height: 1">74.0</span>
+          <span style="font-size: 22px; color: #A9B2BD">L</span>
+        </span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 26px; color: #D5DAE0">dá 25 v · 45 min</span>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 34px; padding: 8px 4px 0; border-top: 1px solid rgba(169, 178, 189, 0.22)">
+        <div style="display: flex; align-items: baseline; gap: 10px">
+          <span style="font-size: 16px; font-weight: 600; letter-spacing: 0.1em; color: #A9B2BD">VOLTA</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 600; color: #F2F4F7">2.91</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 10px">
+          <span style="font-size: 16px; font-weight: 600; letter-spacing: 0.1em; color: #A9B2BD">ÚLT</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 500; color: #D5DAE0">2.91</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 10px">
+          <span style="font-size: 16px; font-weight: 600; letter-spacing: 0.1em; color: #A9B2BD">MÉD</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 500; color: #D5DAE0">2.92</span>
+        </div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 10px; background: rgba(10, 12, 16, {{bgAlpha}}); color: #F2F4F7">
+      <span aria-hidden="true" style="width: 12px; height: 12px; border-radius: 6px; background: #FF5A5A"></span>
+      <span style="font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 600">REC 4/9</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"bgOpacity":{"editor":"range","min":0,"max":100,"step":5,"unit":"%","default":60},"$preview":{"width":760,"height":400}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const o = this.props.bgOpacity ?? 60;
+    return { bgAlpha: (o / 100).toFixed(2) };
+  }
+}
+</script>
+</body>
+</html>

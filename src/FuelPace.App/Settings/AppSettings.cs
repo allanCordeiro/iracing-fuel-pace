@@ -36,6 +36,10 @@ public sealed class CamelCaseEnumConverter<T> : JsonConverter<T> where T : struc
 [JsonConverter(typeof(CamelCaseEnumConverter<RenderBackend>))]
 public enum RenderBackend { Auto, Composition, Layered }
 
+/// <summary>PRD v3 CFG-V3-03: the red decision block's complement, "pct" (−3%) or "seconds" (+0.9 s, needs a fuel-vs-time fit).</summary>
+[JsonConverter(typeof(CamelCaseEnumConverter<RedComplement>))]
+public enum RedComplement { Pct, Seconds }
+
 // Settings records use set (not init): the System.Text.Json source generator leaves init-only properties absent from the file at default(T) instead of their initializer.
 public sealed record OverlaySettings
 {
@@ -61,6 +65,19 @@ public sealed record OverlaySettings
     public bool ShowInsightLine { get; set; } = true;
     public bool AutoHide { get; set; } = true;
     public RenderBackend RenderBackend { get; set; } = RenderBackend.Auto;
+
+    // PRD v3 §7 (Onda 0 contract; front D adds the normalization, the schema 2 migration and the Settings UI).
+    /// <summary>CFG-V3-01: the F2 delta bar.</summary>
+    public bool ShowDeltaBar { get; set; } = true;
+
+    /// <summary>CFG-V3-02: the bar's half-range S in L/lap, 0.05–0.50.</summary>
+    public double DeltaBarScaleLpl { get; set; } = 0.20;
+
+    /// <summary>CFG-V3-03.</summary>
+    public RedComplement RedComplement { get; set; } = RedComplement.Pct;
+
+    /// <summary>CFG-V3-04: MÉD in the F3 support row.</summary>
+    public bool ShowAvgInSupport { get; set; } = true;
 
     internal OverlaySettings Normalize() => this with
     {

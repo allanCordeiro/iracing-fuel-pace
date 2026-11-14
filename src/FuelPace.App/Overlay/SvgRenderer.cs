@@ -53,6 +53,14 @@ public static class SvgRenderer
                     if (c.Kind == CommandKind.StrokeDashedRect) sb.Append(" stroke-dasharray=\"4 3\"");
                     Paint(sb, "stroke", c.Color); sb.Append("/>\n");
                     break;
+                case CommandKind.FillTriangle:
+                {
+                    float x0 = c.Rect.X, x1 = c.Rect.X + c.Rect.W, y0 = c.Rect.Y, y1 = c.Rect.Y + c.Rect.H, ym = y0 + c.Rect.H / 2;
+                    if (c.Radius > 0) sb.Append(Inv, $"<polygon points=\"{F(x0)},{F(y0)} {F(x1)},{F(ym)} {F(x0)},{F(y1)}\"");
+                    else sb.Append(Inv, $"<polygon points=\"{F(x1)},{F(y0)} {F(x0)},{F(ym)} {F(x1)},{F(y1)}\"");
+                    Paint(sb, "fill", c.Color); sb.Append("/>\n");
+                    break;
+                }
                 case CommandKind.Text:
                     bool mono = c.Role is FontRole.Value or FontRole.ValueBold;
                     // A continuation flows after the previous run inside the same <text>, so the browser's own font
