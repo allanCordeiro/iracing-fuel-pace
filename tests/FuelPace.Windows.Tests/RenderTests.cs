@@ -200,6 +200,67 @@ public sealed class RenderTests
             }
     }
 
+    public static TheoryData<string, double> WidestCases()
+    {
+        var data = new TheoryData<string, double>();
+        foreach (double scale in new[] { 1, 2.5 })
+            foreach (var which in new[] { "red", "blue", "pit", "compact", "inactive", "stint", "seconds" })
+                data.Add(which, scale);
+        return data;
+    }
+
+    /// <summary>
+    /// V3-7 (review N10): the widest values of <c>GlanceLayoutTests.Widest_values_stay_inside_the_panel_and_do_not_overlap</c>
+    /// (FuelPace.App.Tests, estimated metrics), laid out and checked with the real DirectWrite measurer and embedded fonts.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(WidestCases))]
+    public void Widest_values_stay_inside_the_panel_with_the_real_fonts(string which, double scale)
+    {
+        GlanceView Preview(string name) => GlancePreviews.All.Single(p => p.Name == name).View;
+        var v = Preview("vermelho");
+        v.DecisionValue = 0.50f; v.ComplementPct = -20; v.LapsRemaining = 999; v.Fuel = 100.0f; v.LapsPossible = 99;
+        v.Target = 2.30f; v.IsEstimate = true; v.LapProj = 2.38f; v.LapLast = 2.39f; v.LapLastInvalid = true;
+        switch (which)
+        {
+            case "blue": v.Decision = DecisionKind.Ok; v.DecisionValue = 99.9f; v.ComplementPct = 0; v.TargetLabel = TargetLabel.Ate; break;
+            case "pit":
+                v.Decision = DecisionKind.Pit; v.DecisionValue = 99.9f; v.ComplementPct = 0; v.ShowBar = false;
+                v.TargetLabel = TargetLabel.PitMin; v.Target = 2.16f; v.FeasibleMin = 2.23f; break;
+            case "compact": v = Preview("compacto"); v.Fuel = 100.0f; v.LapsPossible = 99; v.MinutesPossible = 999; break;
+            case "inactive":
+                v = Preview("compacto"); v.Mode = GlanceMode.Inactive; v.Fuel = 100.0f; v.LapsPossible = 99; v.MinutesPossible = 999; break;
+            case "stint": v.IsStint = true; v.LapsRemaining = 999; break;
+            case "seconds": v.ComplementSec = 9.9f; break;
+        }
+
+        using var fonts = new DWriteFonts();
+        var m = new DWriteTextMeasurer(fonts);
+        var d = new DrawList();
+        GlanceLayout.Build(in v, new OverlayViewOptions(scale, 0.6, 1, true, false, false, "Ctrl+Shift+F", 1840, 980), m, d);
+        float k = (float)scale, eps = 0.01f * k;
+        var p = d.Commands[0].Rect; // the panel
+        float left = p.X + 9 * k, right = p.X + p.W - 9 * k;
+        var boxes = new List<(string T, float X0, float X1, float Y)>();
+        foreach (var c in d.Commands)
+        {
+            if (c.Kind != CommandKind.Text || c.BaselineY > p.Y + p.H) continue; // pills hang under the panel
+            string t = new(d.TextOf(in c));
+            float w = m.Width(t, c.Role, c.Weight, c.SizePx, c.LetterSpacingEm);
+            Assert.True(c.X >= left - eps, $"{which}@{scale}x: '{t}' starts at {c.X}, inner edge {left}");
+            Assert.True(c.X + w <= right + eps, $"{which}@{scale}x: '{t}' ends at {c.X + w}, inner edge {right}");
+            boxes.Add((t, c.X, c.X + w, c.BaselineY));
+        }
+        Assert.NotEmpty(boxes);
+        // runs that share a row (similar baseline) must not overlap
+        foreach (var a in boxes)
+            foreach (var b in boxes)
+            {
+                if (ReferenceEquals(a.T, b.T) || a.X0 >= b.X0 || Math.Abs(a.Y - b.Y) > 6 * k) continue;
+                Assert.True(a.X1 <= b.X0 + eps, $"{which}@{scale}x: '{a.T}' [{a.X0},{a.X1}] overlaps '{b.T}' [{b.X0},{b.X1}]");
+            }
+    }
+
     [Fact]
     public void Rendering_the_same_list_again_creates_no_text_layout()
     {
