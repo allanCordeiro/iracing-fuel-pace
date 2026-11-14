@@ -97,14 +97,64 @@ Antes: desmarque **Ocultar fora da pista** e use uma sessão com limite de volta
 
 ## 11. Roteiro PERF-01 (impacto nos fps)
 
-Meta: o app não pode derrubar o desempenho do iRacing (fps médio ≥ 99,5% do fps sem o app, 1% low ≥ 99%, sem mais quadros > 2× o frametime médio).
+Meta: o app não pode derrubar o desempenho do iRacing (fps médio ≥ 99,5% do fps sem o app, 1% low ≥ 99%, sem mais quadros > 2× o frametime médio). São 6 rodadas de 5 min: 3 **sem** o app e 3 **com** o app.
 
-1. Baixe você mesmo o PresentMon (console) em https://github.com/GameTechDev/PresentMon/releases. O script não baixa nada. Se o exe do iRacing tiver outro nome, use `-ProcessName <nome.exe>`.
-2. Use o **zip normal** (`FuelPace-<versão>-win-x64.zip`, sem o arquivo `FuelPace.debug`): o modo debug grava a telemetria e registra muito mais, e não é o que se mede. Confira que o ponteiro sobre o ícone da bandeja mostra `FuelPace <versão>` **sem** "(debug)" e que **Configurações › Diagnóstico › Modo debug** está desmarcado.
-3. Desmarque **Ocultar fora da pista** (seção 3a). Mesmo carro, pista e clima, numa sessão **com limite de voltas ou de tempo** (treino offline com tempo ou corrida contra a IA; **não** replay nem Test Drive), iRacing em 120 fps. Faça **3 rodadas de 5 min sem o app** (Agent fechado: Bandeja › Sair) e **3 com o app** (Agent aberto). Nas rodadas "com", **olhe o overlay na tela** durante toda a rodada: se ele sumir, a rodada não vale.
-4. Num PowerShell como administrador, com o iRacing na pista (o script está na pasta do app):
-   `.\presentmon.ps1 -PresentMon C:\Caminho\PresentMon.exe -Label sem` e depois `-Label com`. Os CSVs ficam em `%APPDATA%\FuelPace\perf\` e entram no pacote de diagnóstico.
-5. Compare cada par: `.\FuelPace.Replay.exe presentmon <com.csv> <sem.csv>`. A última linha diz `PERF-01: APROVADO` ou `REPROVADO`. Anote que o zip medido foi o normal.
+### 11.1 Preparar (uma vez)
+
+1. Descompacte o **zip normal** (`FuelPace-<versão>-win-x64.zip`, **sem** `-debug`) numa pasta própria, por exemplo `C:\FuelPacePerf`. O modo debug grava a telemetria e registra muito mais, e não é o que se mede. Atenção: o `fuelpace-windows` baixado do GitHub traz os dois zips dentro de `out\`. O `presentmon.ps1` fica **dentro** do zip do app, não na pasta do download.
+2. Baixe o PresentMon em https://github.com/GameTechDev/PresentMon/releases: o arquivo `PresentMon-<versão>-x64.exe` (a versão de console, não o instalador). **Coloque o exe na mesma pasta** (`C:\FuelPacePerf`). O script acha sozinho qualquer `PresentMon*.exe` nessa pasta (ou em Downloads).
+3. Rode o `FuelPace.Agent.exe` dessa pasta e confira que o ponteiro sobre o ícone da bandeja mostra `FuelPace <versão>` **sem** "(debug)". Em Configurações, desmarque **Ocultar fora da pista** (seção 3a).
+
+A pasta fica assim:
+
+```
+C:\FuelPacePerf\
+  FuelPace.Agent.exe
+  FuelPace.Replay.exe
+  presentmon.ps1
+  PresentMon-2.6.0-x64.exe
+  ...
+```
+
+### 11.2 Abrir o PowerShell como administrador
+
+Menu Iniciar › digite `powershell` › botão direito em **Windows PowerShell** › **Executar como administrador**. Nele, vá para a pasta (copie e cole):
+
+```
+cd C:\FuelPacePerf
+```
+
+### 11.3 Medir
+
+Mesmo carro, pista e clima, numa sessão **com limite de voltas ou de tempo** (treino offline com tempo ou corrida contra a IA; **não** replay nem Test Drive), iRacing em 120 fps, em janela sem borda. Com o carro **já na pista**, cole o comando e continue pilotando; ele para sozinho depois de 5 min e diz `Pronto: <arquivo>.csv`.
+
+- Rodada **sem** o app: feche o Agent antes (Bandeja › Sair) e use
+
+  ```
+  powershell -ExecutionPolicy Bypass -File .\presentmon.ps1 -Label sem
+  ```
+
+- Rodada **com** o app: abra o Agent (`FuelPace.Agent.exe`), confira o overlay na tela e use
+
+  ```
+  powershell -ExecutionPolicy Bypass -File .\presentmon.ps1 -Label com
+  ```
+
+  Se o overlay sumir durante a rodada, ela não vale.
+
+Repita até ter 3 de cada. Os CSVs ficam em `%APPDATA%\FuelPace\perf\` e entram no pacote de diagnóstico.
+
+Por que esse comando e não só `presentmon.ps1`: o PowerShell só roda um script da pasta atual com `.\` na frente, e o Windows bloqueia scripts por padrão. O `-ExecutionPolicy Bypass` libera **só esta execução**, sem mudar nada no sistema. Se o PresentMon estiver em outra pasta, acrescente `-PresentMon "C:\caminho\PresentMon-2.6.0-x64.exe"`.
+
+### 11.4 Comparar
+
+Cada par (um `com` e um `sem`):
+
+```
+.\FuelPace.Replay.exe presentmon "$env:APPDATA\FuelPace\perf\com-AAAAMMDD-HHMMSS.csv" "$env:APPDATA\FuelPace\perf\sem-AAAAMMDD-HHMMSS.csv"
+```
+
+A última linha diz `PERF-01: APROVADO` ou `REPROVADO`. Ou simplesmente gere o pacote de diagnóstico (seção 8) e mande: ele leva os CSVs. Anote que o zip medido foi o normal.
 
 ## 12. Testar sem o iRacing (FakeSim, só no zip debug)
 

@@ -155,6 +155,34 @@ public class CaptureViewModelTests
         Assert.Equal("cap-1", Assert.Single(r.Conn.Of<ProfileCommand>()).CaptureId);
     }
 
+    [Fact] // feedback 2026-11-13: the window was opened before iRacing; the line stayed "não conectado" and the lap actions never enabled
+    public async Task Session_changes_update_the_line_and_the_finished_capture_can_be_edited()
+    {
+        var r = new SettingsRig();
+        await r.ConnectAsync(SettingsRig.Snap(capturing: false, laps: [], sim: false)
+            with { ProfileKey = null, CarName = null, TrackName = null, SessionType = null, TankCapacityL = null });
+        Assert.Equal("iRacing não está conectado", r.Capture.SessionLine);
+
+        r.Conn.Raise(new SessionChanged(true, null, null, null, null, null));
+        Assert.Equal("Aguardando uma sessão do iRacing", r.Capture.SessionLine);
+        r.Conn.Raise(new SessionChanged(true, "ligier__zolder", "Ligier JS P320", "Zolder Circuit (Alternate)", "Practice", 100));
+        Assert.Equal("Ligier JS P320 · Zolder Circuit (Alternate) · Practice", r.Capture.SessionLine);
+
+        r.Capture.Capturing = true;
+        r.Conn.Raise(new CaptureLapAdded(SettingsRig.Lap(1, 80.9, 2.38, 64), 1, 1));
+        r.Conn.Raise(new CaptureLapAdded(SettingsRig.Lap(2, 80.3, 2.40, 64), 2, 2));
+        Assert.NotNull(r.Capture.InProgress); // the sim is there: the lap being driven shows
+        r.Conn.Raise(new CaptureFinished("ligier__zolder", "cap-1"));
+        var row = r.Capture.Laps[1];
+        Assert.True(row.ProfileCommand.CanExecute(null));
+        row.ProfileCommand.Execute(null);
+        Assert.Equal(new ProfileCommand("ligier__zolder", "setLapExcluded", "cap-1", 2, true), Assert.Single(r.Conn.Of<ProfileCommand>()));
+
+        r.Conn.Raise(new SessionChanged(false, "ligier__zolder", "Ligier JS P320", "Zolder Circuit (Alternate)", "Practice", 100));
+        Assert.True(row.ProfileCommand.CanExecute(null)); // the saved capture stays editable without the sim
+        Assert.Equal(2, r.Capture.Laps.Count);
+    }
+
     [Fact]
     public async Task Edited_profile_updates_the_rows_and_counter()
     {

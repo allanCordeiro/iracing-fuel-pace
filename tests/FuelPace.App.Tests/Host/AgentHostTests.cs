@@ -143,6 +143,39 @@ public sealed class AgentHostTests
         Assert.Null((await probe.SendAndSync(new GetSnapshot())).CaptureId);
     }
 
+    [Fact] // feedback 2026-11-13: a Settings window opened before iRacing kept "iRacing não está conectado" for the whole race
+    public async Task Session_changes_reach_an_open_settings_window()
+    {
+        using var rig = new HostRig();
+        var src = rig.Race(1, gated: true, endsDisconnected: true);
+        rig.Sources.Then(() => src);
+        rig.Start();
+        var probe = await rig.ConnectAsync();
+        Assert.False((await probe.SendAndSync(new GetSnapshot())).SimConnected);
+
+        src.Allow(120);
+        rig.Settle(src, 120);
+        var s = await probe.WaitFor<SessionChanged>(m => m.SimConnected && m.ProfileKey is not null);
+        Assert.True(s.SimConnected);
+        Assert.Equal(RaceInfo.ProfileKey, s.ProfileKey);
+        Assert.Equal(RaceInfo.CarScreenName, s.CarName);
+        Assert.Equal(RaceInfo.TankCapacityL, s.TankCapacityL);
+        Assert.False(string.IsNullOrEmpty(s.SessionType));
+        var snap = await probe.SendAndSync(new GetSnapshot());
+        Assert.Equal((snap.SimConnected, snap.ProfileKey, snap.CarName, snap.TrackName, snap.SessionType, snap.TankCapacityL),
+            (s.SimConnected, s.ProfileKey, s.CarName, s.TrackName, s.SessionType, s.TankCapacityL));
+
+        // the same session: nothing more is sent
+        int sent = probe.All<SessionChanged>().Count;
+        src.Allow(600);
+        rig.Settle(src, 720);
+        Assert.Equal(sent, probe.All<SessionChanged>().Count);
+
+        // iRacing closed
+        src.Release();
+        await probe.WaitFor<SessionChanged>(m => !m.SimConnected);
+    }
+
     [Fact] // criterion 12
     public async Task Capture_survives_settings_client_disconnect()
     {

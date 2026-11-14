@@ -143,6 +143,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             case FullscreenChanged f:
                 ShowFullscreenBanner = f.On;
                 break;
+            case SessionChanged s:
+                Capture.OnSession(s);
+                break;
             case Error e:
                 Message = e.Text;
                 Diagnostics.OnError();

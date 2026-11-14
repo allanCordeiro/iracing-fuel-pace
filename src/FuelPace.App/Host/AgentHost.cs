@@ -286,6 +286,7 @@ public sealed partial class AgentHost : IDisposable
         Interlocked.Increment(ref _connections);
         _ui.Post(_connectionChanged);
         _scheduler.InvalidateOptions();
+        PublishSession();
     }
 
     private void OnDisconnected()
@@ -294,6 +295,7 @@ public sealed partial class AgentHost : IDisposable
         _simConnected = false;
         _ui.Post(_connectionChanged);
         _scheduler.InvalidateOptions();
+        PublishSession();
     }
 
     /// <summary>UI thread: a new sim connection may show the fullscreen notice again; without the sim nothing is fullscreen.</summary>
@@ -358,7 +360,11 @@ public sealed partial class AgentHost : IDisposable
         {
             if (!h._simConnected) h.OnConnected();
             Volatile.Write(ref h._lastSessionTime, f.SessionTime);
-            if (f.SessionNum != Volatile.Read(ref h._sessionNum)) Volatile.Write(ref h._sessionNum, f.SessionNum);
+            if (f.SessionNum != Volatile.Read(ref h._sessionNum))
+            {
+                Volatile.Write(ref h._sessionNum, f.SessionNum);
+                h.PublishSession(); // the session type of the header line
+            }
             h._recorder?.OnFrame(in f);
         }
 
@@ -366,6 +372,7 @@ public sealed partial class AgentHost : IDisposable
         {
             h._sessionInfo = info;
             h._lastSession = new SessionTap(yaml, version, info);
+            h.PublishSession();
             var rec = h._recorder;
             try { rec?.OnSessionInfo(yaml, version, info); }
             catch (ObjectDisposedException) { /* stopped meanwhile */ }
