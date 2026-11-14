@@ -1,6 +1,7 @@
 using System.Globalization;
 using FuelPace.App.Recording;
 using FuelPace.Core.Diagnostics;
+using FuelPace.Core.Display;
 using FuelPace.Core.Laps;
 using FuelPace.Core.Pipeline;
 using FuelPace.Core.Storage;
@@ -227,9 +228,21 @@ public static class ReplayCli
                 ? $"NÃO FACTÍVEL  alvo {PerLap(s.TargetL)} · mín possível {PerLap(s.FeasibleMinL)}"
                 : $"ALVO  {(s.TargetIsEstimate ? "~" : "")}{PerLap(s.TargetL)} L/v  faltam {N(OverlayText.Laps, s.LapsRemaining)} v";
             w.WriteLine($"  {target} {seal}");
-            Span<char> ins = stackalloc char[160];
-            int len = OverlayText.Insight(in s.Insight, pipeline.CarShort, pipeline.TrackShort, ins, out _);
-            if (len > 0) w.WriteLine($"  {new string(ins[..len])}");
+            // The v3 decision block (PRD v3 §5.1), as the overlay builds it.
+            var v = pipeline.Overlay.ReadView();
+            if (v.Decision != DecisionKind.None)
+            {
+                Span<char> buf = stackalloc char[16];
+                string value = new(buf[..NumberFormat.Fixed(v.DecisionValue, v.Decision == DecisionKind.Economize ? 2 : 1, buf)]);
+                string line = v.Decision switch
+                {
+                    DecisionKind.Economize => $"ECONOMIZE {value} L/v",
+                    DecisionKind.Ok => $"OK  folga {value} L",
+                    _ => $"PIT  faltam {value} L",
+                };
+                if (v.ComplementPct != 0) line += " " + new string(buf[..NumberFormat.Percent(v.ComplementPct, buf)]);
+                w.WriteLine($"  {line}");
+            }
         }
 
         public void Summary(ProfileDocument? doc)

@@ -148,7 +148,7 @@ public class OverlayViewModelTests
     static DrawList Draw(in GlanceView v)
     {
         var d = new DrawList();
-        GlanceLayout.Build(in v, new OverlayViewOptions(1, 0.6, 1, false, false, false, false, "Ctrl+Shift+F", 0, 0), new FixedMetricsMeasurer(), d);
+        GlanceLayout.Build(in v, new OverlayViewOptions(1, 0.6, 1, false, false, false, "Ctrl+Shift+F", 0, 0), new FixedMetricsMeasurer(), d);
         return d;
     }
 

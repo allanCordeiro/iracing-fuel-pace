@@ -3,8 +3,7 @@ using FuelPace.Core.Display;
 namespace FuelPace.App.Overlay;
 
 /// <summary>
-/// PRD v3 §4.2 palette (and the v3 mocks). Standalone on purpose: the v2.1 <see cref="OverlayTheme"/> goes away with the
-/// v2.1 layout at integration, so the colors the v3 layout shares with it (panel, text, edit chrome) are repeated here.
+/// PRD v3 §4.2 palette (and the v3 mocks), with the panel, text and edit-chrome colours kept from v2.1.
 /// </summary>
 public static class GlanceTheme
 {

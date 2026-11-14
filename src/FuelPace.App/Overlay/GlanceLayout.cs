@@ -4,7 +4,7 @@ namespace FuelPace.App.Overlay;
 
 /// <summary>
 /// PRD v3 §4 and §6: lays the v3 overlay out as a <see cref="DrawList"/> from a <see cref="GlanceView"/> (300 px wide at
-/// 1x; Scale × DpiScale for the panel, DpiScale only for the edit chrome, as <see cref="OverlayLayout"/>). Lives in App,
+/// 1x; Scale × DpiScale for the panel, DpiScale only for the edit chrome, as in v2.1). Lives in App,
 /// next to the DrawList and the text measurer, so the geometry is tested on Linux. Zero allocation once warmed up.
 /// </summary>
 /// <remarks>
@@ -454,7 +454,7 @@ public static class GlanceLayout
             return px - PillGap * k;
         }
 
-        // ---- edit chrome (copied from the v2.1 OverlayLayout; the box wraps the panel and the pills, PRD v3 §6.6) ----
+        // ---- edit chrome (as in v2.1; the box wraps the panel and the pills, PRD v3 §6.6) ----
 
         readonly float EditChrome(float ox, float oy, float pw, float boxH, float bottom, ref float width)
         {

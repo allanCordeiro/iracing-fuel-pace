@@ -118,10 +118,10 @@ public sealed class SettingsRenderingTests
     {
         Sta.Run(() =>
         {
-            var p = OverlayPreviews.All[0];
+            var p = GlancePreviews.All[0];
             var list = new DrawList();
-            var s = p.State;
-            OverlayLayout.Build(in s, OverlayPreviews.Car, OverlayPreviews.Track, p.Options, new WpfTextMeasurer(EmbeddedFonts.Shared), list);
+            var v = p.View;
+            GlanceLayout.Build(in v, p.Options, new WpfTextMeasurer(EmbeddedFonts.Shared), list);
             var e = new WpfDrawListRenderer { List = list };
             e.Measure(new Size(1000, 1000));
             Assert.Equal(list.Size.W, e.DesiredSize.Width, 2);

@@ -14,7 +14,7 @@ public sealed class GlanceLayoutTests
 
     static OverlayViewOptions Opts(double scale = 1, double bg = 0.6, double content = 1, bool pace = false, bool edit = false,
         bool debug = false, double dpi = 1) =>
-        new(scale, bg, content, pace, true, edit, debug, "Ctrl+Shift+F", 1840, 980, dpi);
+        new(scale, bg, content, pace, edit, debug, "Ctrl+Shift+F", 1840, 980, dpi);
 
     // V3-3 values (PRD v3 §10)
     internal static GlanceView Red() => new()
@@ -682,6 +682,9 @@ public sealed class GlanceLayoutTests
         Assert.Equal(11f, Text(d, "MODO EDIÇÃO").SizePx);
         Assert.True(Has(d, "X 1840 · Y 980 · escala 200%"));
         Assert.True(Has(d, "Ctrl+Shift+F"));
+        Assert.True(Has(d, " trava e volta ao modo click-through"));
+        Assert.True(Has(d, "arraste para mover · puxe um canto para redimensionar"));
+        Assert.Contains(cmds, c => c.Kind == CommandKind.FillRoundedRect && c.Color == new Rgba(0x1E, 0x6B, 0xD6, 255) && c.Rect.W > 200); // banner
         Assert.True(Text(d, "X 1840 · Y 980 · escala 200%").BaselineY > pillsBottom);
     }
 
@@ -762,7 +765,10 @@ public sealed class GlanceLayoutTests
     {
         var v = Red(); v.BarMarkerQ = 20;
         var svg = SvgRenderer.Render(Build(v));
+        Assert.StartsWith("<svg", svg);
         Assert.Contains("<polygon", svg);
         Assert.Contains("ECONOMIZE", svg);
+        Assert.Contains("JetBrains Mono", svg);
+        Assert.EndsWith("</svg>", svg.TrimEnd());
     }
 }

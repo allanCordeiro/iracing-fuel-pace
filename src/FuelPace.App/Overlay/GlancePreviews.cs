@@ -118,7 +118,7 @@ public static class GlancePreviews
     }
 
     static OverlayViewOptions Options(double scale = 1, bool edit = false) =>
-        new(scale, 0.6, 1, false, false, edit, false, "Ctrl+Shift+F", 1840, 980);
+        new(scale, 0.6, 1, false, edit, false, "Ctrl+Shift+F", 1840, 980);
 
     /// <summary>The preview as SVG over the game-scene backdrop, with the deterministic test metrics.</summary>
     public static string Svg(GlancePreview p)

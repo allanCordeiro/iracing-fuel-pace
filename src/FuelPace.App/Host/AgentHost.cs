@@ -830,8 +830,7 @@ public sealed partial class AgentHost : IDisposable
 
     /// <summary>The panel is drawn at <paramref name="scale"/> × <paramref name="dpi"/>, the edit chrome at <paramref name="dpi"/>.</summary>
     private OverlayViewOptions ViewOptions(AppSettings s, double scale, bool edit, double dpi) => new(
-        scale, s.Overlay.BackgroundOpacity, s.Overlay.ContentOpacity, s.Overlay.ShowPaceLine, false, // the insight line is gone from the settings; integration swaps this layout for the v3 one
-       
+        scale, s.Overlay.BackgroundOpacity, s.Overlay.ContentOpacity, s.Overlay.ShowPaceLine,
         edit, _debugMode, s.Hotkeys.ToggleEdit, s.Overlay.OffsetX, s.Overlay.OffsetY, dpi);
 
     private static int Px(float v) => (int)Math.Round(v, MidpointRounding.AwayFromZero);

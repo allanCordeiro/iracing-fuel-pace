@@ -439,7 +439,7 @@ public sealed partial class OverlayViewModel : ObservableObject
         var list = new DrawList();
         var edit = Hotkey.TryParse(ToggleEdit.Text, out var k) ? k.ToString() : HotkeySettings.DefaultToggleEdit;
         var options = new OverlayViewOptions(ScalePercent / 100.0, BackgroundOpacityPercent / 100.0, ContentOpacityPercent / 100.0,
-            ShowPaceLine, false, false, false, edit, 0, 0);
+            ShowPaceLine, false, false, edit, 0, 0);
         // The overlay's own builder over the "azul" mock: the Layout options show at once. The reserve stays the mock's
         // (it is not a Layout option, and the sample numbers are the V3-3 ones); the red complement has nothing to show on blue.
         var cfg = GlancePreviews.SampleConfig with

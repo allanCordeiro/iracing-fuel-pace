@@ -2,7 +2,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using FuelPace.Agent.Overlay;
 using FuelPace.App.Overlay;
-using FuelPace.Core.Strategy;
+using FuelPace.Core.Display;
 using Vortice.DCommon;
 using Vortice.Direct2D1;
 using Vortice.Direct3D;
@@ -85,7 +85,7 @@ internal static partial class Com
 
 public sealed class RenderTests
 {
-    const int Padding = 40; // around the overlay in the PNG, as in docs/overlay-preview
+    const int Padding = 40; // around the overlay in the PNG, as in docs/v3/preview
 
     static string RepoRoot()
     {
@@ -141,12 +141,21 @@ public sealed class RenderTests
         return (src.R * a + dst.R * (1 - a), src.G * a + dst.G * (1 - a), src.B * a + dst.B * (1 - a));
     }
 
-    static DrawList Build(OverlayPreview p, double dpi, ITextMeasurer m)
+    static DrawList Build(GlancePreview p, double dpi, ITextMeasurer m)
     {
-        var s = p.State;
+        var v = p.View;
         var d = new DrawList();
-        OverlayLayout.Build(in s, OverlayPreviews.Car, OverlayPreviews.Track, p.Options with { DpiScale = dpi }, m, d);
+        GlanceLayout.Build(in v, p.Options with { DpiScale = dpi }, m, d);
         return d;
+    }
+
+    static void AssertPixel(byte[] px, int w, int x, int y, (double R, double G, double B) expected, string what)
+    {
+        var got = Pixel(px, w, x, y);
+        what = $"{what} at ({x},{y}): got {got}, expected {expected}";
+        Assert.True(Math.Abs(got.R - expected.R) <= 8, what);
+        Assert.True(Math.Abs(got.G - expected.G) <= 8, what);
+        Assert.True(Math.Abs(got.B - expected.B) <= 8, what);
     }
 
     [Fact]
@@ -157,9 +166,9 @@ public sealed class RenderTests
         using var warp = new WarpTarget(fonts);
         string dir = Path.Combine(RepoRoot(), "artifacts", "renders");
         Directory.CreateDirectory(dir);
-        Assert.Equal(9, OverlayPreviews.All.Count);
+        Assert.Equal(9, GlancePreviews.All.Count);
 
-        foreach (var p in OverlayPreviews.All)
+        foreach (var p in GlancePreviews.All)
             foreach (int dpi in new[] { 1, 2 })
             {
                 var list = Build(p, dpi, measurer);
@@ -174,21 +183,19 @@ public sealed class RenderTests
                 for (int i = 3; i < px.Length; i += 4) if (px[i] != 0) painted++;
                 Assert.True(painted > w * h / 4, $"{p.Name}@{dpi}x: only {painted} of {w * h} pixels painted");
 
-                if (p.State.State != SignalState.Inactive)
+                // Composed over black (premultiplied bytes are exactly that). The panel's top padding holds nothing else.
+                var rounded = new List<DrawCommand>();
+                foreach (var c in list.Commands) if (c.Kind == CommandKind.FillRoundedRect) rounded.Add(c);
+                float k = (float)(p.Options.Scale * dpi);
+                var panel = rounded[0].Rect;
+                var panelColor = Over((0, 0, 0), GlanceTheme.Panel(p.Options.BackgroundOpacity));
+                AssertPixel(px, w, (int)(panel.X + panel.W / 2), (int)(panel.Y + 3 * k), panelColor, $"{p.Name}@{dpi}x panel");
+                if (p.View.Mode == GlanceMode.Full)
                 {
-                    // The ALVO row is the second rounded fill (after the panel). Sample its vertical centre in the strip
-                    // left of the "ALVO" label, composed over black (premultiplied bytes are exactly that).
-                    var rows = new List<DrawCommand>();
-                    foreach (var c in list.Commands) if (c.Kind == CommandKind.FillRoundedRect) rows.Add(c);
-                    var row = rows[1].Rect;
-                    float k = (float)(p.Options.Scale * dpi);
-                    int sx = (int)(row.X + 3.5f * k), sy = (int)(row.Y + row.H / 2);
-                    var expected = Over(Over((0, 0, 0), OverlayTheme.Panel(p.Options.BackgroundOpacity)), OverlayTheme.For(p.State.State).RowBg);
-                    var got = Pixel(px, w, sx, sy);
-                    string what = $"{p.Name}@{dpi}x ALVO row at ({sx},{sy}): got {got}, expected {expected}";
-                    Assert.True(Math.Abs(got.R - expected.R) <= 8, what);
-                    Assert.True(Math.Abs(got.G - expected.G) <= 8, what);
-                    Assert.True(Math.Abs(got.B - expected.B) <= 8, what);
+                    // The F1 decision block is the second rounded fill: sample its vertical centre in the strip left of the selo.
+                    var block = rounded[1].Rect;
+                    AssertPixel(px, w, (int)(block.X + 3.5f * k), (int)(block.Y + block.H / 2),
+                        Over(panelColor, GlanceTheme.For(p.View.Decision).BlockBg), $"{p.Name}@{dpi}x F1 block");
                 }
             }
     }
@@ -199,7 +206,7 @@ public sealed class RenderTests
         using var fonts = new DWriteFonts();
         var measurer = new DWriteTextMeasurer(fonts);
         using var warp = new WarpTarget(fonts);
-        var list = Build(OverlayPreviews.All[0], 1, measurer);
+        var list = Build(GlancePreviews.All[0], 1, measurer);
         int w = (int)Math.Ceiling(list.Size.W), h = (int)Math.Ceiling(list.Size.H);
         warp.Render(list, w, h);
         long created = warp.Renderer.LayoutsCreated;
