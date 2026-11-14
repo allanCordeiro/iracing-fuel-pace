@@ -409,7 +409,7 @@ public class OverlayViewModelTests
     [InlineData(0.01, 0.05)]
     [InlineData(0.9, 0.50)]
     [InlineData(0.234, 0.23)]
-    [InlineData(double.NaN, 0.05)]
+    [InlineData(double.NaN, 0.20)]
     public async Task Delta_bar_scale_is_clamped_to_005_050_in_steps_of_001(double typed, double expected)
     {
         var r = new SettingsRig();
@@ -417,6 +417,7 @@ public class OverlayViewModelTests
         r.Overlay.DeltaBarScale = typed;
         Assert.Equal(expected, r.Overlay.DeltaBarScale);
         r.Sched.FireAll();
+        if (expected == 0.20) { Assert.Empty(r.Conn.Of<UpdateSettings>()); return; } // NaN lands on the default: nothing changed, nothing sent
         Assert.Equal(expected, Assert.Single(r.Conn.Of<UpdateSettings>()).Settings.Overlay.DeltaBarScaleLpl);
     }
 

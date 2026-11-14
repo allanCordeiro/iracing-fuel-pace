@@ -366,4 +366,24 @@ public sealed class SettingsStoreTests : IDisposable
         File.WriteAllText(SettingsPath, """{"schemaVersion":2,"overlay":{"redComplement":""" + json + "}}");
         Assert.Equal(expected, new SettingsStore(_dir).Load().Overlay.RedComplement);
     }
+
+    [Fact]
+    public void A_failed_migration_write_keeps_the_original_file_and_returns_the_migrated_settings()
+    {
+        var original = File.ReadAllBytes(RepoFile("tests", "fixtures", "settings", "v1-real.json"));
+        File.WriteAllBytes(SettingsPath, original);
+        // A directory where the atomic write puts its temp file: the write fails with UnauthorizedAccessException on Linux and Windows alike.
+        Directory.CreateDirectory(SettingsPath + ".tmp");
+        var store = new SettingsStore(_dir);
+
+        var s = store.Load();
+
+        Assert.Equal(2, s.SchemaVersion);
+        Assert.Equal(1, store.LastLoadMigratedFrom);
+        Assert.Equal(1804, s.Overlay.OffsetX);
+        Assert.Equal(1.66, s.Overlay.Scale);
+        Assert.True(s.Overlay.ShowDeltaBar);
+        Assert.Equal(original, File.ReadAllBytes(SettingsPath));
+        Assert.False(File.Exists(SettingsPath + ".corrupt"));
+    }
 }

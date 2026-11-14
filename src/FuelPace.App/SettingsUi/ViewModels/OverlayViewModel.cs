@@ -282,8 +282,8 @@ public sealed partial class OverlayViewModel : ObservableObject
 
     partial void OnDeltaBarScaleChanged(double value)
     {
-        // 0.01 steps, like what the Agent normalizes to; a NaN typed in the field lands on the minimum.
-        var c = Math.Round(Clamp(value, OverlaySettings.MinDeltaBarScale, OverlaySettings.MaxDeltaBarScale), 2);
+        // 0.01 steps and the same NaN default as OverlaySettings.Normalize.
+        var c = Math.Round(OverlaySettings.Clamp(value, OverlaySettings.MinDeltaBarScale, OverlaySettings.MaxDeltaBarScale, 0.20), 2);
         if (c != value) { DeltaBarScale = c; return; }
         OnPropertyChanged(nameof(DeltaBarScaleText));
         Edited();
