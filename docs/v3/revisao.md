@@ -160,3 +160,59 @@ Na ligação com o resto do app também não achei problema:
 | Sem revisão por tarefa da integração (tarefa 5) | Coberta por esta revisão. |
 
 **Antes do merge:** só o B1. Os itens do ledger não exigem correção; o N2 é barato e cai no mesmo trecho.
+
+## Ciclo 2
+
+Base: `docs/v3/revisao.md` acima, relatório do corretor (`onda3-fix-report.md`), diff `668df4e..abe8d1f` e as novas
+renderizações `cycle2-inativo.png` e `cycle2-pit.png` (comparada com `m-V3Pit.png`). Só olhei o diff da correção, à procura
+de quebras novas; o código fora dele não foi revisto de novo.
+
+Rodei um conjunto focado para tirar uma dúvida: se expor a média no inativo quebraria a PERF-06 com o carro parado no box.
+Foram `AgentHostFixtureTests`, os testes com `Inactive` no nome e `GlancePreviewsTests`, todos em `FuelPace.App.Tests`,
+com a fixture Zolder presente: 16 de 16 aprovados. O relatório do corretor dá 807 de 808 aprovados na suíte Linux (o
+ignorado é um teste só de Windows) e build sem avisos.
+
+### Vereditos
+
+| Item | Veredito | Observação |
+|---|---|---|
+| B1 · INATIVO sem autonomia | **RESOLVIDO** | Ver abaixo. |
+| N2 · `dá 0 v` abaixo da reserva | **RESOLVIDO** | `GlanceViewBuilder`: com `MeanL > 0` e resultado finito, `clamp(floor((C − res)/MÉD), 0, 999)`. Média ou combustível desconhecidos continuam −1 (`Laps_clamps_and_noise`). |
+| N3 · `+0.0 s` | **RESOLVIDO** | Segundos que arredondam para 0,0 deixam `ComplementSec` em NaN e voltam para `%`; 0,05 continua em `+0.1 s` (`Complement_in_seconds_that_rounds_to_zero_falls_back_to_pct`). |
+| N4 · `alvo {A} ·` a 12 px | **RESOLVIDO** | `PitTargetFont = 12`. A tela 11 continua fiel (`cycle2-pit.png`): `74.0 L · dá 31 v   alvo 2.16 · MÍN 2.23` e `faltam 34`; painel com 115 px. Efeito colateral aceitável: só o modelo mais largo do PIT (`100.0 L` com `~`) cai para o tamanho de reserva (≈ 11 px), o que a regra dos dois tamanhos já previa. |
+| N7 · comentário do medidor | **RESOLVIDO** | `DWriteTextMeasurer.cs:12` não cita mais a busca de corte do insight. |
+| N10 · V3-7 com fontes reais | **RESOLVIDO** (pendente de CI) | `RenderTests.Widest_values_stay_inside_the_panel_with_the_real_fonts`: os 7 casos em 1× e 2,5×, com `DWriteTextMeasurer` e as fontes embutidas, mesmas verificações de borda e sobreposição. Compila no Linux, mas só roda no windows-latest. A primeira execução de CI é a primeira execução dele; se falhar, é um estouro de texto real e precisa de correção. |
+
+**B1 em detalhe.**
+
+- **Engine** (`FuelStrategyEngine.cs`):
+  - `myPace`, `MeanFromBaseline`, `MeanL` e `PaceS` foram movidos para antes das saídas antecipadas não elétricas, com as mesmas expressões, e saíram do lugar antigo.
+  - Nenhuma expressão nova, e nada que entra em `L_rest`, alvo, factibilidade, estado, histerese ou insight mudou de valor: `myPace` já era calculado antes de `LapsRemaining`, e `MeanL` antes de `refL`.
+  - `AutonomyLaps` e `AutonomyMin` continuam NaN no inativo, e o caminho do carro elétrico não mudou.
+  - **Conclusão:** é exposição de valor, permitida pela §8.2, e não mudança de fórmula.
+- **Teste da v2.1 alterado:** `Inactive_shows_only_fuel` virou `Inactive_shows_only_fuel_and_the_autonomy_inputs`.
+  - A asserção da v2.1 era `MeanL = NaN` no inativo, que guardava o visual "só COMB" da v2.1 §7.4. A §6.5 da v3 substitui esse visual.
+  - Não é teste de fórmula, então não é o caso da §11.1, item 2c.
+  - O teste novo é mais forte: cobre média do stint, média da baseline e ausência de média, e confere que todo o resto continua NaN.
+  - **Conclusão:** alteração legítima; citar no PR.
+- **Layout:** `CompactFuel` omite `dá N v` quando `LapsPossible < 0`, então sem sim, carro elétrico ou primeira volta sem MÉD aparece só o combustível (`Unknown_autonomy_shows_only_the_fuel`).
+- **Prévia:** `inativo` agora sai do builder sobre `InactiveInput`, e `The_inactive_preview_is_what_the_engine_and_builder_make` confere engine, builder e prévia. `cycle2-inativo.png` mostra `74.0 L … dá 31 v · 41 min`, esmaecido, com uma faixa, como pede a §6.5. A ordem dos inicializadores estáticos (`All` depois de `SampleConfig` e `InactiveInput`) está correta.
+- **Ponta a ponta:** `GlanceViewBuilderTests.Inactive_through_the_engine_keeps_laps_and_minutes_possible` e `GlanceLayoutTests.Inactive_through_the_engine_shows_fuel_and_autonomy`.
+
+### Quebras novas
+
+Não há bloqueante novo (nenhum B2). Três observações não bloqueantes:
+
+- **N14:** no inativo, a `Version` agora também anda quando a MÉD muda, e o `refL` dos diagnósticos `StateChanged` e `OverlayVersion` passa a ser a MÉD em vez de NaN. Durante um reabastecimento no box, `dá N v` muda e redesenha (no máximo 10/s), o que é a informação que a §6.5 pede. Com o carro parado e o tanque estável continuam 0 redesenhos (`AgentHostFixtureTests` verde).
+- **N15:** com combustível abaixo da reserva, o compacto mostra `dá 0 v · 0 min`. É coerente com o N2.
+- **N16:** o teste de N10 ainda não rodou (só Windows). Acompanhar o primeiro CI antes do merge.
+
+### Veredito final
+
+**Aprovado.** Os bloqueantes estão resolvidos; o merge fica sujeito ao CI verde no windows-latest, que vai rodar o
+`RenderTests.Widest_values_stay_inside_the_panel_with_the_real_fonts` pela primeira vez.
+
+**Para a descrição do PR:**
+- os itens N1, N5, N6, N8, N9, N11, N12 e N13 do ciclo 1;
+- a troca do teste da v2.1 `Inactive_shows_only_fuel`;
+- os itens N14 e N16 deste ciclo.
