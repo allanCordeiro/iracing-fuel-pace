@@ -81,7 +81,11 @@ public static class GlanceViewBuilder
                         v.ComplementPct = (sbyte)-Math.Min(Math.Max(1, pct), 127);
                     }
                     if (save > 0 && cfg.ComplementSeconds && !double.IsNaN(s.FuelVsTimeB))
-                        v.ComplementSec = F(R1(-s.FuelVsTimeB * save));
+                    {
+                        // |s| < 0.05 would show "+0.0 s", which says nothing: the % complement stays instead
+                        double sec = R1(-s.FuelVsTimeB * save);
+                        if (sec != 0) v.ComplementSec = F(sec);
+                    }
                 }
                 v.TargetLabel = TargetLabel.Alvo;
                 break;

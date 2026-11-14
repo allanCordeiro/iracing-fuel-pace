@@ -353,6 +353,18 @@ public class GlanceViewBuilderTests
     }
 
     [Fact]
+    public void Complement_in_seconds_that_rounds_to_zero_falls_back_to_pct()
+    {
+        // ref 2.38, A 2.37 → 0.01 L × 2 s/L = 0.02 s → "+0.0 s" says nothing: the % complement (−1%) shows instead
+        var s = St(SignalState.Red, fuel: 74, lr: 30, proj: 2.38, last: 2.38, mean: 2.37, target: 2.37, lim: 2.23, b: -2);
+        var v = Build(s, Cfg with { ComplementSeconds = true });
+        Assert.True(float.IsNaN(v.ComplementSec));
+        Assert.Equal(-1, v.ComplementPct);
+        s.FuelVsTimeB = -5; // 0.05 s rounds half away from zero to 0.1 s: seconds again
+        Assert.Equal(0.1f, Build(s, Cfg with { ComplementSeconds = true }).ComplementSec);
+    }
+
+    [Fact]
     public void Complement_pct_is_at_least_one()
     {
         // ref 2.38, A 2.37 → 0.01 → 0.42% → minimum 1
