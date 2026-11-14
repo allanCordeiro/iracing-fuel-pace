@@ -467,7 +467,7 @@ public sealed class GlanceLayoutTests
         var val = Text(d, "2.23");
         var laps = Text(d, "faltam 34");
         Assert.Equal((12f, 12f, 12f), (fuel.SizePx, rest.SizePx, laps.SizePx));
-        Assert.Equal((FontRole.Value, 11f, Label), (alvo.Role, alvo.SizePx, alvo.Color));
+        Assert.Equal((FontRole.Value, 12f, Label), (alvo.Role, alvo.SizePx, alvo.Color)); // PRD v3 §5.4: 12 px
         Assert.Equal((15f, 8f), (val.SizePx, min.SizePx));
         // line 1: fuel and laps possible on the left; alvo · MÍN value on the right
         Assert.True(rest.Continuation);
@@ -524,8 +524,14 @@ public sealed class GlanceLayoutTests
         Assert.Equal(fallback, AutonomySize(stint));
         Assert.Equal(fallback, AutonomySize(Widest(Blue())));
 
-        // PIT: the widest template fits its two-line arrangement, so it stays at 12 px
-        Assert.Equal(12f, AutonomySize(Widest(Pit())));
+        // PIT: with "alvo ~2.30 ·" at the PRD's 12 px, only the widest template (100.0 L, the "~") overflows its two-line
+        // arrangement; it takes its own fallback, and the grey "alvo" shrinks with the left text
+        var widePit = Widest(Pit());
+        float pitFallback = AutonomySize(widePit);
+        Assert.InRange(pitFallback, 9f, 11.99f);
+        Assert.Equal(pitFallback, Text(Build(widePit), "alvo ~2.16 ·").SizePx, 0.01);
+        var pit74 = Pit(); pit74.IsEstimate = true; pit74.LapsRemaining = 999; // 74.0 L: still the full size
+        Assert.Equal(12f, AutonomySize(pit74));
     }
 
     [Fact]

@@ -42,7 +42,7 @@ public static class GlanceLayout
     const float SupportLabelFont = 8, SupportLabelSpacing = 0.1f, SupportFont = 13, SupportLabelGap = 5, SupportGroupGap = 17;
 
     // divider + F4 · autonomy
-    const float DividerH = 1, DividerGap = 4, AutonomyFont = 12, TargetFont = 15, TargetGap = 4, PitTargetFont = 11, AutonomyMinGap = 8;
+    const float DividerH = 1, DividerGap = 4, AutonomyFont = 12, TargetFont = 15, TargetGap = 4, PitTargetFont = 12, AutonomyMinGap = 8;
     const float AutonomyH = TargetFont;
 
     // compact
