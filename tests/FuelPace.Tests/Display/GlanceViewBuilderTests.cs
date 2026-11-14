@@ -374,7 +374,10 @@ public class GlanceViewBuilderTests
     public void Laps_clamps_and_noise()
     {
         Assert.Equal(-1, Build(St(SignalState.NoBaseline, fuel: 74, mean: 0)).LapsPossible);        // infinity
-        Assert.Equal(-1, Build(St(SignalState.NoBaseline, fuel: 0.2, mean: 2.4)).LapsPossible);     // negative
+        Assert.Equal(0, Build(St(SignalState.NoBaseline, fuel: 0.2, mean: 2.4)).LapsPossible);      // below the reserve: 0, not "—"
+        Assert.Equal(0, Build(St(SignalState.NotFeasible, fuel: 0.3, lr: 2, last: 2.38, mean: 2.37, target: N, lim: 2.23)).LapsPossible);
+        Assert.Equal(-1, Build(St(SignalState.NoBaseline, fuel: 0.2)).LapsPossible);                // unknown mean stays "—"
+        Assert.Equal(-1, Build(St(SignalState.NoBaseline, mean: 2.4)).LapsPossible);                // unknown fuel too
         Assert.Equal(999, Build(St(SignalState.NoBaseline, fuel: 74, mean: 0.01)).LapsPossible);
         Assert.Equal(20, Build(St(SignalState.NoBaseline, fuel: 74, lr: 20.0000000001, mean: 2.4)).LapsRemaining); // fp noise
         Assert.Equal(21, Build(St(SignalState.NoBaseline, fuel: 74, lr: 20.01, mean: 2.4)).LapsRemaining);

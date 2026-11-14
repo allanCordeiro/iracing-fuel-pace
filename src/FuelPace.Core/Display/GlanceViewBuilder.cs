@@ -47,9 +47,10 @@ public static class GlanceViewBuilder
             LastLapTimeS = F(R2(s.LastLapTimeS)), MeanLapTimeS = F(R2(s.MeanLapTimeS)), BaselineLapTimeS = F(R2(s.BaselineLapTimeS)),
         };
 
+        // Below the reserve with a known mean the fuel gives 0 laps, which says more than "—"; an unknown mean or fuel stays -1.
         double possible = Math.Floor((c - res) / s.MeanL);
-        if (!double.IsNaN(possible) && !double.IsInfinity(possible) && possible >= 0)
-            v.LapsPossible = (short)Math.Min(possible, CountCap);
+        if (s.MeanL > 0 && !double.IsNaN(possible) && !double.IsInfinity(possible))
+            v.LapsPossible = (short)Math.Clamp(possible, 0, CountCap);
 
         if (s.Recording) v.Pills |= StatusPills.Rec;
         if (s.BopMismatch) v.Pills |= StatusPills.BopMismatch;
