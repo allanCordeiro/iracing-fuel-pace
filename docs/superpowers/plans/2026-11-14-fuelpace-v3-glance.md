@@ -168,3 +168,52 @@ sem ele, mostra %") e "Mostrar MÉD" (caixa). Siga os padrões do `OverlayViewMo
 edição pendente, `NumberInput` aceita vírgula ou ponto) e os testes existentes em `OverlayViewModelTests.cs`. Onde o
 view model monta `OverlayViewOptions` para a prévia, passe `false` no `ShowInsightLine` (a integração troca a prévia
 pelo layout v3).
+
+## Task 5: Onda 2 · Integração
+
+**Onde:** direto na `feat/v3-glance` (as frentes A, B, C e D já estão mescladas). Pode alterar qualquer arquivo. Spec: PRD v3
+inteiro; decisões: `docs/v3/decisoes*.md`; pendências das frentes: `docs/v3/contratos-pendentes-*.md` e as notas abaixo.
+
+**Entrega:**
+
+1. **Ligar builder → layout no Agent (PRD §8.4).** `GlanceConfig` vem das configurações: `ReserveL = Strategy.ReserveL` (a
+   mesma reserva do engine), `BarScaleL = Overlay.DeltaBarScaleLpl`, `ComplementSeconds = Overlay.RedComplement == Seconds`,
+   `ShowBar = Overlay.ShowDeltaBar`, `ShowAvg = Overlay.ShowAvgInSupport`. Desenho recomendado (decida e registre se fizer
+   diferente): o `TelemetryPipeline` recebe a `GlanceConfig` (como já recebe a estratégia) e, logo depois do
+   `FuelStrategyEngine.Compute`, roda o `GlanceViewBuilder` (thread de estratégia, 10 Hz); o `OverlayStatePublisher` guarda o
+   `OverlayState` e o `GlanceView`, e a `Version` só avança quando o `GlanceView` muda por valor (a dirty flag da v3; hoje é
+   `OverlayState.VisibleEquals`). O `AgentHost.Render` (thread de UI) monta o `GlanceView` do estado publicado com a config atual
+   (o mesmo builder; barato e sem alocação; cobre também o estado sem sim, `NoSim`, e uma mudança de config sem tick novo) e
+   desenha com `GlanceLayout.Build`. Uma mudança de configuração atualiza a config do pipeline e chama `InvalidateOptions`.
+   `AutoHidePolicy` continua com o estado do engine. Zero alocação no tick (os testes de `HotPathAllocationTests` têm que seguir
+   com 0 bytes).
+2. **Prévia do Settings:** o `OverlayViewModel` desenha a prévia com o `GlanceLayout` e um `GlanceView` de exemplo (o `azul`
+   de `GlancePreviews`), respeitando na hora as quatro opções da seção Layout (sem barra, sem MÉD; o complemento só aparece no
+   vermelho, então a prévia pode continuar no azul).
+3. **Remover a v2.1 do overlay:** `OverlayLayout.cs` (mova `OverlayViewOptions` para um arquivo próprio e tire
+   `ShowInsightLine`), `OverlayTheme.cs` se ficar sem uso, `OverlayPreviews.cs`, `OverlayText.Insight` (o gerador de texto da
+   §7.5) e o que só servia a eles; os testes correspondentes saem ou migram para o v3. Ruling do controlador: o `Insight` do
+   engine (valor, não texto) **fica**, porque alimenta o evento de diagnóstico `InsightChanged` usado no feedback loop; nenhuma
+   fórmula muda. Os testes Windows que usam `OverlayLayout`/`OverlayPreviews` (`RenderTests.cs`, `OverlayWindowTests.cs`,
+   `SettingsRenderingTests.cs`) passam a usar `GlanceLayout`/`GlancePreviews`, mantendo o que cada teste verifica. A pasta
+   `docs/overlay-preview` (SVGs da v2.1) sai.
+4. **Log da migração de settings (pendência da frente D):** `src/FuelPace.Agent/Program.cs` faz um `SettingsStore.Load`
+   antes de criar o `AgentHost` (para escolher o backend) e é esse load que migra o arquivo; o `AgentHost` nunca vê
+   `LastLoadMigratedFrom`. Faça a informação chegar ao log do Agent (`settings`, nível Info: "settings.json migrated from schema
+   1 to 2"; corrompido: Warn), por exemplo passando o resultado do primeiro load ao host ou fazendo o host carregar primeiro.
+   Teste no `AgentHostTests` ou equivalente.
+5. **PERF-06 com a fixture (V3-8):** um teste que replaya `tests/fixtures/ligierjsp320_zolder_alt_2026-10-29_20-03-40.ibt` a 1×
+   (relógio manual, como os testes do `AgentHostTests` com `FakeSource`) e confere média ≤ 10 redesenhos/s e 0 redesenhos/s com o
+   carro parado no box; pule com o mesmo mecanismo dos outros testes de fixture quando o arquivo não existir (CI).
+6. **Previews:** `dotnet run --project tools/FuelPace.Preview` regenera `docs/v3/preview/`; um teste confere que o
+   `GlanceViewBuilder` com as entradas do V3-3 produz exatamente os `GlanceView` de `GlancePreviews` (`vermelho`, `azul`, `pit`,
+   `compacto`).
+7. **Documentação:** junte `docs/v3/decisoes-*.md` em `docs/v3/decisoes.md` e `contratos-pendentes-*.md` em
+   `contratos-pendentes.md` (com a resolução de cada item), apagando os arquivos por frente. Atualize o LEIA-ME
+   (`docs/windows-testing.md`: seções que descrevem o overlay, os estados, a linha de insight e o checklist da seção 10) para a
+   v3, e crie `CHANGELOG.md` na raiz com a entrada da v3.
+8. **Benchmark:** o controlador roda o `FuelPace.Bench` depois (não rode: os worktrees dentro de `.claude/` atrapalham o
+   BenchmarkDotNet).
+
+Antes de reportar: `dotnet build FuelPace.sln` (0 avisos) e `dotnet test FuelPace.Linux.slnf` verdes, e os previews
+regenerados sem diferença inesperada. Commits pequenos por item.
