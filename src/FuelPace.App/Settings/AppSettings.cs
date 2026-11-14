@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using FuelPace.Core.Display;
 using FuelPace.Core.Strategy;
 
 namespace FuelPace.App.Settings;
@@ -131,6 +132,11 @@ public sealed record AppSettings
     public HotkeySettings Hotkeys { get; set; } = new();
     public DebugSettings Debug { get; set; } = new();
     public bool StartWithWindows { get; set; }
+
+    /// <summary>PRD v3 §8.4: the display settings of the v3 view. The reserve is the strategy's, so "dá N v" and the folga /
+    /// faltam numbers use the same one as the engine.</summary>
+    public GlanceConfig ToGlanceConfig() => new(Strategy.ReserveL, Overlay.DeltaBarScaleLpl, Overlay.RedComplement == RedComplement.Seconds,
+        Overlay.ShowDeltaBar, Overlay.ShowAvgInSupport);
 
     /// <summary>Clamps every range and replaces unparsable hotkeys with the defaults. Tolerates nulls from a hand-edited file.</summary>
     public AppSettings Normalize() => this with
