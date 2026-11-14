@@ -20,6 +20,6 @@
 <rect x="9" y="67" width="282" height="1" rx="0" fill="#A9B2BD" fill-opacity="0.22"/>
 <text x="253" y="84" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="15" font-weight="700" fill="#F2F4F7">2.30</text>
 <text x="224.04" y="84" xml:space="preserve" font-family="Inter, system-ui, sans-serif" font-size="8" font-weight="600" letter-spacing="0.8" fill="#A9B2BD">ALVO</text>
-<text x="11" y="84" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="12" font-weight="600" fill="#F2F4F7">74.0<tspan font-family="'JetBrains Mono', monospace" font-size="12" font-weight="400" fill="#D5DAE0"> L · dá 31 v · faltam 32</tspan></text>
+<text x="11" y="84" xml:space="preserve" font-family="'JetBrains Mono', monospace" font-size="10.89" font-weight="600" fill="#F2F4F7">74.0<tspan font-family="'JetBrains Mono', monospace" font-size="10.89" font-weight="400" fill="#D5DAE0"> L · dá 31 v · faltam 32</tspan></text>
 </g>
 </svg>

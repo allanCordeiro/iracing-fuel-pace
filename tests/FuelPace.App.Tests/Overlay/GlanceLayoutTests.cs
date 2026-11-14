@@ -428,12 +428,14 @@ public sealed class GlanceLayoutTests
     {
         var d = Build(Red());
         var fuel = Text(d, "74.0");
-        Assert.Equal((FontRole.Value, 600, 12f), (fuel.Role, fuel.Weight, fuel.SizePx));
+        Assert.Equal((FontRole.Value, 600), (fuel.Role, fuel.Weight));
+        // 12 px nominal, shrunk once for the widest template (100.0 L · dá 99 v · faltam 999 next to ~2.30)
+        Assert.InRange(fuel.SizePx, 10f, 12f);
         Assert.Equal(White, fuel.Color);
         Assert.Equal(11f, fuel.X, 0.01);
         var rest = Text(d, " L · dá 31 v · faltam 32");
         Assert.True(rest.Continuation);
-        Assert.Equal((FontRole.Value, 400, 12f), (rest.Role, rest.Weight, rest.SizePx));
+        Assert.Equal((FontRole.Value, 400, fuel.SizePx), (rest.Role, rest.Weight, rest.SizePx));
         Assert.Equal(Secondary, rest.Color);
         Assert.Equal(fuel.X + Width("74.0", fuel), rest.X, 0.01);
         var val = Text(d, "2.30");
@@ -452,25 +454,76 @@ public sealed class GlanceLayoutTests
     }
 
     [Fact]
-    public void Autonomy_row_pit_shows_target_then_min()
+    public void Autonomy_row_pit_takes_two_lines_at_full_size()
     {
         var d = Build(Pit());
+        var p = Panel(d).Rect;
+        Assert.InRange(p.H, 114f, 126f); // screen 11: the second line uses the height the missing bar frees
+        Assert.Equal(Panel(Build(Red())).Rect.H - 18 - 6 + 15 + 6, p.H, 0.01);
+        var fuel = Text(d, "74.0");
+        var rest = Text(d, " L · dá 31 v");
         var alvo = Text(d, "alvo 2.16 ·");
-        Assert.Equal((FontRole.Value, Label), (alvo.Role, alvo.Color));
         var min = Text(d, "MÍN");
         var val = Text(d, "2.23");
-        Assert.Equal((15f, 8f), (val.SizePx, min.SizePx)); // the label and value keep their size
+        var laps = Text(d, "faltam 34");
+        Assert.Equal((12f, 12f, 12f), (fuel.SizePx, rest.SizePx, laps.SizePx));
+        Assert.Equal((FontRole.Value, 11f, Label), (alvo.Role, alvo.SizePx, alvo.Color));
+        Assert.Equal((15f, 8f), (val.SizePx, min.SizePx));
+        // line 1: fuel and laps possible on the left; alvo · MÍN value on the right
+        Assert.True(rest.Continuation);
+        Assert.Equal(fuel.BaselineY, val.BaselineY, 0.01);
+        Assert.Equal(fuel.BaselineY, alvo.BaselineY, 0.01);
         Assert.Equal(289f, val.X + Width("2.23", val), 0.01);
-        Assert.Equal(min.X - 4, alvo.X + Width("alvo 2.16 ·", alvo), 0.01);
         Assert.Equal(val.X - 4, min.X + Width("MÍN", min), 0.01);
-        var rest = Text(d, " L · dá 31 v · faltam 34");
-        // 74.0 L · dá 31 v · faltam 34 + alvo 2.16 · do not fit at 12 / 11 px (the PIT mock wraps): both secondary runs
-        // shrink by the same factor, and no further than needed
-        float f = rest.SizePx / 12;
-        Assert.InRange(f, 0.7f, 0.99f);
-        Assert.Equal(11 * f, alvo.SizePx, 0.01);
-        Assert.Equal(12 * f, Text(d, "74.0").SizePx, 0.01);
-        Assert.Equal(alvo.X - 8, rest.X + Width(" L · dá 31 v · faltam 34", rest), 0.01);
+        Assert.Equal(min.X - 4, alvo.X + Width("alvo 2.16 ·", alvo), 0.01);
+        Assert.True(rest.X + Width(" L · dá 31 v", rest) + 8 <= alvo.X);
+        // line 2: the laps left, under the fuel
+        Assert.Equal((11f, Secondary, false), (laps.X, laps.Color, laps.Continuation));
+        Assert.Equal(fuel.BaselineY + 15 + 6, laps.BaselineY, 0.01);
+        Assert.True(laps.BaselineY < p.Y + p.H - 7);
+        var stint = Pit(); stint.IsStint = true; stint.LapsRemaining = 12;
+        Assert.True(Has(Build(stint), "stint 12"));
+    }
+
+    [Fact]
+    public void Autonomy_font_size_does_not_depend_on_the_values()
+    {
+        foreach (var baseView in new[] { Red(), Blue(), Pit() })
+        {
+            var a = baseView; a.LapsRemaining = 100; a.IsEstimate = false;
+            var b = baseView; b.LapsRemaining = 99; b.IsEstimate = true;
+            var c = baseView; c.LapsRemaining = 999; c.Fuel = 100.0f; c.LapsPossible = 99; c.IsEstimate = true; c.IsStint = true;
+            float Size(GlanceView v)
+            {
+                var d = Build(v);
+                return Texts(d).First(t => t.Cmd.Role == FontRole.Value && t.Cmd.Weight == 600 && t.Cmd.Color == White
+                    && t.Cmd.BaselineY > Panel(d).Rect.Y + 60).Cmd.SizePx;
+            }
+            Assert.Equal(Size(a), Size(b));
+            Assert.Equal(Size(a), Size(c));
+            Assert.Equal(Size(baseView), Size(a));
+        }
+    }
+
+    [Fact]
+    public void Bar_is_drawn_only_for_economize_and_ok()
+    {
+        var pit = Pit(); pit.ShowBar = true; pit.BarMarkerQ = 3; pit.BarGhostQ = 2;
+        var d = Build(pit);
+        Assert.DoesNotContain(d.Commands.ToArray(), c => c.Color == GlanceTheme.BarBlue || c.Color == GlanceTheme.BarGhost);
+        Assert.Equal(Panel(Build(Pit())).Rect.H, Panel(d).Rect.H, 0.01);
+        Assert.Single(Fills(Build(Blue()), GlanceTheme.BarBlue));
+    }
+
+    [Fact]
+    public void Inactive_dimming_does_not_dim_the_edit_handles()
+    {
+        var v = Compact(); v.Mode = GlanceMode.Inactive;
+        var d = Build(v, Opts(edit: true));
+        var handles = d.Commands.ToArray().Where(c => c.Kind == CommandKind.FillRect).ToArray();
+        Assert.Equal(4, handles.Length);
+        Assert.All(handles, h => Assert.Equal(255, h.Color.A));
+        Assert.Equal(128, Text(d, "74.0").Color.A);
     }
 
     [Fact]

@@ -43,7 +43,7 @@ public sealed class GlancePreviewsTests
         Assert.Equal((sbyte)-8, Get("azul").View.BarGhostQ);
 
         var pit = Texts(Get("pit"));
-        foreach (var t in new[] { "PIT", "FALTAM", "2.3", " L · dá 31 v · faltam 34", "alvo 2.16 ·", "MÍN", "2.23" })
+        foreach (var t in new[] { "PIT", "FALTAM", "2.3", " L · dá 31 v", "faltam 34", "alvo 2.16 ·", "MÍN", "2.23" })
             Assert.Contains(t, pit);
         Assert.False(Get("pit").View.ShowBar);
 

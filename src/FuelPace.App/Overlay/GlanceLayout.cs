@@ -96,7 +96,9 @@ public static class GlanceLayout
             float k = _k;
             bool edit = _o.EditMode;
             bool full = v.Mode == GlanceMode.Full, inactive = v.Mode == GlanceMode.Inactive;
-            bool bar = full && v.ShowBar, pace = !inactive && _o.ShowPaceLine;
+            // PRD v3 §5.2: the bar exists only in the blue and red states (no reachable target to centre it on in PIT)
+            bool bar = full && v.ShowBar && (v.Decision is DecisionKind.Economize or DecisionKind.Ok);
+            bool pace = !inactive && _o.ShowPaceLine, twoLine = full && v.TargetLabel == TargetLabel.PitMin;
             if (inactive) _op *= 0.5;
 
             // Panel height (1x)
@@ -106,6 +108,7 @@ public static class GlanceLayout
                 h += BlockH;
                 if (bar) h += Gap + BarH;
                 h += Gap + SupportFont + Gap + DividerH + DividerGap + AutonomyH;
+                if (twoLine) h += Gap + AutonomyH; // PIT: the second F4 line uses the height the missing bar frees
             }
             else
             {
@@ -140,6 +143,7 @@ public static class GlanceLayout
                 top += (DividerH + DividerGap) * k;
                 Autonomy(in v, top);
                 top += AutonomyH * k;
+                if (twoLine) top += (Gap + AutonomyH) * k;
             }
             else
             {
@@ -301,57 +305,71 @@ public static class GlanceLayout
 
         // ---- F4 ----
 
+        /// <summary>
+        /// One line: <c>74.0 L · dá 31 v · faltam 32 … ALVO 2.30</c>. PIT (screen 11) has no bar, and its row does not fit
+        /// one line at full size, so it takes two: <c>74.0 L · dá 31 v … alvo 2.16 · MÍN 2.23</c>, then <c>faltam 34</c>.
+        /// </summary>
         readonly void Autonomy(in GlanceView v, float top)
         {
             float k = _k, bl = top + Asc(FontRole.ValueBold, TargetFont);
             float xl = _x0 + RowInset * k, xr = _right - RowInset * k;
             bool target = v.TargetLabel != TargetLabel.None, pit = v.TargetLabel == TargetLabel.PitMin;
+            float f = AutonomyFactor(pit);
 
-            // left: COMB, then " L · dá N v · faltam N" (or "stint N")
+            // left: COMB, then " L · dá N v · faltam N" (or "stint N"); in PIT the laps left go to the second line
             Span<char> fuel = stackalloc char[16], rest = stackalloc char[40], value = stackalloc char[16], grey = stackalloc char[24];
             int nf = NumberFormat.Fixed(v.Fuel, 1, fuel);
             int nr = Cat(rest, 0, " L · dá ");
             nr += NumberFormat.Count(v.LapsPossible, rest[nr..]);
-            nr = Cat(rest, nr, v.IsStint ? " v · stint " : " v · faltam ");
+            nr = Cat(rest, nr, " v");
+            int line2 = nr;
+            nr = Cat(rest, nr, pit ? "" : " · ");
+            nr = Cat(rest, nr, v.IsStint ? "stint " : "faltam ");
             nr += NumberFormat.Count(v.LapsRemaining, rest[nr..]);
 
             // right: [alvo A ·] LABEL value. The "~" marks the estimated target (PRD v3 §5.4); in PIT that is the grey
             // "alvo" number, not MÍN.
-            int nv = !target ? 0 : pit ? NumberFormat.Fixed(v.FeasibleMin, 2, value) : Target(in v, value);
-            int ng = 0;
-            if (pit)
-            {
-                ng = Cat(grey, 0, "alvo ");
-                ng += Target(in v, grey[ng..]);
-                ng = Cat(grey, ng, " ·");
-            }
-            string word = GlanceTheme.TargetWord(v.TargetLabel);
-            float wv = target ? W(value[..nv], FontRole.ValueBold, 700, TargetFont, 0) : 0;
-            float ww = target ? W(word, FontRole.Label, 600, SupportLabelFont, SupportLabelSpacing) + TargetGap * k : 0;
-
-            // The row does not always fit at its nominal sizes: the widest values (100.0 L · dá 99 v · faltam 999 next to
-            // ~2.30) and every PIT row (the PIT mock wraps it). The two secondary runs, the left text and the grey "alvo",
-            // shrink by one factor; the target label and value keep their size.
-            float fixedW = wv + ww + (target ? AutonomyMinGap * k : 0) + (pit ? TargetGap * k : 0);
-            float flexW = W(fuel[..nf], FontRole.Value, 600, AutonomyFont, 0) + W(rest[..nr], FontRole.Value, 400, AutonomyFont, 0)
-                + (pit ? W(grey[..ng], FontRole.Value, 400, PitTargetFont, 0) : 0);
-            float avail = xr - xl - fixedW, f = flexW > avail && flexW > 0 ? avail / flexW : 1;
-
             float rx = xr;
             if (target)
             {
-                rx -= wv;
+                int nv = pit ? NumberFormat.Fixed(v.FeasibleMin, 2, value) : Target(in v, value);
+                rx -= W(value[..nv], FontRole.ValueBold, 700, TargetFont, 0);
                 T(value[..nv], FontRole.ValueBold, 700, TargetFont, 0, false, GlanceTheme.Text, rx, bl);
-                rx -= ww;
+                string word = GlanceTheme.TargetWord(v.TargetLabel);
+                rx -= TargetGap * k + W(word, FontRole.Label, 600, SupportLabelFont, SupportLabelSpacing);
                 T(word, FontRole.Label, 600, SupportLabelFont, SupportLabelSpacing, false, GlanceTheme.Label, rx, bl);
                 if (pit)
                 {
+                    int ng = Cat(grey, 0, "alvo ");
+                    ng += Target(in v, grey[ng..]);
+                    ng = Cat(grey, ng, " ·");
                     rx -= TargetGap * k + W(grey[..ng], FontRole.Value, 400, PitTargetFont * f, 0);
                     T(grey[..ng], FontRole.Value, 400, PitTargetFont * f, 0, false, GlanceTheme.Label, rx, bl);
                 }
             }
             float wf = T(fuel[..nf], FontRole.Value, 600, AutonomyFont * f, 0, false, GlanceTheme.Text, xl, bl);
-            T(rest[..nr], FontRole.Value, 400, AutonomyFont * f, 0, false, GlanceTheme.Secondary, xl + wf, bl, true);
+            T(rest[..(pit ? line2 : nr)], FontRole.Value, 400, AutonomyFont * f, 0, false, GlanceTheme.Secondary, xl + wf, bl, true);
+            if (pit)
+                T(rest[line2..nr], FontRole.Value, 400, AutonomyFont * f, 0, false, GlanceTheme.Secondary, xl, bl + (AutonomyH + Gap) * k);
+        }
+
+        /// <summary>
+        /// Overflow fallback for the F4 secondary runs (left text, grey "alvo"), against the widest template of the
+        /// arrangement (V3-7: 100.0 L · dá 99 v · faltam 999 next to ~2.30), never against the values shown: a given scale
+        /// always draws F4 at one size, so it does not jump when faltam loses a digit or the "~" comes and goes. The target
+        /// label and value keep their size.
+        /// </summary>
+        readonly float AutonomyFactor(bool pit)
+        {
+            float k = _k;
+            float fixedW = W(pit ? "2.30" : "~2.30", FontRole.ValueBold, 700, TargetFont, 0)
+                + TargetGap * k + W(pit ? "MÍN" : "ALVO", FontRole.Label, 600, SupportLabelFont, SupportLabelSpacing)
+                + AutonomyMinGap * k + (pit ? TargetGap * k : 0);
+            float flexW = W("100.0", FontRole.Value, 600, AutonomyFont, 0)
+                + W(pit ? " L · dá 99 v" : " L · dá 99 v · faltam 999", FontRole.Value, 400, AutonomyFont, 0)
+                + (pit ? W("alvo ~2.30 ·", FontRole.Value, 400, PitTargetFont, 0) : 0);
+            float avail = (InnerW - 2 * RowInset) * k - fixedW;
+            return flexW > avail && flexW > 0 ? avail / flexW : 1;
         }
 
         static int Target(in GlanceView v, Span<char> dest)
@@ -436,8 +454,9 @@ public static class GlanceLayout
             for (int i = 0; i < 4; i++)
             {
                 var r = new RectF(hx[i], hy[i], hs, hs);
-                _d.FillRect(r, white.WithOpacity(_op));
-                _d.StrokeRect(r, c, GlanceTheme.Accent.WithOpacity(_op));
+                // the inactive panel's dimming is content, not chrome: the handles keep the user's content opacity only
+                _d.FillRect(r, white.WithOpacity(_o.ContentOpacity));
+                _d.StrokeRect(r, c, GlanceTheme.Accent.WithOpacity(_o.ContentOpacity));
             }
 
             // banner above (does not follow the user's scale)
