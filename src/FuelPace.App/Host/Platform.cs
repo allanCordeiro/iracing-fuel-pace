@@ -78,5 +78,7 @@ public interface ISystemServices
 /// <param name="AppDataRoot">Root of settings.json, logs, profiles and recordings (normally <c>%APPDATA%\FuelPace</c>).</param>
 /// <param name="ReplayPath">Set when the source replays a file: session info is then loaded inline on the telemetry thread.</param>
 /// <param name="ExitAfter">Smoke tests: <see cref="AgentHost.Completion"/> ends after this long.</param>
+/// <param name="EarlierSettingsLoad">What a load of settings.json before the host existed did (the Agent reads the render
+/// backend first): that load is the one that migrates or quarantines the file, so the host logs it.</param>
 public sealed record AgentOptions(string AppDataRoot, bool DebugFromCommandLine, bool DebugMarker, string? ReplayPath,
-    ReplaySpeed ReplaySpeed, TimeSpan? ExitAfter, string PipeName = "FuelPace");
+    ReplaySpeed ReplaySpeed, TimeSpan? ExitAfter, string PipeName = "FuelPace", SettingsLoadReport? EarlierSettingsLoad = null);

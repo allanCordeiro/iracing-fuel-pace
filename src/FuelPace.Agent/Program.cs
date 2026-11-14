@@ -79,7 +79,10 @@ internal static class Program
         var sources = new LiveSourceFactory(options.ReplayPath, options.ReplaySpeed, HostLog);
         using var fonts = new DWriteFonts();
         // Only the backend is needed before the host starts (it reads, and owns, settings.json); a locked file means "auto".
-        var backend = new SettingsStore(options.AppDataRoot).Load(retryLocked: false).Overlay.RenderBackend;
+        // This load migrates (or quarantines) the file, so what it did goes to the host, which logs it.
+        var early = new SettingsStore(options.AppDataRoot);
+        var backend = early.Load(retryLocked: false).Overlay.RenderBackend;
+        options = options with { EarlierSettingsLoad = SettingsLoadReport.Of(early) };
         using var overlay = new OverlayWindow(backend, fonts, HostLog);
         overlay.DpiChanged += monitors.Recheck; // the overlay's own monitor (the message window hears only the primary)
         var hotkeys = new Hotkeys(window, HostLog);

@@ -2,7 +2,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using FuelPace.Agent.Overlay;
 using FuelPace.App.Overlay;
-using FuelPace.Core.Strategy;
+using FuelPace.Core.Display;
 using Vortice.DCommon;
 using Vortice.Direct2D1;
 using Vortice.Direct3D;
@@ -85,7 +85,7 @@ internal static partial class Com
 
 public sealed class RenderTests
 {
-    const int Padding = 40; // around the overlay in the PNG, as in docs/overlay-preview
+    const int Padding = 40; // around the overlay in the PNG, as in docs/v3/preview
 
     static string RepoRoot()
     {
@@ -141,12 +141,21 @@ public sealed class RenderTests
         return (src.R * a + dst.R * (1 - a), src.G * a + dst.G * (1 - a), src.B * a + dst.B * (1 - a));
     }
 
-    static DrawList Build(OverlayPreview p, double dpi, ITextMeasurer m)
+    static DrawList Build(GlancePreview p, double dpi, ITextMeasurer m)
     {
-        var s = p.State;
+        var v = p.View;
         var d = new DrawList();
-        OverlayLayout.Build(in s, OverlayPreviews.Car, OverlayPreviews.Track, p.Options with { DpiScale = dpi }, m, d);
+        GlanceLayout.Build(in v, p.Options with { DpiScale = dpi }, m, d);
         return d;
+    }
+
+    static void AssertPixel(byte[] px, int w, int x, int y, (double R, double G, double B) expected, string what)
+    {
+        var got = Pixel(px, w, x, y);
+        what = $"{what} at ({x},{y}): got {got}, expected {expected}";
+        Assert.True(Math.Abs(got.R - expected.R) <= 8, what);
+        Assert.True(Math.Abs(got.G - expected.G) <= 8, what);
+        Assert.True(Math.Abs(got.B - expected.B) <= 8, what);
     }
 
     [Fact]
@@ -157,9 +166,9 @@ public sealed class RenderTests
         using var warp = new WarpTarget(fonts);
         string dir = Path.Combine(RepoRoot(), "artifacts", "renders");
         Directory.CreateDirectory(dir);
-        Assert.Equal(9, OverlayPreviews.All.Count);
+        Assert.Equal(9, GlancePreviews.All.Count);
 
-        foreach (var p in OverlayPreviews.All)
+        foreach (var p in GlancePreviews.All)
             foreach (int dpi in new[] { 1, 2 })
             {
                 var list = Build(p, dpi, measurer);
@@ -174,22 +183,81 @@ public sealed class RenderTests
                 for (int i = 3; i < px.Length; i += 4) if (px[i] != 0) painted++;
                 Assert.True(painted > w * h / 4, $"{p.Name}@{dpi}x: only {painted} of {w * h} pixels painted");
 
-                if (p.State.State != SignalState.Inactive)
+                // Composed over black (premultiplied bytes are exactly that). The panel's top padding holds nothing else.
+                var rounded = new List<DrawCommand>();
+                foreach (var c in list.Commands) if (c.Kind == CommandKind.FillRoundedRect) rounded.Add(c);
+                float k = (float)(p.Options.Scale * dpi);
+                var panel = rounded[0].Rect;
+                var panelColor = Over((0, 0, 0), GlanceTheme.Panel(p.Options.BackgroundOpacity));
+                AssertPixel(px, w, (int)(panel.X + panel.W / 2), (int)(panel.Y + 3 * k), panelColor, $"{p.Name}@{dpi}x panel");
+                if (p.View.Mode == GlanceMode.Full)
                 {
-                    // The ALVO row is the second rounded fill (after the panel). Sample its vertical centre in the strip
-                    // left of the "ALVO" label, composed over black (premultiplied bytes are exactly that).
-                    var rows = new List<DrawCommand>();
-                    foreach (var c in list.Commands) if (c.Kind == CommandKind.FillRoundedRect) rows.Add(c);
-                    var row = rows[1].Rect;
-                    float k = (float)(p.Options.Scale * dpi);
-                    int sx = (int)(row.X + 3.5f * k), sy = (int)(row.Y + row.H / 2);
-                    var expected = Over(Over((0, 0, 0), OverlayTheme.Panel(p.Options.BackgroundOpacity)), OverlayTheme.For(p.State.State).RowBg);
-                    var got = Pixel(px, w, sx, sy);
-                    string what = $"{p.Name}@{dpi}x ALVO row at ({sx},{sy}): got {got}, expected {expected}";
-                    Assert.True(Math.Abs(got.R - expected.R) <= 8, what);
-                    Assert.True(Math.Abs(got.G - expected.G) <= 8, what);
-                    Assert.True(Math.Abs(got.B - expected.B) <= 8, what);
+                    // The F1 decision block is the second rounded fill: sample its vertical centre in the strip left of the selo.
+                    var block = rounded[1].Rect;
+                    AssertPixel(px, w, (int)(block.X + 3.5f * k), (int)(block.Y + block.H / 2),
+                        Over(panelColor, GlanceTheme.For(p.View.Decision).BlockBg), $"{p.Name}@{dpi}x F1 block");
                 }
+            }
+    }
+
+    public static TheoryData<string, double> WidestCases()
+    {
+        var data = new TheoryData<string, double>();
+        foreach (double scale in new[] { 1, 2.5 })
+            foreach (var which in new[] { "red", "blue", "pit", "compact", "inactive", "stint", "seconds" })
+                data.Add(which, scale);
+        return data;
+    }
+
+    /// <summary>
+    /// V3-7 (review N10): the widest values of <c>GlanceLayoutTests.Widest_values_stay_inside_the_panel_and_do_not_overlap</c>
+    /// (FuelPace.App.Tests, estimated metrics), laid out and checked with the real DirectWrite measurer and embedded fonts.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(WidestCases))]
+    public void Widest_values_stay_inside_the_panel_with_the_real_fonts(string which, double scale)
+    {
+        GlanceView Preview(string name) => GlancePreviews.All.Single(p => p.Name == name).View;
+        var v = Preview("vermelho");
+        v.DecisionValue = 0.50f; v.ComplementPct = -20; v.LapsRemaining = 999; v.Fuel = 100.0f; v.LapsPossible = 99;
+        v.Target = 2.30f; v.IsEstimate = true; v.LapProj = 2.38f; v.LapLast = 2.39f; v.LapLastInvalid = true;
+        switch (which)
+        {
+            case "blue": v.Decision = DecisionKind.Ok; v.DecisionValue = 99.9f; v.ComplementPct = 0; v.TargetLabel = TargetLabel.Ate; break;
+            case "pit":
+                v.Decision = DecisionKind.Pit; v.DecisionValue = 99.9f; v.ComplementPct = 0; v.ShowBar = false;
+                v.TargetLabel = TargetLabel.PitMin; v.Target = 2.16f; v.FeasibleMin = 2.23f; break;
+            case "compact": v = Preview("compacto"); v.Fuel = 100.0f; v.LapsPossible = 99; v.MinutesPossible = 999; break;
+            case "inactive":
+                v = Preview("compacto"); v.Mode = GlanceMode.Inactive; v.Fuel = 100.0f; v.LapsPossible = 99; v.MinutesPossible = 999; break;
+            case "stint": v.IsStint = true; v.LapsRemaining = 999; break;
+            case "seconds": v.ComplementSec = 9.9f; break;
+        }
+
+        using var fonts = new DWriteFonts();
+        var m = new DWriteTextMeasurer(fonts);
+        var d = new DrawList();
+        GlanceLayout.Build(in v, new OverlayViewOptions(scale, 0.6, 1, true, false, false, "Ctrl+Shift+F", 1840, 980), m, d);
+        float k = (float)scale, eps = 0.01f * k;
+        var p = d.Commands[0].Rect; // the panel
+        float left = p.X + 9 * k, right = p.X + p.W - 9 * k;
+        var boxes = new List<(string T, float X0, float X1, float Y)>();
+        foreach (var c in d.Commands)
+        {
+            if (c.Kind != CommandKind.Text || c.BaselineY > p.Y + p.H) continue; // pills hang under the panel
+            string t = new(d.TextOf(in c));
+            float w = m.Width(t, c.Role, c.Weight, c.SizePx, c.LetterSpacingEm);
+            Assert.True(c.X >= left - eps, $"{which}@{scale}x: '{t}' starts at {c.X}, inner edge {left}");
+            Assert.True(c.X + w <= right + eps, $"{which}@{scale}x: '{t}' ends at {c.X + w}, inner edge {right}");
+            boxes.Add((t, c.X, c.X + w, c.BaselineY));
+        }
+        Assert.NotEmpty(boxes);
+        // runs that share a row (similar baseline) must not overlap
+        foreach (var a in boxes)
+            foreach (var b in boxes)
+            {
+                if (ReferenceEquals(a.T, b.T) || a.X0 >= b.X0 || Math.Abs(a.Y - b.Y) > 6 * k) continue;
+                Assert.True(a.X1 <= b.X0 + eps, $"{which}@{scale}x: '{a.T}' [{a.X0},{a.X1}] overlaps '{b.T}' [{b.X0},{b.X1}]");
             }
     }
 
@@ -199,7 +267,7 @@ public sealed class RenderTests
         using var fonts = new DWriteFonts();
         var measurer = new DWriteTextMeasurer(fonts);
         using var warp = new WarpTarget(fonts);
-        var list = Build(OverlayPreviews.All[0], 1, measurer);
+        var list = Build(GlancePreviews.All[0], 1, measurer);
         int w = (int)Math.Ceiling(list.Size.W), h = (int)Math.Ceiling(list.Size.H);
         warp.Render(list, w, h);
         long created = warp.Renderer.LayoutsCreated;
@@ -241,5 +309,41 @@ public sealed class RenderTests
         // line height 1.0: baseline = size/2 + (ascent - descent)/2
         Assert.Equal(0.86f * 10, m.Ascent(FontRole.Value, 10), 2);
         Assert.Equal((0.5f + (1984 - 494) / 2048f / 2) * 10, m.Ascent(FontRole.Label, 10), 2);
+    }
+
+    [Fact]
+    public void FillTriangle_points_to_the_requested_side()
+    {
+        using var fonts = new DWriteFonts();
+        using var warp = new WarpTarget(fonts);
+        var red = new Rgba(255, 0, 0, 255);
+        // Rect (10,10)-(30,30), 40x40 canvas; the base is a full 20 px edge, the tip a point at the middle of the opposite edge.
+        foreach (bool right in new[] { true, false })
+        {
+            var list = new DrawList();
+            list.FillTriangle(new RectF(10, 10, 20, 20), right, red);
+            var px = warp.Render(list, 40, 40);
+            int baseX = right ? 11 : 28, tipX = right ? 27 : 12;
+            string side = right ? "right" : "left";
+            Assert.Equal((255, 0, 0), Pixel(px, 40, baseX, 11)); // base corner, opaque
+            Assert.Equal((255, 0, 0), Pixel(px, 40, baseX, 28));
+            Assert.Equal((255, 0, 0), Pixel(px, 40, tipX, 19)); // beside the tip, on the middle line
+            Assert.Equal((255, 0, 0), Pixel(px, 40, tipX, 20));
+            Assert.True(px[(11 * 40 + tipX) * 4 + 3] == 0, $"{side}: the tip-side corner must stay empty");
+            Assert.True(px[(28 * 40 + tipX) * 4 + 3] == 0, $"{side}: the tip-side corner must stay empty");
+            Assert.True(px[(5 * 40 + baseX) * 4 + 3] == 0, $"{side}: nothing outside the rect");
+        }
+    }
+
+    [Fact]
+    public void FillTriangle_applies_the_color_alpha()
+    {
+        using var fonts = new DWriteFonts();
+        using var warp = new WarpTarget(fonts);
+        var list = new DrawList();
+        list.FillTriangle(new RectF(10, 10, 20, 20), true, new Rgba(255, 0, 0, 128));
+        var px = warp.Render(list, 40, 40);
+        int a = px[(20 * 40 + 14) * 4 + 3];
+        Assert.InRange(a, 124, 132);
     }
 }

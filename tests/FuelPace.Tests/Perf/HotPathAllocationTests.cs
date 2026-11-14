@@ -1,4 +1,5 @@
 using FuelPace.Core.Diagnostics;
+using FuelPace.Core.Display;
 using FuelPace.Core.Pipeline;
 using FuelPace.Core.Strategy;
 using FuelPace.Core.Telemetry;
@@ -76,6 +77,44 @@ public class HotPathAllocationTests
         var r = Run(nameof(Pipeline_allocates_zero_bytes_per_tick_fixture), path, yaml);
         Assert.True(r.Bytes == 0, $"allocated {r.Bytes} bytes");
         Assert.True(r.Publishes > 0);
+    }
+
+    /// <summary>V3-8: the v3 builder and the number formatting allocate nothing over 10,000 calls, in every state.</summary>
+    [Fact]
+    public void Glance_builder_and_number_format_allocate_zero_bytes()
+    {
+        var cfg = GlanceConfig.Default with { ComplementSeconds = true };
+        var states = new OverlayState[6];
+        for (int k = 0; k < states.Length; k++)
+            states[k] = new OverlayState
+            {
+                State = (SignalState)k, FuelL = 74.04, LapsRemaining = 31.3, LapProjectionL = 2.385, LastLapL = 2.39, MeanL = 2.37,
+                TargetL = 2.296875, FeasibleMinL = 2.23, PaceS = 108, FuelVsTimeB = -11.4, Recording = k % 2 == 0,
+                LastLapTimeS = 108.456, MeanLapTimeS = 108.1, BaselineLapTimeS = 107.9,
+            };
+        Span<char> buf = stackalloc char[32];
+        int sink = 0;
+
+        for (int i = 0; i < Warmup; i++)
+            sink += Once(states, i, cfg, buf);
+
+        var window = AllocationMeasure.Start(nameof(Glance_builder_and_number_format_allocate_zero_bytes));
+        for (int i = 0; i < Measured; i++)
+            sink += Once(states, i, cfg, buf);
+        long bytes = window.Bytes;
+        Assert.True(bytes == 0, $"allocated {bytes} bytes");
+        Assert.NotEqual(0, sink);
+    }
+
+    static int Once(OverlayState[] states, int i, in GlanceConfig cfg, Span<char> buf)
+    {
+        var v = GlanceViewBuilder.Build(in states[i % states.Length], in cfg);
+        int n = NumberFormat.Fixed(v.DecisionValue, 2, buf);
+        n += NumberFormat.Fixed(-v.Fuel, 1, buf);
+        n += NumberFormat.Count(v.LapsPossible, buf);
+        n += NumberFormat.Percent(v.ComplementPct, buf);
+        n += NumberFormat.SignedSeconds(v.ComplementSec, buf);
+        return n + (v.Equals(default) ? 1 : 0);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 namespace FuelPace.Core.Strategy;
 
-/// <summary>The single insight line (§7.5), declared in priority order after the overriding ones.</summary>
+/// <summary>The v2.1 insight (§7.5), declared in priority order after the overriding ones. The v3 overlay has no insight line;
+/// the engine still computes it for the <c>InsightChanged</c> diagnostic.</summary>
 public enum InsightKind : byte { None, ElectricUnsupported, StopRequired, BopMismatch, Save, Slack, OnTarget, NoBaseline }
 
 /// <summary>

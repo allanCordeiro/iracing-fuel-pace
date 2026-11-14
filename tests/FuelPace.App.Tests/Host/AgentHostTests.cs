@@ -9,6 +9,7 @@ using FuelPace.App.Settings;
 using FuelPace.App.Simulation;
 using FuelPace.App.Tests.Fakes;
 using FuelPace.Core.Diagnostics;
+using FuelPace.Core.Display;
 using FuelPace.Core.Storage;
 using FuelPace.Core.Strategy;
 using FuelPace.Core.Telemetry;
@@ -58,6 +59,50 @@ public sealed class AgentHostTests
             int renders = rig.Surface.Renders;
             Assert.InRange(renders, 5, 60 * 10 + 1);
         }
+    }
+
+    [Fact] // PRD v3 §8.4: a Layout option redraws at once, without waiting for a tick that changes the data
+    public async Task A_layout_option_change_redraws_without_new_telemetry()
+    {
+        using var rig = new HostRig();
+        var settings = new AppSettings();
+        settings.Overlay.AutoHide = false;
+        rig.WriteSettings(settings);
+        new ProfileStore(rig.AppData).Save(SyntheticRace.Profile(RaceInfo)); // a baseline: the full panel with F3
+        var src = rig.Race(3, gated: true);
+        rig.Sources.Then(() => src);
+        rig.Start();
+        src.Allow(300);
+        rig.Settle(src, 300);
+        Assert.Equal(GlanceMode.Full, rig.Host.LastRenderedView.Mode);
+        Assert.Contains("MÉD", rig.Surface.LastTexts);
+        Assert.Equal(settings.Strategy.ReserveL, rig.Host.Pipeline.GlanceConfig.ReserveL);
+
+        var probe = await rig.ConnectAsync();
+        var snap = await probe.SendAndSync(new GetSnapshot());
+        await probe.SendAndSync(new UpdateSettings(snap.Settings with
+        {
+            Overlay = snap.Settings.Overlay with { ShowAvgInSupport = false, ShowDeltaBar = false, DeltaBarScaleLpl = 0.3 },
+            Strategy = snap.Settings.Strategy with { ReserveL = 1.0 },
+        }));
+        rig.WaitUntil(() => !rig.Surface.LastTexts.Contains("MÉD"), "redrawn without MÉD", pump: Tick);
+        Assert.Equal(300, src.Consumed); // no frame was needed
+        Assert.False(rig.Host.LastRenderedView.ShowAvg);
+        Assert.False(rig.Host.LastRenderedView.ShowBar);
+        Assert.Equal(new GlanceConfig(1.0, 0.3, false, false, false), rig.Host.Pipeline.GlanceConfig);
+    }
+
+    [Fact]
+    public void Without_the_sim_the_panel_is_the_inactive_one()
+    {
+        using var rig = new HostRig(replay: false);
+        var settings = new AppSettings();
+        settings.Overlay.AutoHide = false;
+        rig.WriteSettings(settings);
+        rig.Start();
+        rig.WaitUntil(() => rig.Surface.Renders > 0, "first render", pump: Tick);
+        Assert.Equal(GlanceMode.Inactive, rig.Host.LastRenderedView.Mode);
+        Assert.True(float.IsNaN(rig.Host.LastRenderedView.Fuel));
     }
 
     [Fact] // criterion 7, Review Focus 3
@@ -389,6 +434,67 @@ public sealed class AgentHostTests
         rig.Surface.RaiseResized(placed);
         rig.Ui.Drain();
         Assert.Equal(1.0, rig.Host.Settings.Overlay.Scale);
+    }
+
+    static string RepoFile(params string[] parts)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "FuelPace.sln"))) dir = dir.Parent;
+        Assert.NotNull(dir);
+        return Path.Combine([dir.FullName, .. parts]);
+    }
+
+    static List<JsonElement> SettingsLines(HostRig rig, string level) =>
+        rig.LogLines().Where(l => l.GetProperty("cat").GetString() == "settings" && l.GetProperty("lvl").GetString() == level
+            && l.TryGetProperty("msg", out _)).ToList();
+
+    [Fact] // front D carry-over: the migration is logged even when the host's own load is the one that migrates
+    public void A_schema_1_file_migrated_by_the_host_is_logged()
+    {
+        using var rig = new HostRig();
+        File.Copy(RepoFile("tests", "fixtures", "settings", "v1-real.json"), rig.SettingsPath);
+        rig.Start();
+        var line = Assert.Single(SettingsLines(rig, "info"), l => l.GetProperty("msg").GetString()!.Contains("migrated"));
+        Assert.Equal("settings.json migrated from schema 1 to 2", line.GetProperty("msg").GetString());
+    }
+
+    [Fact] // front D carry-over: Program.cs loads (and migrates) before the host exists; that load reaches the log
+    public void A_migration_done_by_the_earlier_load_is_logged()
+    {
+        using var rig = new HostRig();
+        File.Copy(RepoFile("tests", "fixtures", "settings", "v1-real.json"), rig.SettingsPath);
+        var early = new SettingsStore(rig.AppData);
+        early.Load(retryLocked: false); // what Program.cs does to pick the backend
+        Assert.Equal(1, early.LastLoadMigratedFrom);
+        rig.Options = rig.Options with { EarlierSettingsLoad = SettingsLoadReport.Of(early) };
+        rig.Start();
+        var line = Assert.Single(SettingsLines(rig, "info"), l => l.GetProperty("msg").GetString()!.Contains("migrated"));
+        Assert.Equal("settings.json migrated from schema 1 to 2", line.GetProperty("msg").GetString());
+        Assert.Equal(AppSettings.CurrentSchemaVersion, rig.Host.Settings.SchemaVersion);
+    }
+
+    [Fact]
+    public void A_corrupt_file_found_by_the_earlier_load_is_a_warning()
+    {
+        using var rig = new HostRig();
+        File.WriteAllText(rig.SettingsPath, "{ not json");
+        var early = new SettingsStore(rig.AppData);
+        early.Load(retryLocked: false);
+        Assert.True(early.LastLoadWasCorrupt);
+        rig.Options = rig.Options with { EarlierSettingsLoad = SettingsLoadReport.Of(early) };
+        rig.Start();
+        Assert.Single(SettingsLines(rig, "warn"), l => l.GetProperty("msg").GetString()!.Contains(".corrupt"));
+        Assert.DoesNotContain(SettingsLines(rig, "info"), l => l.GetProperty("msg").GetString()!.Contains("migrated"));
+    }
+
+    [Fact]
+    public void A_current_file_logs_neither_migration_nor_corruption()
+    {
+        using var rig = new HostRig();
+        rig.WriteSettings(new AppSettings());
+        rig.Start();
+        Assert.DoesNotContain(SettingsLines(rig, "info"), l => l.GetProperty("msg").GetString()!.Contains("migrated"));
+        Assert.Empty(SettingsLines(rig, "warn"));
     }
 
     static AppSettings UserSettings()

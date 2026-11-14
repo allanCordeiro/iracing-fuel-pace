@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Configurações, overlay e cálculo</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7DB6FF}a:hover{color:#A9CEFF}
+</style>
+</helmet>
+<div style="width: 1120px; height: 820px; box-sizing: border-box; display: flex; flex-direction: column; background: #121418; border: 1px solid #2A2F37; border-radius: 10px; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: #E8EBEF">
+  <div style="height: 40px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; background: #0C0E11; border-bottom: 1px solid #22262D">
+    <span style="font-size: 13px; color: #B7BFC9">FuelPace · Configurações</span>
+    <div style="display: flex; gap: 2px">
+      <button type="button" aria-label="Minimizar" style="width: 44px; height: 32px; border: 0; background: transparent; color: #B7BFC9; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12"><path d="M1 6h10" stroke="currentColor" stroke-width="1.2"></path></svg></button>
+      <button type="button" aria-label="Fechar" style="width: 44px; height: 32px; border: 0; background: transparent; color: #B7BFC9; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" stroke-width="1.2"></path></svg></button>
+    </div>
+  </div>
+
+  <div style="flex: 1; display: flex; min-height: 0">
+    <nav aria-label="Seções" style="width: 200px; flex: none; padding: 20px 12px; display: flex; flex-direction: column; gap: 4px; background: #0F1114; border-right: 1px solid #22262D">
+      <a href="ConfigCaptura.dc.html" style="padding: 10px 12px; border-radius: 6px; color: #B7BFC9; font-size: 14px; text-decoration: none">Captura</a>
+      <a href="#" style="padding: 10px 12px; border-radius: 6px; background: #1E2632; color: #FFFFFF; font-size: 14px; font-weight: 600; text-decoration: none">Overlay e cálculo</a>
+      <a href="#" style="padding: 10px 12px; border-radius: 6px; color: #B7BFC9; font-size: 14px; text-decoration: none">Perfis</a>
+    </nav>
+
+    <main style="flex: 1; min-width: 0; padding: 24px 32px; display: flex; gap: 28px">
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 22px">
+        <h1 style="margin: 0; font-size: 24px; font-weight: 700">Overlay e cálculo</h1>
+
+        <section style="display: flex; flex-direction: column; gap: 14px">
+          <h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.08em; color: #A9B2BD">OVERLAY</h2>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="mon" style="font-size: 13px; color: #C9CFD6">Monitor</label>
+              <select id="mon" style="height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid #343A44; background: #181B20; color: #E8EBEF; font-size: 14px"><option>1 · 2560 × 1440</option></select>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="px" style="font-size: 13px; color: #C9CFD6">Posição X</label>
+              <input id="px" type="text" value="1840" readonly style="height: 36px; box-sizing: border-box; padding: 0 10px; border-radius: 6px; border: 1px solid #343A44; background: #181B20; color: #E8EBEF; font-family: 'JetBrains Mono', monospace; font-size: 14px">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="py" style="font-size: 13px; color: #C9CFD6">Posição Y</label>
+              <input id="py" type="text" value="980" readonly style="height: 36px; box-sizing: border-box; padding: 0 10px; border-radius: 6px; border: 1px solid #343A44; background: #181B20; color: #E8EBEF; font-family: 'JetBrains Mono', monospace; font-size: 14px">
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px">
+            <div style="display: flex; align-items: center; gap: 14px">
+              <label for="sc" style="width: 150px; font-size: 13px; color: #C9CFD6">Escala</label>
+              <input id="sc" type="range" min="50" max="250" value="100" readonly style="flex: 1; accent-color: #2F80ED">
+              <span style="width: 52px; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 14px">100%</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 14px">
+              <label for="ob" style="width: 150px; font-size: 13px; color: #C9CFD6">Opacidade do fundo</label>
+              <input id="ob" type="range" min="0" max="100" value="60" readonly style="flex: 1; accent-color: #2F80ED">
+              <span style="width: 52px; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 14px">60%</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 14px">
+              <label for="ot" style="width: 150px; font-size: 13px; color: #C9CFD6">Opacidade do texto</label>
+              <input id="ot" type="range" min="30" max="100" value="100" readonly style="flex: 1; accent-color: #2F80ED">
+              <span style="width: 52px; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 14px">100%</span>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 24px; flex-wrap: wrap">
+            <div style="display: flex; align-items: center; gap: 8px"><input id="lp" type="checkbox" style="width: 18px; height: 18px; margin: 0; accent-color: #2F80ED"><label for="lp" style="font-size: 14px">Linha de pace</label></div>
+            <div style="display: flex; align-items: center; gap: 8px"><input id="li" type="checkbox" checked style="width: 18px; height: 18px; margin: 0; accent-color: #2F80ED"><label for="li" style="font-size: 14px">Linha de insight</label></div>
+            <div style="display: flex; align-items: center; gap: 8px"><input id="lh" type="checkbox" checked style="width: 18px; height: 18px; margin: 0; accent-color: #2F80ED"><label for="lh" style="font-size: 14px">Ocultar fora da pista</label></div>
+          </div>
+        </section>
+
+        <section style="display: flex; flex-direction: column; gap: 14px; padding-top: 18px; border-top: 1px solid #22262D">
+          <h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.08em; color: #A9B2BD">CÁLCULO</h2>
+          <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="rs" style="font-size: 13px; color: #C9CFD6">Reserva (L)</label>
+              <input id="rs" type="text" value="0.5" readonly style="height: 36px; box-sizing: border-box; padding: 0 10px; border-radius: 6px; border: 1px solid #343A44; background: #181B20; color: #E8EBEF; font-family: 'JetBrains Mono', monospace; font-size: 14px">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="mm" style="font-size: 13px; color: #C9CFD6">Média móvel (voltas)</label>
+              <input id="mm" type="text" value="5" readonly style="height: 36px; box-sizing: border-box; padding: 0 10px; border-radius: 6px; border: 1px solid #343A44; background: #181B20; color: #E8EBEF; font-family: 'JetBrains Mono', monospace; font-size: 14px">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="em" style="font-size: 13px; color: #C9CFD6">Economia máxima (%)</label>
+              <input id="em" type="text" value="6" readonly style="height: 36px; box-sizing: border-box; padding: 0 10px; border-radius: 6px; border: 1px solid #343A44; background: #181B20; color: #E8EBEF; font-family: 'JetBrains Mono', monospace; font-size: 14px">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="ve" style="font-size: 13px; color: #C9CFD6">Voltas extras</label>
+              <input id="ve" type="text" value="0" readonly style="height: 36px; box-sizing: border-box; padding: 0 10px; border-radius: 6px; border: 1px solid #343A44; background: #181B20; color: #E8EBEF; font-family: 'JetBrains Mono', monospace; font-size: 14px">
+            </div>
+          </div>
+          <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 10px">
+            <legend style="padding: 0 0 8px; font-size: 13px; color: #C9CFD6">Voltas restantes</legend>
+            <div style="display: flex; align-items: center; gap: 8px"><input id="ma" type="radio" name="modo" checked style="width: 18px; height: 18px; margin: 0; accent-color: #2F80ED"><label for="ma" style="font-size: 14px">Automático · por tempo usa o ritmo do líder geral</label></div>
+            <div style="display: flex; align-items: center; gap: 8px"><input id="mn" type="radio" name="modo" style="width: 18px; height: 18px; margin: 0; accent-color: #2F80ED"><label for="mn" style="font-size: 14px">Manual · stint de</label><input aria-label="Voltas do stint" type="text" value="25" readonly style="width: 56px; height: 30px; box-sizing: border-box; padding: 0 8px; border-radius: 6px; border: 1px solid #2A2F37; background: #15181C; color: #7E8792; font-family: 'JetBrains Mono', monospace; font-size: 14px"><span style="font-size: 14px; color: #7E8792">voltas</span></div>
+          </fieldset>
+        </section>
+
+        <section style="display: flex; flex-direction: column; gap: 10px; padding-top: 18px; border-top: 1px solid #22262D">
+          <h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.08em; color: #A9B2BD">ATALHOS</h2>
+          <div style="display: flex; gap: 28px; font-size: 14px; color: #C9CFD6">
+            <span><strong style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #E8EBEF">Ctrl+Shift+F</strong> travar / editar posição</span>
+            <span><strong style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #E8EBEF">Ctrl+Shift+H</strong> mostrar / ocultar</span>
+          </div>
+        </section>
+      </div>
+
+      <aside aria-label="Prévia" style="width: 320px; flex: none; display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.08em; color: #A9B2BD">PRÉVIA · 100%</span>
+        <div style="position: relative; height: 170px; border-radius: 8px; overflow: hidden; background: #3B4048">
+          <div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 320px; height: 70px; background: #3A4552"></div>
+          <div style="position: absolute; left: 10px; top: 24px; width: 300px; box-sizing: border-box; padding: 9px 11px; border-radius: 6px; background: rgba(10, 12, 16, 0.6); display: flex; flex-direction: column; gap: 6px; color: #F2F4F7">
+            <div style="display: flex; align-items: baseline; justify-content: space-between">
+              <div style="display: flex; align-items: baseline; gap: 8px">
+                <span style="width: 46px; font-size: 9px; font-weight: 600; letter-spacing: 0.1em; color: #A9B2BD">COMB</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 21px; font-weight: 600; line-height: 1">41.8</span>
+                <span style="font-size: 10px; color: #A9B2BD">L</span>
+              </div>
+              <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #D5DAE0">17.3 v · 23 min</span>
+            </div>
+            <div style="display: flex; align-items: baseline; gap: 20px">
+              <div style="display: flex; align-items: baseline; gap: 8px">
+                <span style="width: 46px; font-size: 9px; font-weight: 600; letter-spacing: 0.1em; color: #A9B2BD">VOLTA</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 700; color: #6AAEFF">2.36</span>
+              </div>
+              <div style="display: flex; align-items: baseline; gap: 6px">
+                <span style="font-size: 9px; font-weight: 600; letter-spacing: 0.1em; color: #A9B2BD">ÚLT</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 500; color: #9CC8FF">2.39</span>
+              </div>
+              <div style="display: flex; align-items: baseline; gap: 6px">
+                <span style="font-size: 9px; font-weight: 600; letter-spacing: 0.1em; color: #A9B2BD">MÉD</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 500">2.38</span>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin: 0 -4px; padding: 5px 7px; border-radius: 4px; background: rgba(47, 128, 237, 0.26)">
+              <div style="display: flex; align-items: baseline; gap: 8px">
+                <span style="width: 43px; font-size: 9px; font-weight: 600; letter-spacing: 0.1em; color: #CFE2FF">ALVO</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700">2.49</span>
+              </div>
+              <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #E6EEF9">faltam 16.6 v</span>
+              <span style="padding: 3px 6px; border-radius: 3px; background: #1E6BD6; font-size: 8px; font-weight: 700; letter-spacing: 0.08em; color: #FFFFFF">NO ALVO</span>
+            </div>
+            <div style="font-size: 11px; color: #E3E7EC"><strong style="font-weight: 700">Folga 1.8 L</strong> · pode atacar</div>
+          </div>
+        </div>
+        <button type="button" style="height: 40px; border-radius: 6px; border: 1px solid #2F80ED; background: transparent; color: #CFE2FF; font-size: 14px; font-weight: 600">Posicionar no jogo</button>
+        <span style="font-size: 12px; line-height: 1.45; color: #A9B2BD">Destrava o overlay para arrastar sobre o iRacing. O jogo precisa estar em janela sem borda.</span>
+      </aside>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1120,"height":820}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
