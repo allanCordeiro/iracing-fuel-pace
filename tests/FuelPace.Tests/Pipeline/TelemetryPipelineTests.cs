@@ -500,6 +500,42 @@ public class TelemetryPipelineTests
         Assert.Equal(2.4 * LapSim.FuelCurve(0.5) / 0.5, rig.Pipeline.Overlay.Read().LapProjectionL, 0.02);
     }
 
+    [Fact] // feedback 2026-11-14: after the leader's flag, crossing the line ends my race (it showed "stop required" for 6 s)
+    public void Crossing_the_line_after_the_checkered_ends_the_race()
+    {
+        // the leader takes the flag at st 50, in the middle of my lap 3; I take it at st 60
+        var frames = new LapSim(lapTimeS: 20).TimeRace(45).Run(4, endPct: 0.5)
+            .Select(f => { f.SessionState = f.SessionTime >= 50 ? 5 : 4; return f; });
+        using var rig = new Rig(frames, TimeRaceYaml(45));
+
+        rig.StepUntil(f => f.SessionTime >= 57);
+        var last = rig.Pipeline.Overlay.Read();
+        Assert.NotEqual(SignalState.Inactive, last.State);
+        Assert.Equal(1 - rig.LastPublishedFrame.LapDistPct, last.LapsRemaining, 6); // the rest of my last lap
+
+        rig.StepUntil(f => f.SessionTime >= 61);
+        Assert.Equal(SignalState.Inactive, rig.Pipeline.Overlay.Read().State);
+        rig.StepAll();
+        Assert.Equal(SignalState.Inactive, rig.Pipeline.Overlay.Read().State);
+    }
+
+    [Fact] // feedback 2026-11-14: the race clock read 0 for 2 s at the green flag (target 2732 L, 0.04 laps)
+    public void A_race_clock_at_zero_before_it_could_have_run_is_unavailable()
+    {
+        var frames = new LapSim(lapTimeS: 20).TimeRace(1800).Run(1, endPct: 0.5)
+            .Select(f => { if (f.SessionTime < 10) f.SessionTimeRemain = 0; return f; });
+        using var rig = new Rig(frames, TimeRaceYaml(1800));
+
+        rig.StepUntil(f => f.SessionTime >= 5);
+        Assert.True(double.IsNaN(rig.Pipeline.Overlay.Read().LapsRemaining));
+
+        rig.StepUntil(f => f.SessionTime >= 15);
+        var s = rig.Pipeline.Overlay.Read();
+        var f = rig.LastPublishedFrame;
+        Assert.Equal(LapsRemainingCalculator.ByTime(f.SessionTimeRemain, double.NaN, double.NaN, f.LapDistPct, s.PaceS),
+            s.LapsRemaining, 9);
+    }
+
     [Fact]
     public void Time_race_without_caridx_uses_own_pace()
     {
