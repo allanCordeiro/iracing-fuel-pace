@@ -10,6 +10,14 @@ public static class FuelStrategyEngine
 {
     public static OverlayState Compute(in StrategyInput input, Baseline? baseline, StrategyConfig cfg, ref SignalHysteresis hysteresis)
     {
+        var laps = default(TimedLapsHold); // no history: the plain formulas
+        return Compute(in input, baseline, cfg, ref hysteresis, ref laps);
+    }
+
+    /// <summary>As above, with the history that keeps a timed race's lap count from flipping (<see cref="TimedLapsHold"/>).</summary>
+    public static OverlayState Compute(in StrategyInput input, Baseline? baseline, StrategyConfig cfg, ref SignalHysteresis hysteresis,
+        ref TimedLapsHold laps)
+    {
         var s = Blank(in input);
 
         if (input.IsElectric)
@@ -25,7 +33,7 @@ public static class FuelStrategyEngine
         if (input.Inactive)
             return Inactive(ref s, new Insight(InsightKind.None), input.SessionTime, ref hysteresis);
 
-        double lRest = LapsRemaining(in input, cfg, myPace);
+        double lRest = LapsRemaining(in input, cfg, myPace, ref laps);
         if (lRest <= 0)
             return Inactive(ref s, new Insight(InsightKind.None), input.SessionTime, ref hysteresis);
 
@@ -86,10 +94,12 @@ public static class FuelStrategyEngine
     }
 
     /// <summary>§7.3 laps remaining for the configured mode and session kind; NaN when there is no limit.</summary>
-    static double LapsRemaining(in StrategyInput i, StrategyConfig cfg, double myPace)
+    static double LapsRemaining(in StrategyInput i, StrategyConfig cfg, double myPace, ref TimedLapsHold laps)
     {
         if (cfg.Mode == LapsMode.Stint)
             return LapsRemainingCalculator.Stint(cfg.StintLaps, i.StintLapsDone, i.LapDistPct);
+        // Feedback 2026-11-14: I took the flag; what is left is the cool-down lap.
+        if (i.IFinished) return 0;
 
         switch (i.Race)
         {
@@ -100,7 +110,7 @@ public static class FuelStrategyEngine
                 if (i.LeaderFinished) return LapsRemainingCalculator.AfterCheckered(i.LapDistPct);
                 // Decision 10: the leader's pace only counts in a race, and not when I am the leader.
                 bool useLeader = i.IsRaceSession && !i.IAmLeader;
-                return LapsRemainingCalculator.ByTime(i.SessionTimeRemain,
+                return laps.ByTime(i.SessionTime, i.SessionTimeRemain, i.LeaderCarIdx,
                     useLeader ? i.LeaderLapDistPct : double.NaN, useLeader ? i.LeaderPaceS : double.NaN,
                     i.LapDistPct, myPace) + cfg.ExtraLaps;
             default:

@@ -34,6 +34,10 @@ public sealed class TelemetryPipeline : ILapSink
     private readonly StintTracker _stint;
     private readonly LeaderPaceTracker _leader;
     private SignalHysteresis _hysteresis;
+    private TimedLapsHold _lapsHold;
+    // Feedback 2026-11-14: my lap count when the checkered flag came out (session _checkeredSession), or -1 for none yet.
+    private int _checkeredSession = -1, _checkeredLap;
+    private bool _finishedAtCheckered;
 
     // Written by any thread, read by the tick.
     private StrategyConfig _requestedCfg;
@@ -284,7 +288,7 @@ public sealed class TelemetryPipeline : ILapSink
             StintMeanL = _stint.MeanFuelL,
             StintMeanLapS = _stint.MeanLapS,
             StintLapsDone = _stint.LapsDone,
-            SessionTimeRemain = f.SessionTimeRemain,
+            SessionTimeRemain = PlausibleTimeRemain(f.SessionTimeRemain, f.SessionTime, session),
             SessionLapsRemainEx = f.SessionLapsRemainEx,
             LeaderPaceS = leader.PaceS,
             LeaderLapDistPct = leader.LeaderLapDistPct,
@@ -295,7 +299,9 @@ public sealed class TelemetryPipeline : ILapSink
             Caution = (f.SessionFlags & LapValidator.CautionMask) != 0,
             IsRaceSession = session is not null && session.Type == "Race",
             LeaderFinished = f.SessionState == 5,
+            IFinished = TookTheFlag(in f, leader.LeaderCarIdx >= 0 && leader.LeaderCarIdx == me),
             IAmLeader = leader.LeaderCarIdx >= 0 && leader.LeaderCarIdx == me,
+            LeaderCarIdx = leader.LeaderCarIdx,
             BopMismatch = BopMismatch(ctx, in f),
             Recording = recording,
             RecValid = recording ? _capture.ValidCount : 0,
@@ -303,11 +309,38 @@ public sealed class TelemetryPipeline : ILapSink
             Race = RaceOf(session, f.SessionLapsRemainEx),
         };
 
-        var s = FuelStrategyEngine.Compute(in input, baseline, cfg, ref _hysteresis);
+        var s = FuelStrategyEngine.Compute(in input, baseline, cfg, ref _hysteresis, ref _lapsHold);
         var view = GlanceViewBuilder.Build(in s, in Volatile.Read(ref _glance).Value);
         long versionBefore = Overlay.Version;
         Overlay.Publish(in s, in view);
         EmitStrategyDiagnostics(in input, in s, baseline, cfg, versionBefore);
+    }
+
+    /// <summary>
+    /// Feedback 2026-11-14: the race clock read 0 for ~2 s at the green flag. The clock cannot have run longer than the session
+    /// has, so a remainder below <c>length − SessionTime</c> (1 s of slack) is unavailable rather than "the last lap".
+    /// </summary>
+    private static double PlausibleTimeRemain(double remainS, double sessionTime, SessionDef? s) =>
+        s?.TimeS is double length && remainS < length - sessionTime - 1 ? double.NaN : remainS;
+
+    /// <summary>
+    /// Feedback 2026-11-14: true once I crossed the line after the checkered flag came out (or I took it as the leader); the
+    /// "rest of the lap" after the flag then belongs to the cool-down lap. Reset when the flag is gone or the session changes.
+    /// </summary>
+    private bool TookTheFlag(in TelemetryFrame f, bool iAmLeader)
+    {
+        if (f.SessionState != 5)
+        {
+            _checkeredSession = -1;
+            return false;
+        }
+        if (_checkeredSession != f.SessionNum)
+        {
+            _checkeredSession = f.SessionNum;
+            _checkeredLap = f.LapCompleted;
+            _finishedAtCheckered = iAmLeader;
+        }
+        return _finishedAtCheckered || f.LapCompleted > _checkeredLap;
     }
 
     /// <summary>Decision 10: laps when the session has a lap count and the sim reports a finite remainder; else time; else unlimited.</summary>
@@ -342,7 +375,8 @@ public sealed class TelemetryPipeline : ILapSink
         {
             // The engine only returns the displayed state; a fresh hysteresis gives the raw one.
             var fresh = default(SignalHysteresis);
-            var raw = FuelStrategyEngine.Compute(in input, baseline, cfg, ref fresh).State;
+            var laps = _lapsHold; // a copy: the same lap count as the shown state, without touching the history
+            var raw = FuelStrategyEngine.Compute(in input, baseline, cfg, ref fresh, ref laps).State;
             if (!_hasPrevState || raw != _prevRaw || s.State != _prevShown)
                 _log.Emit(DiagLevel.Info, DiagEvent.StateChanged, input.SessionTime, (int)raw, (int)s.State,
                     s.TargetL, refL, s.LapsRemaining, s.FeasibleMinL);

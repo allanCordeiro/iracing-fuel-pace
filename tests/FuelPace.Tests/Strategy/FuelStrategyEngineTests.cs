@@ -491,4 +491,38 @@ public class FuelStrategyEngineTests
         Assert.Equal(SignalState.NoBaseline, s.State);
         Assert.Equal(InsightKind.NoBaseline, s.Insight.Kind);
     }
+
+    [Fact] // feedback 2026-11-14: after taking the flag nothing is left; it showed "stop required" for 6 s on the cool-down lap
+    public void Finished_after_the_checkered_is_inactive()
+    {
+        var time = Input.TimeRace();
+        time.LeaderFinished = true;
+        time.IFinished = true;
+        time.LapDistPct = 0.003;
+        Assert.Equal(SignalState.Inactive, Run(time).State);
+
+        var laps = Input.LapsRace(50, 1, 2.38);
+        laps.IFinished = true;
+        Assert.Equal(SignalState.Inactive, Run(laps).State);
+    }
+
+    [Fact] // feedback 2026-11-14: the lap count of a timed race is held through a lap-boundary swing
+    public void Timed_laps_are_held_across_calls()
+    {
+        var i = Input.TimeRace();
+        i.IAmLeader = true;
+        i.LapDistPct = 0;
+        i.SessionTimeRemain = 30.001 * 102;
+        var h = new SignalHysteresis();
+        var laps = new TimedLapsHold();
+        var a = FuelStrategyEngine.Compute(in i, FixtureBaseline, Default, ref h, ref laps);
+
+        i.SessionTime += 0.1;
+        i.SessionTimeRemain -= 0.03 * 102;
+        var b = FuelStrategyEngine.Compute(in i, FixtureBaseline, Default, ref h, ref laps);
+
+        Assert.Equal(31, a.LapsRemaining, 9);
+        Assert.Equal(a.LapsRemaining, b.LapsRemaining, 9);
+        Assert.Equal(30, Run(i).LapsRemaining, 9); // without the history the plain formula flips
+    }
 }
