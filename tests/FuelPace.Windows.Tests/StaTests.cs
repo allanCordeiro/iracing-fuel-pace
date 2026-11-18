@@ -8,7 +8,9 @@ public sealed class StaTests
     public void Bodies_started_together_run_one_at_a_time_each_on_its_own_STA_thread()
     {
         int running = 0, most = 0;
-        var threads = new System.Collections.Concurrent.ConcurrentBag<int>();
+        // Thread objects, not ManagedThreadId: the bodies run one after another and .NET reuses the id of a thread that
+        // has exited, so two distinct threads can share an id (CI push run 44411669483: 3 distinct ids for 4 threads).
+        var threads = new System.Collections.Concurrent.ConcurrentBag<Thread>();
         using var go = new Barrier(4);
         var errors = new Exception?[4];
         var callers = Enumerable.Range(0, 4).Select(i => new Thread(() =>
@@ -19,7 +21,7 @@ public sealed class StaTests
                 Sta.Run(() =>
                 {
                     Assert.Equal(ApartmentState.STA, Thread.CurrentThread.GetApartmentState());
-                    threads.Add(Environment.CurrentManagedThreadId);
+                    threads.Add(Thread.CurrentThread);
                     int now = Interlocked.Increment(ref running);
                     InterlockedMax(ref most, now);
                     Thread.Sleep(100);
@@ -32,7 +34,8 @@ public sealed class StaTests
         foreach (var c in callers) c.Join();
         Assert.All(errors, e => Assert.Null(e));
         Assert.Equal(1, most);
-        Assert.Equal(4, threads.Distinct().Count());
+        Assert.Equal(4, threads.Distinct(ReferenceEqualityComparer.Instance).Count());
+        Assert.DoesNotContain(threads, t => callers.Contains(t));
     }
 
     static void InterlockedMax(ref int target, int value)
