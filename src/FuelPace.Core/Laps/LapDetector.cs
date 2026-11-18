@@ -254,11 +254,7 @@ public sealed class LapDetector
         if (_stats.IncidentsAtEnd > _stats.IncidentsAtStart)
             Trigger(LapReasons.Incident, _stats.IncidentsAtEnd - _stats.IncidentsAtStart, in f);
 
-        if (f.PlayerTrackSurface == 0)
-        {
-            _stats.OffTrackSeconds += dt;
-            if (_stats.OffTrackSeconds > LapValidator.OffTrackLimitS) Trigger(LapReasons.OffTrack, _stats.OffTrackSeconds, in f);
-        }
+        if (f.PlayerTrackSurface == 0) _stats.OffTrackSeconds += dt; // measured only, never a reason (LapValidator)
 
         if (f.FuelLevel < _minFuel) _minFuel = f.FuelLevel;
         else if (f.FuelLevel > _minFuel + LapValidator.RefuelThresholdL) Trigger(LapReasons.Refuel, f.FuelLevel - _minFuel, in f);

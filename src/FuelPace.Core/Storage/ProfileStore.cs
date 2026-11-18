@@ -143,6 +143,7 @@ public sealed class ProfileStore
             var loaded = JsonSerializer.Deserialize(text, ProfileJsonContext.Default.ProfileDocument)
                 ?? throw new JsonException("document is null");
             Validate(loaded);
+            DropOffTrackReason(loaded, path);
             doc = loaded;
             _log.Text(DiagLevel.Debug, "storage", "loaded " + Path.GetFileName(path));
             return LoadResult.Loaded;
@@ -162,6 +163,23 @@ public sealed class ProfileStore
         if (json.RootElement.ValueKind != JsonValueKind.Object) throw new JsonException("profile is not a JSON object");
         return json.RootElement.TryGetProperty("schemaVersion", out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n)
             ? n : CurrentSchemaVersion;
+    }
+
+    /// <summary>
+    /// Laps saved before the iRacing-leniency rule (feedback 2026-11-18) may carry <see cref="LapReasons.OffTrack"/>, which
+    /// is no longer a reason (<see cref="LapValidator"/>). Drops it and, when any lap changed, recomputes outliers and the
+    /// baseline; the next save persists it. A profile without it is left as saved.
+    /// </summary>
+    private void DropOffTrackReason(ProfileDocument doc, string path)
+    {
+        int changed = 0;
+        foreach (var c in doc.Captures)
+            foreach (var l in c.Laps)
+                if ((l.Reasons & LapReasons.OffTrack) != 0) { l.Reasons &= ~LapReasons.OffTrack; changed++; }
+        if (changed == 0) return;
+        ProfileOperations.RecomputeBaseline(doc, DateTimeOffset.UtcNow);
+        _log.Text(DiagLevel.Info, "storage",
+            $"{Path.GetFileName(path)}: dropped the old offtrack reason from {changed} lap(s); baseline now {doc.Baseline?.ValidLaps ?? 0} valid lap(s)");
     }
 
     /// <summary><c>required</c> only checks presence; a <c>null</c> where the code dereferences is corruption too.</summary>
