@@ -5,6 +5,9 @@ namespace FuelPace.Core.Telemetry;
 /// <summary>Converts one raw record into a <see cref="TelemetryFrame"/>. Allocation free.</summary>
 public static class TelemetryFrameReader
 {
+    /// <summary>A <c>LapDistPct</c> in (-LineSlackPct, 0) is read as 0 (about 6 m on a 6 km track).</summary>
+    public const float LineSlackPct = 0.001f;
+
     public static void Read(ReadOnlySpan<byte> row, VarLayout layout, ref TelemetryFrame f)
     {
         f.SessionTime = ReadDouble(row, layout[TelemetryVarId.SessionTime]);
@@ -20,6 +23,9 @@ public static class TelemetryFrameReader
         f.TrackWetness = ReadInt(row, layout[TelemetryVarId.TrackWetness]);
         f.SessionFlags = ReadUInt(row, layout[TelemetryVarId.SessionFlags]);
         f.LapDistPct = ReadFloat(row, layout[TelemetryVarId.LapDistPct]);
+        // iRacing says "not in world" with -1, but it can also report a hair below zero for one frame right after the line
+        // (-0.000009 at 242 km/h, Monza, feedback 2026-11-18); that is the line, not a car leaving the world.
+        if (f.LapDistPct < 0 && f.LapDistPct > -LineSlackPct) f.LapDistPct = 0;
         f.LapLastLapTime = ReadFloat(row, layout[TelemetryVarId.LapLastLapTime]);
         f.FuelLevel = ReadFloat(row, layout[TelemetryVarId.FuelLevel]);
         f.FuelLevelPct = ReadFloat(row, layout[TelemetryVarId.FuelLevelPct]);

@@ -32,7 +32,7 @@ public class ProfileStoreTests : IDisposable
             Laps =
             [
                 new CapturedLap { Lap = 1, TimeS = 80.123, FuelL = 2.3812, FullThrottlePct = withNaN ? double.NaN : 64.5, Reasons = LapReasons.None, FuelProfile = Enumerable.Range(0, 101).Select(i => i / 100f).ToArray() },
-                new CapturedLap { Lap = 2, TimeS = null, FuelL = 2.5, FullThrottlePct = 50, Reasons = LapReasons.OffTrack | LapReasons.Incident },
+                new CapturedLap { Lap = 2, TimeS = null, FuelL = 2.5, FullThrottlePct = 50, Reasons = LapReasons.Caution | LapReasons.Incident },
             ],
         };
         doc.Captures.Add(rec);
@@ -40,6 +40,44 @@ public class ProfileStoreTests : IDisposable
             withNaN ? double.NaN : 64.0, 42.1, 56.3, new FuelVsTime(200, -50), Confidence.Media,
             [0f, 0.5f, 1f], [new BopSignature(-1.5, 12, 100.5)]);
         return doc;
+    }
+
+    // Feedback 2026-11-18: laps saved before the iRacing-leniency rule carry "offtrack" (surface only). Loading drops that
+    // reason, so a lap iRacing kept valid counts again, and recomputes outliers and the baseline. Other reasons stay.
+    [Fact]
+    public void Loading_drops_the_old_offtrack_reason_and_recomputes_the_baseline()
+    {
+        var store = new ProfileStore(_root);
+        var doc = SampleDoc();
+        var laps = doc.Captures[0].Laps;
+        laps.Clear();
+        for (int i = 0; i < 3; i++) laps.Add(new CapturedLap { Lap = 11 + i, TimeS = 104 + 0.1 * i, FuelL = 3.2, FullThrottlePct = 70 });
+        laps.Add(new CapturedLap { Lap = 14, TimeS = 104.162, FuelL = 3.25, FullThrottlePct = 72, Reasons = LapReasons.OffTrack });
+        laps.Add(new CapturedLap { Lap = 15, TimeS = 103.8, FuelL = 3.13, FullThrottlePct = 67, Reasons = LapReasons.OffTrack | LapReasons.Incident });
+        laps.Add(new CapturedLap { Lap = 16, TimeS = 130, FuelL = 2.9, FullThrottlePct = 40, Reasons = LapReasons.OffTrack });
+        ProfileOperations.RecomputeBaseline(doc, T0);
+        Assert.Equal(3, doc.Baseline!.ValidLaps);
+        store.Save(doc);
+
+        var back = store.Load(doc.Car.Path, doc.Track.Name)!;
+
+        var got = back.Captures[0].Laps;
+        Assert.Equal(LapReasons.None, got[3].Reasons);
+        Assert.Equal(LapReasons.Incident, got[4].Reasons);
+        Assert.Equal(LapReasons.Outlier, got[5].Reasons); // 130 s > 107% of the others: still out, now by the time rule
+        Assert.Equal(4, back.Baseline!.ValidLaps);
+        Assert.Equal((3 * 3.2 + 3.25) / 4, back.Baseline.FuelMeanL, 1e-9);
+    }
+
+    [Fact]
+    public void Loading_a_profile_without_offtrack_keeps_the_saved_baseline()
+    {
+        var store = new ProfileStore(_root);
+        var doc = SampleDoc();
+        store.Save(doc);
+        var back = store.Load(doc.Car.Path, doc.Track.Name)!;
+        Assert.Equal(doc.Baseline!.ComputedAt, back.Baseline!.ComputedAt);
+        Assert.Equal(doc.Baseline.ValidLaps, back.Baseline.ValidLaps);
     }
 
     [Fact] public void File_name_replaces_spaces_and_invalid_chars() { Assert.Equal("ligierjsp320__zolder_alt.json", ProfileStore.FileNameFor("ligierjsp320", "zolder alt")); }
@@ -118,7 +156,7 @@ public class ProfileStoreTests : IDisposable
             Assert.Equal(src.Laps[i].Reasons, rec.Laps[i].Reasons);
             Assert.Equal(src.Laps[i].FuelProfile, rec.Laps[i].FuelProfile);
         }
-        Assert.Equal(LapReasons.OffTrack | LapReasons.Incident, rec.Laps[1].Reasons);
+        Assert.Equal(LapReasons.Caution | LapReasons.Incident, rec.Laps[1].Reasons);
         Assert.False(rec.Laps[1].Valid);
         var b = back.Baseline!; var e = doc.Baseline!;
         Assert.Equal(e.ComputedAt, b.ComputedAt); Assert.Equal(e.ValidLaps, b.ValidLaps);
@@ -155,7 +193,7 @@ public class ProfileStoreTests : IDisposable
         Assert.Contains("\"schemaVersion\": 1", flat);
         foreach (var name in new[] { "tankCapacityL", "fuelKgPerL", "lengthKm", "sessionType", "fullThrottlePct" })
             Assert.Contains($"\"{name}\":", flat);
-        Assert.Contains("\"reasons\": [ \"incident\", \"offtrack\" ]", flat);
+        Assert.Contains("\"reasons\": [ \"incident\", \"caution\" ]", flat);
         Assert.Contains("\"confidence\": \"media\"", flat);
         Assert.Contains("\"valid\": false", flat);
         Assert.Contains("\"valid\": true", flat);

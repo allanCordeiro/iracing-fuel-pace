@@ -154,7 +154,7 @@ Uma volta é **inválida** se qualquer um destes ocorrer (o motivo fica registra
 |---|---|
 | `pit` | `OnPitRoad` verdadeiro em algum momento da volta (pega out-lap e in-lap) |
 | `incident` | `PlayerCarMyIncidentCount` aumentou durante a volta |
-| `offtrack` | `PlayerTrackSurface == OffTrack` por mais de 0,5 s acumulados |
+| ~~`offtrack`~~ | **Removido (feedback 2026-11-18).** A volta segue a leniência do iRacing: se ela vale no iRacing, vale aqui. `PlayerTrackSurface == OffTrack` também aparece em zebra e área de escape que o iRacing tolera (Monza: 0,15–1,1 s na saída das Lesmos em quase toda volta, só 2 incidentes). A saída que o iRacing pune vira `incident`. O tempo fora da pista é só medido (`OffTrackSeconds`). Perfis antigos perdem esse motivo ao carregar, e a baseline é recalculada. |
 | `caution` | `SessionFlags` com yellow, caution ou caution waving durante a volta |
 | `reset` | `IsOnTrack` falso, `PlayerCarTowTime > 0` ou salto de `LapDistPct` incompatível com a velocidade |
 | `refuel` | aumento de combustível na volta |
@@ -309,7 +309,7 @@ Esquema do perfil (resumido):
       "conditions": { "trackTempC": 21.7, "airTempC": 20.3, "wetness": 1, "powerAdjustPct": 0, "weightPenaltyKg": 0 },
       "laps": [
         { "lap": 16, "timeS": 80.897, "fuelL": 2.382, "fullThrottlePct": 63.6, "valid": true,  "reasons": [] },
-        { "lap": 19, "timeS": 93.175, "fuelL": 2.388, "fullThrottlePct": 55.3, "valid": false, "reasons": ["offtrack", "incident"] }
+        { "lap": 19, "timeS": 93.175, "fuelL": 2.388, "fullThrottlePct": 55.3, "valid": false, "reasons": ["incident"] }
       ],
       "fuelProfile": [0.0, 0.008, "... 101 pontos, fração acumulada por 1% de LapDistPct ..."]
     }
@@ -427,8 +427,8 @@ Arquivo: `ligierjsp320_zolder_alt_2026-10-29_20-03-40.ibt` (51,7 MB, 60 Hz, 47.1
 | 16 | 80.897 | 2.382 | ✓ | |
 | 17 | 80.272 | 2.404 | ✓ | |
 | 18 | 79.964 | 2.373 | ✓ | |
-| 19 | 93.175 | 2.388 | ✗ | `offtrack` (~4,6 s), `incident` (+2) |
-| 20 | 79.133 | 2.386 | ✗ | `incident` (+1); fora da pista só ~0,12 s, abaixo do limiar |
+| 19 | 93.175 | 2.388 | ✗ | `incident` (+2); ~4,6 s fora da pista (não é mais motivo, §6.3) |
+| 20 | 79.133 | 2.386 | ✗ | `incident` (+1); fora da pista só ~0,12 s |
 | 21 | 79.514 | 2.403 | ✓ | |
 | 22 | 79.134 | 2.389 | ✓ | |
 | 23 | 81.062 | 2.289 | ✓ | (volta mais econômica: 58% de pé embaixo, contra 64–67% nas voltas de ataque) |
@@ -437,7 +437,7 @@ Arquivo: `ligierjsp320_zolder_alt_2026-10-29_20-03-40.ibt` (51,7 MB, 60 Hz, 47.1
 **Baseline esperada (6 voltas válidas):** consumo médio **2.373 L/v**, mediana 2.386, mínimo 2.289, desvio 0.043. Tempo médio **80.140 s**, mediana 80.118. Autonomia de ~**42,1 voltas / ~56 min** com 100 L. Confiança **média**. `fuelVsTime = null` (só 6 voltas válidas e uma única volta de economia, abaixo do mínimo da §6.4).
 
 **Insights que este arquivo já mostra (bom para validar o motor):**
-- O consumo em ritmo de ataque é muito estável (2,37–2,40 L/v). Ficar fora da pista e tomar incidente quase não muda o consumo (volta 19: 2,388 L). Por isso o tempo de volta é um critério ruim para invalidar consumo, e a regra de `incident`/`offtrack` é a que importa.
+- O consumo em ritmo de ataque é muito estável (2,37–2,40 L/v). Ficar fora da pista e tomar incidente quase não muda o consumo (volta 19: 2,388 L). Por isso o tempo de volta é um critério ruim para invalidar consumo, e a regra de `incident` é a que importa.
 - A volta 23 economizou **~0,10 L (−4%)** ao custo de **~+1,1 s** em relação à média das voltas de ataque. Esse é o tipo de relação que alimenta o insight `Economize X · ≈ +Y s/v`.
 - O consumo não é linear na volta (ver §7.2), o que justifica o perfil de consumo.
 - O `.ibt` começa no meio da sessão (`SessionTime` = 4264 s) e no meio de uma volta (`LapDistPct` = 0,067, saída do box). Não assumir que a primeira amostra é o início da sessão nem da volta.

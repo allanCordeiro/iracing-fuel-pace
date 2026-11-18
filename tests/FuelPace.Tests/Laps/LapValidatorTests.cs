@@ -50,20 +50,25 @@ public class LapValidatorTests
         Assert.Equal(LapReasons.None, sink.Reasons(3));
     }
 
-    [Fact]
-    public void Offtrack_over_half_second_marks_offtrack()
+    // Feedback 2026-11-18 (Monza): PlayerTrackSurface read OffTrack for 0.15-1.1 s at the exits of both Lesmos on most
+    // laps, but iRacing gave 1x only twice. A lap stays valid when iRacing keeps it valid: a real off shows up as an
+    // incident (PlayerCarMyIncidentCount), so the surface alone only measures time, it never invalidates.
+    [Theory]
+    [InlineData(0.6)]
+    [InlineData(1.2)]
+    [InlineData(3.0)]
+    public void Offtrack_surface_without_an_incident_keeps_the_lap_valid(double seconds)
     {
-        var sink = Drive(Run(new LapSim().OffTrack(2, 0.4, 0.6)));
-        Assert.Equal(LapReasons.OffTrack, sink.Reasons(2));
-        Assert.Equal(LapReasons.None, sink.Reasons(3));
-        Assert.Equal(0.6, sink.Lap(2).Stats.OffTrackSeconds, 0.05);
+        var sink = Drive(Run(new LapSim().OffTrack(2, 0.4, seconds)));
+        Assert.Equal(LapReasons.None, sink.Reasons(2));
+        Assert.Equal(seconds, sink.Lap(2).Stats.OffTrackSeconds, 0.05);
     }
 
     [Fact]
-    public void Offtrack_below_limit_is_ignored()
+    public void Offtrack_with_an_incident_is_invalid_by_the_incident()
     {
-        var sink = Drive(Run(new LapSim().OffTrack(2, 0.4, 0.12)));
-        Assert.Equal(LapReasons.None, sink.Reasons(2));
+        var sink = Drive(Run(new LapSim().OffTrack(2, 0.4, 1.0).Incident(2, 0.41)));
+        Assert.Equal(LapReasons.Incident, sink.Reasons(2));
     }
 
     [Theory]
@@ -204,8 +209,8 @@ public class LapValidatorTests
     [Fact]
     public void Multiple_reasons_accumulate_in_code_order()
     {
-        var sink = Drive(Run(new LapSim().OffTrack(2, 0.4, 0.6).Incident(2, 0.3)));
-        Assert.Equal(["incident", "offtrack"], LapReasonCodes.ToCodes(sink.Reasons(2)));
+        var sink = Drive(Run(new LapSim().Caution(2, 0.5, 0.6, 0x4000u).Incident(2, 0.3)));
+        Assert.Equal(["incident", "caution"], LapReasonCodes.ToCodes(sink.Reasons(2)));
     }
 
     [Fact]
@@ -243,14 +248,15 @@ public class LapValidatorTests
     public void Emits_LapReasonTriggered_once_per_reason_and_lap()
     {
         var log = new DiagLog(DiagLevel.Debug);
-        Drive(Run(new LapSim().OffTrack(2, 0.4, 0.6).Incident(2, 0.3, 2)), log);
+        Drive(Run(new LapSim().OffTrack(2, 0.4, 0.6).Caution(2, 0.5, 0.6, 0x4000u).Incident(2, 0.3, 2)), log);
 
         var recs = Records(log).Where(r => r.Event == DiagEvent.LapReasonTriggered).ToArray();
-        var off = Assert.Single(recs, r => r.I1 == (int)LapReasons.OffTrack);
-        Assert.Equal(2, off.I0);
-        Assert.Equal(DiagLevel.Debug, off.Level);
-        Assert.InRange(off.A, 0.5, 0.6);
-        Assert.InRange(off.B, 0.4, 0.6);
+        Assert.DoesNotContain(recs, r => r.I1 == (int)LapReasons.OffTrack);
+        var caution = Assert.Single(recs, r => r.I1 == (int)LapReasons.Caution);
+        Assert.Equal(2, caution.I0);
+        Assert.Equal(DiagLevel.Debug, caution.Level);
+        Assert.Equal(0x4000, caution.A);
+        Assert.InRange(caution.B, 0.5, 0.52);
         var inc = Assert.Single(recs, r => r.I1 == (int)LapReasons.Incident);
         Assert.Equal(2, inc.I0);
         Assert.Equal(2, inc.A);
